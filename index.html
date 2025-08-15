@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <title>Dopple Talent Demo</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --bg:#0e0f12; --bg-2:#08090c;
+      --panel:#12131a; --panel-2:#1a1b25;
+      --text:#ececf1; --muted:#b7b8c3;
+      --stroke:#26283a; --stroke-strong:#3a3b52;
+      --accent:#8a8cff;
+      --ok:#16db65; --warn:#ffd166; --stop:#ff6b6b;
+      --shadow:0 10px 30px rgba(0,0,0,.35); --radius:16px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      color:var(--text);
+      background:
+        radial-gradient(1200px 600px at 80% -10%, rgba(94,97,255,.12), transparent 40%),
+        radial-gradient(900px 480px at 0% 110%, rgba(138,140,255,.10), transparent 45%),
+        linear-gradient(180deg,var(--bg),var(--bg-2));
+      min-height:100vh;
+    }
+
+    /* Layout */
+    .wrap{max-width:1100px; margin:0 auto; padding:28px 20px 48px}
+    .card{
+      position:relative;
+      background:linear-gradient(180deg,var(--panel),var(--panel-2));
+      border:1px solid var(--stroke);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      padding:26px 22px 32px;
+      margin:18px 0;
+    }
+    .section{max-width:980px; margin:0 auto}
+    .stack-s{margin-top:8px}
+    .stack-m{margin-top:16px}
+    .stack-l{margin-top:24px}
+    .stack-xl{margin-top:32px}
+
+    /* Top mic button */
+    .mic-rail{display:flex; justify-content:center}
+    .mic{
+      appearance:none; border:none; cursor:pointer;
+      padding:18px 26px; border-radius:18px;
+      font-size:18px; line-height:1; letter-spacing:.4px;
+      font-family:'Montserrat',sans-serif; font-weight:800; text-transform:uppercase;
+      background:linear-gradient(180deg,#fff,#eee); color:#000;
+      box-shadow:0 8px 20px rgba(0,0,0,.25);
+      min-width:240px; /* tighter than original */
+      transition:transform .15s ease, opacity .15s ease, background .15s ease;
+    }
+    .mic:hover{transform:translateY(-1px)}
+    .mic:active{transform:translateY(0)}
+    .mic.listening{background:linear-gradient(180deg,var(--warn),#ffdf8a)}
+    .mic.stopping{background:linear-gradient(180deg,var(--stop),#ff8a8a); color:#000}
+    .mic[disabled]{opacity:.45; cursor:not-allowed}
+
+    /* Status pill */
+    .status-rail{display:flex; justify-content:center}
+    .pill{
+      display:inline-flex; align-items:center; gap:8px;
+      background:#191a23; border:1px solid var(--stroke-strong);
+      color:#cfd0dc; border-radius:999px; padding:7px 12px;
+      font-size:12px; letter-spacing:.2px;
+      box-shadow:0 6px 16px rgba(0,0,0,.25);
+    }
+    .dot{width:8px; height:8px; border-radius:999px; background:#666}
+    .pill.listening .dot{background:#f7c948}
+    .pill.thinking  .dot{background:#8a8cff}
+    .pill.speaking  .dot{background:#16db65}
+    .pill.ready     .dot{background:#6f7284}
+
+    /* Instructions */
+    .instructions{
+      text-align:center;
+      font-family:'Montserrat',sans-serif; font-weight:800; text-transform:uppercase;
+      color:#d8d9e3; letter-spacing:.4px; font-size:14px;
+    }
+    .instructions small{display:block; color:#bfc1cd; margin-top:6px; font-size:9px}
+
+    /* Prompt buttons (tighter + more space ABOVE video) */
+    .prompt-grid{
+      display:flex; flex-wrap:wrap; justify-content:center;
+      gap:12px 14px;
+      margin:18px auto 36px;          /* ↑ space above video */
+      max-width:1000px;
+      padding:0 6px;
+    }
+    .btn{
+      appearance:none; border:none; cursor:pointer;
+      padding:10px 14px;               /* tightened padding */
+      border-radius:16px; font-size:12px;
+      font-family:'Montserrat',sans-serif; font-weight:700; text-transform:uppercase;
+      background:linear-gradient(180deg,#fff,#efefef); color:#000;
+      border:1px solid #e7e7e7;
+      white-space:nowrap;               /* fit to text */
+      transition:transform .15s ease, opacity .15s ease;
+    }
+    .btn:hover{transform:translateY(-1px)}
+    .btn[disabled]{opacity:.45; cursor:not-allowed}
+    .btn.active{background:linear-gradient(180deg,#e9ebff,#dfe1ff); border-color:#cfd1ff}
+
+    /* Video */
+    .hero{display:flex; justify-content:center; position:relative}
+    #resp{
+      width:min(100%,560px); aspect-ratio:9/16; max-height:70vh;
+      border-radius:14px; background:#000;
+      border:1px solid var(--stroke-strong);
+      box-shadow:0 12px 32px rgba(0,0,0,.35);
+      opacity:1; transition:opacity 320ms ease;
+      cursor:pointer; outline:none;
+    }
+    #resp:focus-visible{box-shadow:0 0 0 3px var(--accent)}
+    .fade-start{opacity:0}
+
+    /* Buffering overlay */
+    .overlay {
+      position:absolute; inset:0; display:none;
+      align-items:center; justify-content:center;
+      background:rgba(0,0,0,.18); border-radius:14px;
+      pointer-events:none;
+    }
+    .overlay.show{display:flex}
+    .spinner{
+      width:38px; height:38px; border-radius:999px;
+      border:3px solid rgba(255,255,255,.35);
+      border-top-color:#fff; animation:spin 900ms linear infinite;
+      box-shadow:0 0 18px rgba(255,255,255,.25);
+    }
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    .footer{font-size:12px; color:#b7b8c3; text-align:center; margin-top:26px; margin-bottom:60px}
+
+    /* screen-reader-only status */
+    .sr-only{
+      position:absolute !important; width:1px; height:1px; padding:0; margin:-1px;
+      overflow:hidden; clip:rect(0,0,0,0); border:0;
+    }
+
+    @media (max-width:480px){
+      .mic{min-width:195px; font-size:16px; padding:16px 22px}
+      .btn{width:100%}
+      #resp{max-height:68vh}
+      .prompt-grid{gap:10px 12px; margin:14px auto 26px}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card section">
+      <!-- BIG mic button -->
+      <div class="mic-rail">
+        <button class="mic" id="micBtn" aria-pressed="false">🎤 Tap to Talk</button>
+      </div>
+
+      <!-- status pill -->
+      <div class="status-rail stack-s">
+        <div id="statusPill" class="pill ready" aria-live="polite">
+          <span class="dot"></span><span id="pillText">Ready</span>
+        </div>
+      </div>
+
+      <!-- instructions -->
+      <div class="instructions stack-l">
+        Ask Sasha one of these 3 questions.
+        <small>If your microphone doesn’t work, tap the question.</small>
+      </div>
+
+      <!-- prompt buttons -->
+      <div class="prompt-grid stack-m" id="promptGrid">
+        <button class="btn" data-file="assets/p_fun.mp4">What do you like to do for fun?</button>
+        <button class="btn" data-file="assets/p_from.mp4">Where are you from?</button>
+        <button class="btn" data-file="assets/p_relax.mp4">What’s your favorite way to relax?</button>
+      </div>
+
+      <!-- response video + overlay -->
+      <div class="hero">
+        <video id="resp" playsinline preload="auto" tabindex="0" aria-label="Response video (tap to play or pause)"></video>
+        <div id="overlay" class="overlay" aria-hidden="true"><div class="spinner"></div></div>
+      </div>
+
+      <!-- screen-reader-only status -->
+      <div class="sr-only" aria-live="polite" id="asrStatus">Idle</div>
+
+      <div class="footer">AI built by Michelle McCormack</div>
+    </div>
+  </div>
+
+  <script>
+    /* ---------- Elements & state ---------- */
+    const resp = document.getElementById('resp');
+    const grid = document.getElementById('promptGrid');
+    const promptButtons = Array.from(grid.querySelectorAll('.btn'));
+    const micBtn  = document.getElementById('micBtn');
+    const srStatus = document.getElementById('asrStatus');
+
+    const pill = document.getElementById('statusPill');
+    const pillText = document.getElementById('pillText');
+    const overlay = document.getElementById('overlay');
+
+    let currentFile = 'assets/p_fun.mp4';
+    let isStopped = true;
+
+    // audio state (for ElevenLabs)
+    let currentAudio = null;
+    let currentAudioURL = null;
+
+    // replay memory (kept, even though replay UI is hidden)
+    let lastMode = null;  // 'video' | 'tts'
+    let lastFile = null;
+    let lastText = null;
+
+    // mic debounce
+    let micLocked = false;
+    function lockMic(ms=350){ micLocked = true; setTimeout(()=>micLocked=false, ms); }
+
+    // simple in-memory video preload cache
+    const preloadCache = new Map(); // src => HTMLVideoElement
+
+    function haptic(ms=12){ if (navigator.vibrate) try{ navigator.vibrate(ms);}catch{} }
+
+    /* ---------- Helpers ---------- */
+    function setPill(mode, text){
+      pill.classList.remove('listening','thinking','speaking','ready');
+      pill.classList.add(mode);
+      pillText.textContent = text;
+    }
+    function showOverlay(){ overlay.classList.add('show'); }
+    function hideOverlay(){ overlay.classList.remove('show'); }
+
+    function primeFirstFrame(src){
+      showOverlay();
+      resp.classList.add('fade-start');
+      resp.src = src;
+      resp.load();
+      resp.addEventListener('loadeddata', () => {
+        resp.pause();
+        resp.currentTime = 0;
+        requestAnimationFrame(() => resp.classList.remove('fade-start'));
+        isStopped = true;
+        hideOverlay();
+        setPill('ready','Ready');
+      }, { once:true });
+    }
+    function safePlay(){
+      const p = resp.play();
+      if (p && typeof p.catch === 'function') p.catch(()=>{});
+    }
+    function clearActive(){ promptButtons.forEach(b => b.classList.remove('active')); }
+    function setActiveByFile(file){
+      clearActive();
+      const btn = promptButtons.find(b => b.dataset.file === file);
+      if (btn) btn.classList.add('active');
+    }
+    function disablePrompts(disabled){ promptButtons.forEach(b => b.disabled = !!disabled); }
+
+    function stopAudio(){
+      try {
+        if (currentAudio) { currentAudio.pause(); currentAudio.src = ''; }
+        if (currentAudioURL) { URL.revokeObjectURL(currentAudioURL); }
+      } catch {}
+      currentAudio = null;
+      currentAudioURL = null;
+      if ('speechSynthesis' in window) { try { speechSynthesis.cancel(); } catch{} }
+    }
+
+    function stopVideo(){
+      resp.pause();
+      resp.currentTime = 0;
+      isStopped = true;
+      clearActive();
+    }
+
+    /* ---------- UI states ---------- */
+    function setListeningUI(){
+      micBtn.textContent = '■ Stop';
+      micBtn.classList.add('listening');
+      micBtn.classList.remove('stopping');
+      micBtn.setAttribute('aria-pressed','true');
+      disablePrompts(true);
+      setPill('listening','Listening…');
+    }
+    function setPlayingUI(){
+      micBtn.textContent = '■ Stop';
+      micBtn.classList.add('stopping');
+      micBtn.classList.remove('listening');
+      micBtn.setAttribute('aria-pressed','true');
+      disablePrompts(true);
+      setPill('speaking','Speaking…');
+    }
+    function setIdleUI(){
+      micBtn.textContent = '🎤 Tap to Talk';
+      micBtn.classList.remove('listening','stopping');
+      micBtn.setAttribute('aria-pressed','false');
+      disablePrompts(false);
+      srStatus.textContent = 'Idle';
+      setPill('ready','Ready');
+    }
+
+    function stopAll(){
+      stopAudio();
+      stopVideo();
+      setIdleUI();
+      haptic();
+    }
+
+    /* ---------- Video preload ---------- */
+    function preloadSources(initialSrc){
+      const uniqueSrcs = [...new Set(promptButtons.map(b => b.dataset.file))];
+      uniqueSrcs.forEach(src => {
+        if (src === initialSrc) return; // already primed by main video
+        if (preloadCache.has(src)) return;
+        const v = document.createElement('video');
+        v.preload = 'auto';
+        v.src = src;
+        // just load metadata; browser will cache
+        v.addEventListener('loadeddata', ()=>{/* cached */}, { once:true });
+        try { v.load(); } catch {}
+        preloadCache.set(src, v);
+      });
+    }
+
+    /* ---------- Video playback ---------- */
+    function playFile(file){
+      stopAudio(); // stop any TTS first
+
+      if (!isStopped && currentFile === file && !resp.paused) { // toggle off
+        stopVideo();
+        setIdleUI();
+        hideOverlay();
+        return;
+      }
+
+      currentFile = file; isStopped = false; setActiveByFile(file);
+      setPlayingUI();
+      showOverlay();
+
+      lastMode = 'video';
+      lastFile = file;
+      lastText = null;
+
+      resp.classList.add('fade-start');
+      resp.src = file; resp.load();
+      const onCanPlay = () => {
+        safePlay();
+        requestAnimationFrame(() => resp.classList.remove('fade-start'));
+        hideOverlay();
+      };
+      resp.addEventListener('canplay', onCanPlay, { once:true });
+
+      if (window.innerWidth < 900) resp.scrollIntoView({ behavior:'smooth', block:'center' });
+    }
+
+    /* ---------- Events ---------- */
+    resp.addEventListener('click', () => {
+      if (resp.paused) { safePlay(); isStopped = false; setPlayingUI(); }
+      else { stopVideo(); setIdleUI(); hideOverlay(); }
+    });
+    grid.addEventListener('click', (e) => {
+      const btn = e.target.closest('.btn'); if (!btn) return;
+      playFile(btn.dataset.file);
+    });
+    resp.addEventListener('ended', () => { stopVideo(); setIdleUI(); });
+    resp.addEventListener('error', () => { stopVideo(); setIdleUI(); hideOverlay(); });
+
+    /* ---------- ASR + backend routing + ElevenLabs TTS ---------- */
+    const supportsASR = ('SpeechRecognition' in window) || ('webkitSpeechRecognition' in window);
+    let recognizer = null, recognizing = false, finalTranscript = '';
+
+    if (!supportsASR) { micBtn.disabled = true; srStatus.textContent = 'Speech input not available.'; }
+
+    function initRecognizer(){
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      recognizer = new SR();
+      recognizer.lang = 'en-US';
+      recognizer.interimResults = true;
+      recognizer.continuous = false;
+
+      recognizer.onstart = () => {
+        recognizing = true; finalTranscript = '';
+        stopAll();           // clear media
+        setListeningUI();
+        srStatus.textContent = 'Listening…';
+        lockMic(); // debounce mic
+        haptic();
+      };
+      recognizer.onerror = (e) => { srStatus.textContent = 'Mic error: ' + (e.error || 'unknown'); stopASR(); setIdleUI(); hideOverlay(); };
+      recognizer.onend = () => {
+        recognizing = false;
+        const text = finalTranscript.trim();
+        if (text) {
+          srStatus.textContent = 'Processing…';
+          setPill('thinking','Thinking…');
+          routeToBackend(text);
+        } else { setIdleUI(); }
+      };
+      recognizer.onresult = (event) => {
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const res = event.results[i];
+          if (res.isFinal) finalTranscript += res[0].transcript.trim() + ' ';
+        }
+      };
+    }
+    function startASR(){ if (!recognizer) initRecognizer(); try { recognizer.start(); } catch { try { recognizer.stop(); recognizer.start(); } catch(_){} } }
+    function stopASR(){ if (recognizer && recognizing) recognizer.stop(); recognizing = false; }
+
+    micBtn.addEventListener('click', () => {
+      if (micLocked) return;        // debounce
+      if (micBtn.textContent.includes('Stop')) { stopAll(); lockMic(); return; }
+      if (!supportsASR) return;
+      startASR();
+    });
+    window.addEventListener('keydown', (e) => { if (e.key === 'Escape') stopAll(); });
+
+    async function routeToBackend(text){
+      try{
+        const res = await fetch('/.netlify/functions/dop-chat', {
+          method:'POST',
+          headers:{ 'Content-Type':'application/json' },
+          body: JSON.stringify({ text })
+        });
+        const data = await res.json();
+
+        if (data.matchedClip) {
+          setPlayingUI();
+          playFile(data.matchedClip);
+        } else if (data.fallbackResponse) {
+          setPlayingUI();
+          lastMode = 'tts';
+          lastText = data.fallbackResponse;
+          lastFile = null;
+          await speakWithElevenLabs(data.fallbackResponse);
+          setIdleUI();
+        } else {
+          setIdleUI();
+        }
+      } catch (err){
+        console.error(err);
+        srStatus.textContent = 'Error contacting backend.';
+        setIdleUI();
+      }
+    }
+
+    // Calls your Netlify function (ElevenLabs) and plays returned audio/mpeg
+    async function speakWithElevenLabs(text){
+      try{
+        stopVideo();
+        showOverlay(); // give a tiny indication even for TTS
+
+        const res = await fetch('/.netlify/functions/tts-eleven', {
+          method:'POST',
+          headers:{ 'Content-Type':'application/json' },
+          body: JSON.stringify({ text })
+        });
+        if (!res.ok) throw new Error('TTS failed');
+
+        const buf = await res.arrayBuffer();
+        const blob = new Blob([buf], { type: 'audio/mpeg' });
+        currentAudioURL = URL.createObjectURL(blob);
+        currentAudio = new Audio(currentAudioURL);
+
+        setPill('speaking','Speaking…');
+        await currentAudio.play().catch(()=>{});
+        await new Promise((resolve) => {
+          const cleanup = () => { currentAudio && currentAudio.removeEventListener('ended', cleanup); resolve(); };
+          currentAudio.addEventListener('ended', cleanup, { once:true });
+        });
+      } catch(e){
+        console.warn('ElevenLabs TTS error, falling back to device TTS', e);
+        if ('speechSynthesis' in window) {
+          const u = new SpeechSynthesisUtterance(text);
+          u.lang = 'en-US';
+          setPill('speaking','Speaking…');
+          try { speechSynthesis.cancel(); speechSynthesis.speak(u); } catch {}
+          await new Promise((resolve) => { u.onend = resolve; setTimeout(resolve, 12000); });
+        }
+      } finally {
+        hideOverlay();
+        try{
+          if (currentAudio) { currentAudio.pause(); currentAudio.src=''; }
+          if (currentAudioURL) URL.revokeObjectURL(currentAudioURL);
+        }catch{}
+        currentAudio=null; currentAudioURL=null;
+      }
+    }
+
+    // Boot
+    primeFirstFrame(currentFile);
+    // Preload the other prompts after the first frame is ready
+    setTimeout(() => preloadSources(currentFile), 300);
+  </script>
+</body>
+</html>
