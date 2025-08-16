@@ -205,7 +205,7 @@
     const srStatus = document.getElementById('asrStatus');
 
     const pill = document.getElementById('statusPill');
-    the pillText = document.getElementById('pillText');
+    const pillText = document.getElementById('pillText');
     const overlay = document.getElementById('overlay');
 
     let currentFile = 'assets/p_fun.mp4';
@@ -214,6 +214,11 @@
     // audio state (for ElevenLabs)
     let currentAudio = null;
     let currentAudioURL = null;
+
+    // replay memory (kept, even though replay UI is hidden)
+    let lastMode = null;  // 'video' | 'tts'
+    let lastFile = null;
+    let lastText = null;
 
     // mic debounce
     let micLocked = false;
@@ -340,6 +345,10 @@
       setPlayingUI();
       showOverlay();
 
+      lastMode = 'video';
+      lastFile = file;
+      lastText = null;
+
       resp.classList.add('fade-start');
       resp.src = file; resp.load();
       const onCanPlay = () => {
@@ -368,7 +377,6 @@
     const supportsASR = ('SpeechRecognition' in window) || ('webkitSpeechRecognition' in window);
     let recognizer = null, recognizing = false, finalTranscript = '';
 
-    // iPhone (no Web Speech) => mic disabled; desktop => enabled
     if (!supportsASR) { micBtn.disabled = true; srStatus.textContent = 'Speech input not available.'; }
 
     function initRecognizer(){
@@ -428,6 +436,9 @@
           playFile(data.matchedClip);
         } else if (data.fallbackResponse) {
           setPlayingUI();
+          lastMode = 'tts';
+          lastText = data.fallbackResponse;
+          lastFile = null;
           await speakWithElevenLabs(data.fallbackResponse);
           setIdleUI();
         } else {
