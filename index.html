@@ -205,7 +205,7 @@
     const srStatus = document.getElementById('asrStatus');
 
     const pill = document.getElementById('statusPill');
-    const pillText = document.getElementById('pillText');
+    the pillText = document.getElementById('pillText');
     const overlay = document.getElementById('overlay');
 
     let currentFile = 'assets/p_fun.mp4';
@@ -214,11 +214,6 @@
     // audio state (for ElevenLabs)
     let currentAudio = null;
     let currentAudioURL = null;
-
-    // replay memory (kept, even though replay UI is hidden)
-    let lastMode = null;  // 'video' | 'tts'
-    let lastFile = null;
-    let lastText = null;
 
     // mic debounce
     let micLocked = false;
@@ -281,14 +276,6 @@
       clearActive();
     }
 
-    function stopAll(){
-      stopAudio();
-      stopVideo();
-      stopRecordingFallback();
-      setIdleUI();
-      haptic();
-    }
-
     /* ---------- UI states ---------- */
     function setListeningUI(){
       micBtn.textContent = '■ Stop';
@@ -313,6 +300,13 @@
       disablePrompts(false);
       srStatus.textContent = 'Idle';
       setPill('ready','Ready');
+    }
+
+    function stopAll(){
+      stopAudio();
+      stopVideo();
+      setIdleUI();
+      haptic();
     }
 
     /* ---------- Video preload ---------- */
@@ -346,10 +340,6 @@
       setPlayingUI();
       showOverlay();
 
-      lastMode = 'video';
-      lastFile = file;
-      lastText = null;
-
       resp.classList.add('fade-start');
       resp.src = file; resp.load();
       const onCanPlay = () => {
@@ -378,7 +368,9 @@
     const supportsASR = ('SpeechRecognition' in window) || ('webkitSpeechRecognition' in window);
     let recognizer = null, recognizing = false, finalTranscript = '';
 
-    // Desktop Web Speech API
+    // iPhone (no Web Speech) => mic disabled; desktop => enabled
+    if (!supportsASR) { micBtn.disabled = true; srStatus.textContent = 'Speech input not available.'; }
+
     function initRecognizer(){
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
       recognizer = new SR();
@@ -414,99 +406,14 @@
     function startASR(){ if (!recognizer) initRecognizer(); try { recognizer.start(); } catch { try { recognizer.stop(); recognizer.start(); } catch(_){} } }
     function stopASR(){ if (recognizer && recognizing) recognizer.stop(); recognizing = false; }
 
-    // ---------- Whisper fallback recording (iPhone etc.) ----------
-    let mediaStream = null, mediaRecorder = null, recordChunks = [], recMime = 'audio/mp4', recording = false, fallbackTimer = null;
-
-    async function startRecordingFallback(){
-      try{
-        stopAll(); // ensure clean state
-
-        // Prefer mp4 on iOS Safari; fall back to webm if needed
-        if (window.MediaRecorder && MediaRecorder.isTypeSupported('audio/mp4')) recMime = 'audio/mp4';
-        else if (window.MediaRecorder && MediaRecorder.isTypeSupported('audio/webm')) recMime = 'audio/webm';
-        else recMime = 'audio/mp4';
-
-        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorder = new MediaRecorder(mediaStream, { mimeType: recMime });
-        recordChunks = [];
-
-        mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size) recordChunks.push(e.data); };
-        mediaRecorder.onstart = () => {
-          recording = true;
-          setListeningUI();
-          srStatus.textContent = 'Listening…';
-          // safety stop after 15s
-          fallbackTimer = setTimeout(() => { try{ mediaRecorder.stop(); }catch{} }, 15000);
-        };
-        mediaRecorder.onstop = async () => {
-          recording = false;
-          try{
-            if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
-            const blob = new Blob(recordChunks, { type: recMime });
-            showOverlay(); setPill('thinking','Thinking…'); srStatus.textContent = 'Processing…';
-
-            const base64 = await blobToBase64(blob);
-            const res = await fetch('/.netlify/functions/stt-whisper', {
-              method:'POST',
-              headers:{ 'Content-Type':'application/json' },
-              body: JSON.stringify({ audioBase64: base64, mime: recMime })
-            });
-            const data = await res.json();
-            const text = (data.text || '').trim();
-
-            if (text) { await routeToBackend(text); }
-            else { setIdleUI(); }
-          } catch(err){
-            console.error('Whisper fallback error', err);
-            setIdleUI();
-          } finally {
-            hideOverlay();
-            cleanupStream();
-          }
-        };
-
-        mediaRecorder.start();
-      } catch(err){
-        console.error('getUserMedia error', err);
-        srStatus.textContent = 'Mic permission denied.';
-        setIdleUI();
-        cleanupStream();
-      }
-    }
-
-    function stopRecordingFallback(){
-      try{ if (mediaRecorder && recording) mediaRecorder.stop(); }catch{}
-      recording = false;
-      if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
-      cleanupStream();
-    }
-
-    function cleanupStream(){
-      try{ if (mediaStream) mediaStream.getTracks().forEach(t => t.stop()); }catch{}
-      mediaStream = null; mediaRecorder = null;
-    }
-
-    function blobToBase64(blob){
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          try { resolve(String(reader.result).split(',')[1] || ''); }
-          catch(e){ reject(e); }
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-    }
-
-    // Mic button
     micBtn.addEventListener('click', () => {
       if (micLocked) return;        // debounce
       if (micBtn.textContent.includes('Stop')) { stopAll(); lockMic(); return; }
-      if (supportsASR) startASR(); else startRecordingFallback();
+      if (!supportsASR) return;
+      startASR();
     });
     window.addEventListener('keydown', (e) => { if (e.key === 'Escape') stopAll(); });
 
-    /* ---------- Backend routing + ElevenLabs TTS ---------- */
     async function routeToBackend(text){
       try{
         const res = await fetch('/.netlify/functions/dop-chat', {
@@ -521,9 +428,6 @@
           playFile(data.matchedClip);
         } else if (data.fallbackResponse) {
           setPlayingUI();
-          lastMode = 'tts';
-          lastText = data.fallbackResponse;
-          lastFile = null;
           await speakWithElevenLabs(data.fallbackResponse);
           setIdleUI();
         } else {
