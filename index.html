@@ -497,18 +497,5 @@
     primeFirstFrame(currentFile);
     setTimeout(() => preloadSources(currentFile), 300);
   </script>
-
-  <!-- SAFE PROXY TEST (no UI changes) -->
-  <script>
-    (async function testHeygenProxy(){
-      try{
-        const res = await fetch("/.netlify/functions/heygen-proxy");
-        const data = await res.json();
-        console.log("Heygen Proxy Test →", data);
-      }catch(err){
-        console.error("Proxy error:", err);
-      }
-    })();
-  </script>
 </body>
 </html>
