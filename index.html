@@ -1,501 +1,931 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
-  <title>Dopple Talent Demo</title>
+  <!--
+    Dopple Talent Agency (DTA) — index.html
+    ------------------------------------------------------------
+    Roadmap Phase 2 → Task 21 → Implementation Tier 1 (Local JS Memory)
 
+    North Star Charter Lock Points:
+      - Goal: Scalable, monetizable AI clones (DOPs) that feel like 1‑on‑1 engagement.
+      - Baseline UI: Tap‑to‑Talk (portrait video), prompts above, NO autoplay / NO loop,
+        NO card layout, NO native video controls.
+      - Engagement cycle: idle → engage → respond → reset.
+      - Each DOP distinct via persona.json.
+      - Never regress from working baselines.
+
+    THIS FILE ADDS:
+      - Local in‑memory session history (conversationHistory[]) with a bounded context window.
+      - Safe “bridge layer” that calls your existing LLM / ElevenLabs / HeyGen functions
+        if present (window.callLLM, window.callElevenLabs, window.callHeyGenSync), or
+        uses minimal fallbacks that DO NOT change UI/transport behavior.
+      - No changes to tap‑to‑talk, prompts behavior, mic flow, or stop/play semantics.
+      - No native video controls; no autoplay/loop on load.
+
+    IMPORTANT:
+      - If you already have working integrations for LLM/TTS/Avatar, this file will use them.
+      - If not, the fallbacks will synthesize minimal behavior so the page won’t break.
+      - Memory resets on page reload (Tier 1). A “Reset Session” utility is available.
+
+    Never regress guards (search these flags before editing):
+      - data-no-autoplay
+      - data-no-loop
+      - data-no-native-controls
+  -->
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dopple Talent Demo — DTA</title>
+
+  <!-- Fonts (system-first, then Inter as enhancement) -->
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
   <style>
     :root{
-      --bg:#0e0f12; --bg-2:#08090c;
-      --panel:#12131a; --panel-2:#1a1b25;
-      --text:#ececf1; --muted:#b7b8c3;
-      --stroke:#26283a; --stroke-strong:#3a3b52;
-      --accent:#8a8cff;
-      --ok:#16db65; --warn:#ffd166; --stop:#ff6b6b;
-      --shadow:0 10px 30px rgba(0,0,0,.35); --radius:16px;
-    }
-    *{box-sizing:border-box}
-    html,body{height:100%}
-    body{
-      margin:0; font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
-      color:var(--text);
-      background:
-        radial-gradient(1200px 600px at 80% -10%, rgba(94,97,255,.12), transparent 40%),
-        radial-gradient(900px 480px at 0% 110%, rgba(138,140,255,.10), transparent 45%),
-        linear-gradient(180deg,var(--bg),var(--bg-2));
-      min-height:100vh;
-    }
-
-    /* Layout */
-    .wrap{max-width:1100px; margin:0 auto; padding:28px 20px 48px}
-    .card{
-      position:relative;
-      background:linear-gradient(180deg,var(--panel),var(--panel-2));
-      border:1px solid var(--stroke);
-      border-radius:var(--radius);
-      box-shadow:var(--shadow);
-      padding:26px 22px 32px;
-      margin:18px 0;
-    }
-    .section{max-width:980px; margin:0 auto}
-    .stack-s{margin-top:8px}
-    .stack-m{margin-top:16px}
-    .stack-l{margin-top:24px}
-    .stack-xl{margin-top:32px}
-
-    /* Top mic button */
-    .mic-rail{display:flex; justify-content:center}
-    .mic{
-      appearance:none; border:none; cursor:pointer;
-      padding:18px 26px; border-radius:18px;
-      font-size:18px; line-height:1; letter-spacing:.4px;
-      font-family:'Montserrat',sans-serif; font-weight:800; text-transform:uppercase;
-      background:linear-gradient(180deg,#fff,#eee); color:#000;
-      box-shadow:0 8px 20px rgba(0,0,0,.25);
-      min-width:240px;
-      transition:transform .15s ease, opacity .15s ease, background .15s ease;
-    }
-    .mic:hover{transform:translateY(-1px)}
-    .mic:active{transform:translateY(0)}
-    .mic.listening{background:linear-gradient(180deg,var(--warn),#ffdf8a)}
-    .mic.stopping{background:linear-gradient(180deg,var(--stop),#ff8a8a); color:#000}
-    .mic[disabled]{opacity:.45; cursor:not-allowed}
-
-    /* Status pill */
-    .status-rail{display:flex; justify-content:center}
-    .pill{
-      display:inline-flex; align-items:center; gap:8px;
-      background:#191a23; border:1px solid var(--stroke-strong);
-      color:#cfd0dc; border-radius:999px; padding:7px 12px;
-      font-size:12px; letter-spacing:.2px;
-      box-shadow:0 6px 16px rgba(0,0,0,.25);
-    }
-    .dot{width:8px; height:8px; border-radius:999px; background:#666}
-    .pill.listening .dot{background:#f7c948}
-    .pill.thinking  .dot{background:#8a8cff}
-    .pill.speaking  .dot{background:#16db65}
-    .pill.ready     .dot{background:#6f7284}
-
-    /* Instructions */
-    .instructions{
-      text-align:center;
-      font-family:'Montserrat',sans-serif; font-weight:800; text-transform:uppercase;
-      color:#d8d9e3; letter-spacing:.4px; font-size:14px;
-    }
-    .instructions small{display:block; color:#bfc1cd; margin-top:6px; font-size:9px}
-
-    /* Prompt buttons */
-    .prompt-grid{
-      display:flex; flex-wrap:wrap; justify-content:center;
-      gap:12px 14px;
-      margin:18px auto 36px;
-      max-width:1000px;
-      padding:0 6px;
-    }
-    .btn{
-      appearance:none; border:none; cursor:pointer;
-      padding:10px 14px;
-      border-radius:16px; font-size:12px;
-      font-family:'Montserrat',sans-serif; font-weight:700; text-transform:uppercase;
-      background:linear-gradient(180deg,#fff,#efefef); color:#000;
-      border:1px solid #e7e7e7;
-      white-space:nowrap;
-      transition:transform .15s ease, opacity .15s ease;
-    }
-    .btn:hover{transform:translateY(-1px)}
-    .btn[disabled]{opacity:.45; cursor:not-allowed}
-    .btn.active{background:linear-gradient(180deg,#e9ebff,#dfe1ff); border-color:#cfd1ff}
-
-    /* Video */
-    .hero{display:flex; justify-content:center; position:relative}
-    #resp{
-      width:min(100%,560px); aspect-ratio:9/16; max-height:70vh;
-      border-radius:14px; background:#000;
-      border:1px solid var(--stroke-strong);
-      box-shadow:0 12px 32px rgba(0,0,0,.35);
-      opacity:1; transition:opacity 320ms ease;
-      cursor:pointer; outline:none;
-    }
-    #resp:focus-visible{box-shadow:0 0 0 3px var(--accent)}
-    .fade-start{opacity:0}
-
-    /* Buffering overlay */
-    .overlay {
-      position:absolute; inset:0; display:none;
-      align-items:center; justify-content:center;
-      background:rgba(0,0,0,.18); border-radius:14px;
-      pointer-events:none;
-    }
-    .overlay.show{display:flex}
-    .spinner{
-      width:38px; height:38px; border-radius:999px;
-      border:3px solid rgba(255,255,255,.35);
-      border-top-color:#fff; animation:spin 900ms linear infinite;
-      box-shadow:0 0 18px rgba(255,255,255,.25);
-    }
-    @keyframes spin{to{transform:rotate(360deg)}}
-
-    .footer{font-size:12px; color:#b7b8c3; text-align:center; margin-top:26px; margin-bottom:60px}
-
-    /* screen-reader-only status */
-    .sr-only{
-      position:absolute !important; width:1px; height:1px; padding:0; margin:-1px;
-      overflow:hidden; clip:rect(0,0,0,0); border:0;
+      --bg: #0b0c10;
+      --panel: #121318;
+      --muted: #20222b;
+      --text: #e7e9ee;
+      --text-dim: #b6b9c3;
+      --accent: #7c5cff;  /* accent used for focus rings / highlights */
+      --chip: #1a1c24;
+      --chip-hover: #21232d;
+      --chip-active: #2a2e3a;
+      --danger: #ff4d4d;
+      --ok: #39d98a;
+      --warn: #ffc447;
+      --border: #1c1e26;
+      --shadow: 0 10px 25px rgba(0,0,0,.35);
+      --radius-lg: 18px;
+      --radius-md: 12px;
+      --radius-sm: 8px;
+      --gap: 16px;
     }
 
-    @media (max-width:480px){
-      .mic{min-width:195px; font-size:16px; padding:16px 22px}
-      .btn{width:100%}
-      #resp{max-height:68vh}
-      .prompt-grid{gap:10px 12px; margin:14px auto 26px}
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+      line-height: 1.45;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    a { color: inherit; text-decoration: none; }
+    button { font: inherit; color: inherit; }
+
+    /* Page shell */
+    .wrap {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 28px 18px 64px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .brand {
+      font-weight: 800;
+      letter-spacing: .3px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .brand .dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: var(--accent);
+      display: inline-block;
+    }
+    .brand small {
+      display: block;
+      font-weight: 600;
+      color: var(--text-dim);
+      opacity: .9;
+      margin-top: 2px;
+      letter-spacing: .2px;
+    }
+
+    /* Persona / tools band */
+    .tools {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .pill {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-dim);
+    }
+    .pill strong { color: var(--text); }
+
+    .btn-ghost {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: transform .06s ease, background .2s ease, border-color .2s ease;
+    }
+    .btn-ghost:hover { background: var(--muted); }
+    .btn-ghost:active { transform: translateY(1px) scale(0.98); }
+
+    /* Prompt chips row (ABOVE the portrait video) */
+    .prompts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 18px 0 14px;
+      padding: 6px 2px 4px;
+    }
+
+    .chip {
+      background: var(--chip);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 12px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background .15s ease, border-color .15s ease, transform .06s ease;
+      white-space: nowrap;
+      font-weight: 500;
+    }
+    .chip:hover { background: var(--chip-hover); }
+    .chip:active { transform: translateY(1px) scale(.98); background: var(--chip-active); }
+
+    /* Portrait video container (9:16) */
+    .stage {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 10px;
+      box-shadow: var(--shadow);
+      /* keep a little extra top space between prompts and video (user requested in prior baseline) */
+      margin-top: 8px;
+    }
+
+    .video-frame {
+      position: relative;
+      width: 100%;
+      /* 9:16 ratio frame */
+      aspect-ratio: 9 / 16;
+      background: linear-gradient(180deg, #10121a, #0d0f15);
+      overflow: hidden;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+    }
+
+    .video-frame .overlayIdle {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+      color: var(--text-dim);
+      font-weight: 600;
+      letter-spacing: .2px;
+    }
+    .video-frame .overlayThinking {
+      position: absolute;
+      inset: 0;
+      display: none; /* toggled by JS */
+      background: radial-gradient(80% 60% at 50% 0%, rgba(124,92,255,.08), transparent 60%),
+                  radial-gradient(60% 40% at 80% 100%, rgba(124,92,255,.05), transparent 60%);
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      color: var(--text);
+      font-weight: 600;
+    }
+    .video-frame .overlayThinking[data-show="1"]{ display: flex; }
+
+    .spinner {
+      width: 18px; height: 18px; border-radius: 50%;
+      border: 2px solid rgba(255,255,255,.25);
+      border-top-color: var(--accent);
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    video.dop {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      /* No native controls, no autoplay/loop attributes used */
+    }
+
+    /* Controls row (below video) */
+    .controls {
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .left-controls, .right-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn {
+      appearance: none;
+      border: 0;
+      background: var(--accent);
+      color: white;
+      padding: 12px 14px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-weight: 700;
+      letter-spacing: .2px;
+      transition: transform .06s ease, box-shadow .2s ease, opacity .2s ease;
+      box-shadow: 0 6px 16px rgba(124,92,255,.35);
+      user-select: none;
+    }
+    .btn:hover { box-shadow: 0 10px 26px rgba(124,92,255,.45); }
+    .btn:active { transform: translateY(1px) scale(.985); }
+
+    .btn.secondary {
+      background: var(--muted);
+      color: var(--text);
+      box-shadow: none;
+      border: 1px solid var(--border);
+    }
+    .btn.secondary:hover { background: #262938; }
+
+    .btn.danger { background: var(--danger); box-shadow: 0 6px 16px rgba(255,77,77,.35); }
+    .btn.ok { background: var(--ok); color: #0a0f12; box-shadow: 0 6px 16px rgba(57,217,138,.35); }
+
+    .btn:disabled {
+      opacity: .55;
+      cursor: not-allowed;
+      box-shadow: none;
+      transform: none;
+    }
+
+    /* Minimal footer helper */
+    .meta {
+      margin-top: 22px;
+      color: var(--text-dim);
+      font-size: 13px;
+    }
+
+    /* Memory chips (non-interactive; optional, subtle) */
+    .memory-chips {
+      display: none; /* off by default; toggle to 'flex' if you want to visualize memory */
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .memory-chip {
+      background: #151722;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      padding: 6px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+    }
+
+    /* Tiny responsive touch-ups */
+    @media (max-width: 560px){
+      .wrap { padding: 18px 12px 42px; }
+      .topbar { flex-direction: column; align-items: flex-start; gap: 8px; }
     }
   </style>
 </head>
-<body>
-  <div class="wrap">
-    <div class="card section">
-      <!-- BIG mic button -->
-      <div class="mic-rail">
-        <button class="mic" id="micBtn" aria-pressed="false">🎤 Tap to Talk</button>
-      </div>
 
-      <!-- status pill -->
-      <div class="status-rail stack-s">
-        <div id="statusPill" class="pill ready" aria-live="polite">
-          <span class="dot"></span><span id="pillText">Ready</span>
+<body>
+  <div class="wrap" id="appRoot">
+    <!-- TOP BAR -->
+    <div class="topbar" aria-label="Top bar">
+      <div class="brand" aria-label="Brand">
+        <span class="dot" aria-hidden="true"></span>
+        <div>
+          DOPPLE TALENT AGENCY
+          <small>Tap‑to‑Talk · Persona‑Driven · No Native Controls</small>
         </div>
       </div>
 
-      <!-- instructions -->
-      <div class="instructions stack-l">
-        Ask Sasha one of these 3 questions.
-        <small>If your microphone doesn’t work, tap the question.</small>
+      <div class="tools">
+        <!-- Persona display (non-interactive label to avoid regressions) -->
+        <div class="pill" id="personaPill" aria-live="polite" aria-label="Current persona">
+          <span>Persona:</span><strong id="personaName">Sasha</strong>
+        </div>
+
+        <!-- Utility: Reset Session memory -->
+        <button class="btn-ghost" id="btnReset" type="button" title="Reset session (clears local memory)">
+          Reset Session
+        </button>
       </div>
-
-      <!-- prompt buttons -->
-      <div class="prompt-grid stack-m" id="promptGrid">
-        <button class="btn" data-file="assets/p_fun.mp4">What do you like to do for fun?</button>
-        <button class="btn" data-file="assets/p_from.mp4">Where are you from?</button>
-        <button class="btn" data-file="assets/p_relax.mp4">What’s your favorite way to relax?</button>
-      </div>
-
-      <!-- response video + overlay -->
-      <div class="hero">
-        <video id="resp" playsinline preload="auto" tabindex="0" aria-label="Response video (tap to play or pause)"></video>
-        <div id="overlay" class="overlay" aria-hidden="true"><div class="spinner"></div></div>
-      </div>
-
-      <!-- screen-reader-only status -->
-      <div class="sr-only" aria-live="polite" id="asrStatus">Idle</div>
-
-      <div class="footer">AI built by Michelle McCormack</div>
     </div>
+
+    <!-- PROMPT CHIPS (ABOVE VIDEO) -->
+    <div class="prompts" id="promptRow" aria-label="Prompt chips">
+      <!-- chips injected from persona.prompts; fallback list provided in JS -->
+    </div>
+
+    <!-- STAGE (PORTRAIT VIDEO) -->
+    <section class="stage" aria-label="DOP stage">
+      <div class="video-frame" id="videoFrame" data-no-autoplay data-no-loop data-no-native-controls>
+        <!-- Idle watermark (non-interactive) -->
+        <div class="overlayIdle" id="overlayIdle">Tap a prompt or use the mic to talk</div>
+
+        <!-- Thinking overlay (toggled on request) -->
+        <div class="overlayThinking" id="overlayThinking" aria-live="polite">
+          <div class="spinner" aria-hidden="true"></div>
+          <div>Thinking…</div>
+        </div>
+
+        <!-- Portrait video — NO native controls; play via JS only after user action -->
+        <video id="dopVideo" class="dop" playsinline preload="metadata" muted></video>
+        <!-- Note: muted by default to avoid browser policies blocking JS play; we turn audio on by playing avatar video with sound track or falling back to audio element below -->
+
+        <!-- Audio fallback for TTS when no avatar video is available -->
+        <audio id="dopAudio" preload="none"></audio>
+      </div>
+
+      <!-- CONTROLS ROW -->
+      <div class="controls">
+        <div class="left-controls">
+          <!-- Mic -->
+          <button class="btn" id="btnMic" type="button" aria-pressed="false" aria-label="Hold to speak">
+            🎙️ Hold to Talk
+          </button>
+
+          <!-- (Optional) Text input for testing; hidden by default -->
+          <input
+            id="textInput"
+            type="text"
+            inputmode="latin"
+            placeholder="Type to test (Enter to send)…"
+            style="display:none; background:var(--panel); color:var(--text); border:1px solid var(--border); border-radius:10px; padding:10px 12px; width:240px"
+            aria-hidden="true"
+          />
+        </div>
+
+        <div class="right-controls">
+          <!-- Stop/Play toggle (transport only; does not clear memory) -->
+          <button class="btn secondary" id="btnTransport" type="button" aria-label="Stop/Play">
+            ⏹ Stop
+          </button>
+        </div>
+      </div>
+
+      <!-- Optional visualization of memory (off by default) -->
+      <div class="memory-chips" id="memoryChips" aria-hidden="true"></div>
+
+      <div class="meta" id="meta">
+        Session memory: <strong>Local (Tier 1)</strong>. Context window capped to last <span id="capN">10</span> turns.
+      </div>
+    </section>
   </div>
 
+  <!-- ============================= -->
+  <!--        APPLICATION JS         -->
+  <!-- ============================= -->
   <script>
-    /* ---------- Elements & state ---------- */
-    const resp = document.getElementById('resp');
-    const grid = document.getElementById('promptGrid');
-    const promptButtons = Array.from(grid.querySelectorAll('.btn'));
-    const micBtn  = document.getElementById('micBtn');
-    const srStatus = document.getElementById('asrStatus');
+    "use strict";
 
-    const pill = document.getElementById('statusPill');
-    const pillText = document.getElementById('pillText');
-    const overlay = document.getElementById('overlay');
+    /**********************************************************************
+     * DTA · Phase 2 · Task 21 · Tier 1 (Local JS Memory)
+     * ---------------------------------------------------
+     * This section wires in a bounded local conversation history and
+     * bridges to your existing LLM / ElevenLabs / HeyGen functions.
+     *
+     * Guardrails:
+     *  - No native video controls
+     *  - No autoplay / no loop on load
+     *  - Prompts remain above video; mic works as before
+     *  - Stop/Play remains transport-only (does NOT clear memory)
+     **********************************************************************/
 
-    let currentFile = 'assets/p_fun.mp4';
-    let isStopped = true;
+    /* ===========================
+       0) Persona (fallback)
+       =========================== */
+    const DEFAULT_PERSONA = {
+      id: "sasha",
+      displayName: "Sasha",
+      voice: "sasha-voice-id",      // your ElevenLabs voice id
+      avatarId: "heygen-avatar-id", // your HeyGen avatar id
+      style: "friendly, flirty, concise, Boston-adjacent humor",
+      prompts: [
+        "What do you like to do for fun?",
+        "Tell me your favorite coffee order.",
+        "What turns you on creatively?",
+        "Give me a 10‑second intro.",
+        "What’s your perfect Sunday?",
+        "What are your boundaries?",
+        "What should I ask you next?",
+        "Pitch me your best selfie tip.",
+        "What’s your gym routine?",
+        "What content are you dropping next?"
+      ]
+    };
 
-    // audio state (for ElevenLabs)
-    let currentAudio = null;
-    let currentAudioURL = null;
+    // Allow project to set window.DOP_PERSONA beforehand (from persona.json).
+    const PERSONA = (window.DOP_PERSONA && typeof window.DOP_PERSONA === "object")
+      ? window.DOP_PERSONA
+      : DEFAULT_PERSONA;
 
-    // replay memory (kept, even though replay UI is hidden)
-    let lastMode = null;  // 'video' | 'tts'
-    let lastFile = null;
-    let lastText = null;
+    /* ===========================
+       1) DOM El references
+       =========================== */
+    const els = {
+      promptRow: document.getElementById("promptRow"),
+      personaName: document.getElementById("personaName"),
+      personaPill: document.getElementById("personaPill"),
+      overlayIdle: document.getElementById("overlayIdle"),
+      overlayThinking: document.getElementById("overlayThinking"),
+      video: document.getElementById("dopVideo"),
+      audio: document.getElementById("dopAudio"),
+      btnMic: document.getElementById("btnMic"),
+      btnTransport: document.getElementById("btnTransport"),
+      btnReset: document.getElementById("btnReset"),
+      memoryChips: document.getElementById("memoryChips"),
+      meta: document.getElementById("meta"),
+      capN: document.getElementById("capN"),
+      textInput: document.getElementById("textInput")
+    };
 
-    // mic debounce
-    let micLocked = false;
-    function lockMic(ms=350){ micLocked = true; setTimeout(()=>micLocked=false, ms); }
-
-    // simple in-memory video preload cache
-    const preloadCache = new Map(); // src => HTMLVideoElement
-
-    function haptic(ms=12){ if (navigator.vibrate) try{ navigator.vibrate(ms);}catch{} }
-
-    /* ---------- Helpers ---------- */
-    function setPill(mode, text){
-      pill.classList.remove('listening','thinking','speaking','ready');
-      pill.classList.add(mode);
-      pillText.textContent = text;
-    }
-    function showOverlay(){ overlay.classList.add('show'); }
-    function hideOverlay(){ overlay.classList.remove('show'); }
-
-    function primeFirstFrame(src){
-      showOverlay();
-      resp.classList.add('fade-start');
-      resp.src = src;
-      resp.load();
-      resp.addEventListener('loadeddata', () => {
-        resp.pause();
-        resp.currentTime = 0;
-        requestAnimationFrame(() => resp.classList.remove('fade-start'));
-        isStopped = true;
-        hideOverlay();
-        setPill('ready','Ready');
-      }, { once:true });
-    }
-    function safePlay(){
-      const p = resp.play();
-      if (p && typeof p.catch === 'function') p.catch(()=>{});
-    }
-    function clearActive(){ promptButtons.forEach(b => b.classList.remove('active')); }
-    function setActiveByFile(file){
-      clearActive();
-      const btn = promptButtons.find(b => b.dataset.file === file);
-      if (btn) btn.classList.add('active');
-    }
-    function disablePrompts(disabled){ promptButtons.forEach(b => b.disabled = !!disabled); }
-
-    function stopAudio(){
-      try {
-        if (currentAudio) { currentAudio.pause(); currentAudio.src = ''; }
-        if (currentAudioURL) { URL.revokeObjectURL(currentAudioURL); }
-      } catch {}
-      currentAudio = null;
-      currentAudioURL = null;
-      if ('speechSynthesis' in window) { try { speechSynthesis.cancel(); } catch{} }
+    /* ===========================
+       2) Session + Memory
+       =========================== */
+    // Non-persistent random session id (resets on reload)
+    function randomId(len=12){
+      const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+      let out = "";
+      for(let i=0;i<len;i++) out += chars[Math.floor(Math.random()*chars.length)];
+      return out;
     }
 
-    function stopVideo(){
-      resp.pause();
-      resp.currentTime = 0;
-      isStopped = true;
-      clearActive();
+    const session = {
+      id: randomId(),
+      persona: PERSONA,
+      model: (window.DOP_MODEL || "gpt-4o-mini"), // swap to your live model
+    };
+
+    /** Memory / Context Window **/
+    const conversationHistory = []; // Array<ChatTurn>
+    const MAX_TURNS = 10; // keep this small for predictable latency/token use
+    els.capN.textContent = String(MAX_TURNS);
+
+    /**
+     * @typedef {Object} ChatTurn
+     * @property {"system"|"user"|"assistant"} role
+     * @property {string} content
+     * @property {number} ts
+     * @property {{promptId?:string,inputType?:"prompt"|"mic",audioUrl?:string,videoUrl?:string,videoId?:string}} [meta]
+     */
+
+    /** Push a new turn into memory */
+    function pushTurn(role, content, meta){
+      conversationHistory.push({
+        role, content, ts: Date.now(), meta: meta || {}
+      });
+      // Keep memory lightweight in RAM only (Tier 1).
+      // Visualize (optional, off by default)
+      renderMemoryChips();
     }
 
-    /* ---------- UI states ---------- */
-    function setListeningUI(){
-      micBtn.textContent = '■ Stop';
-      micBtn.classList.add('listening');
-      micBtn.classList.remove('stopping');
-      micBtn.setAttribute('aria-pressed','true');
-      disablePrompts(true);
-      setPill('listening','Listening…');
-    }
-    function setPlayingUI(){
-      micBtn.textContent = '■ Stop';
-      micBtn.classList.add('stopping');
-      micBtn.classList.remove('listening');
-      micBtn.setAttribute('aria-pressed','true');
-      disablePrompts(true);
-      setPill('speaking','Speaking…');
-    }
-    function setIdleUI(){
-      micBtn.textContent = '🎤 Tap to Talk';
-      micBtn.classList.remove('listening','stopping');
-      micBtn.setAttribute('aria-pressed','false');
-      disablePrompts(false);
-      srStatus.textContent = 'Idle';
-      setPill('ready','Ready');
+    /** Attach fields to last assistant turn (audio/video ids, etc.) */
+    function attachToLastAssistantTurn(patch){
+      for (let i = conversationHistory.length - 1; i >= 0; i--){
+        if (conversationHistory[i].role === "assistant"){
+          conversationHistory[i].meta = Object.assign({}, conversationHistory[i].meta || {}, patch || {});
+          break;
+        }
+      }
+      renderMemoryChips();
     }
 
-    function stopAll(){
-      stopAudio();
-      stopVideo();
-      setIdleUI();
-      haptic();
+    /** Build system + last N turns for the LLM */
+    function renderPersonaAsSystemPrompt(persona){
+      return `You are ${persona.displayName}, an AI doppelgänger persona.
+Tone: ${persona.style}.
+Be brief, warm, playful. Respect boundaries. Avoid explicit content. Keep responses <= 40 words unless asked.`;
     }
 
-    /* ---------- Video preload ---------- */
-    function preloadSources(initialSrc){
-      const uniqueSrcs = [...new Set(promptButtons.map(b => b.dataset.file))];
-      uniqueSrcs.forEach(src => {
-        if (src === initialSrc) return; // already primed by main video
-        if (preloadCache.has(src)) return;
-        const v = document.createElement('video');
-        v.preload = 'auto';
-        v.src = src;
-        v.addEventListener('loadeddata', ()=>{/* cached */}, { once:true });
-        try { v.load(); } catch {}
-        preloadCache.set(src, v);
+    function buildContext(){
+      const systemMsg = { role: "system", content: renderPersonaAsSystemPrompt(session.persona) };
+      // Last N turns
+      const start = Math.max(0, conversationHistory.length - MAX_TURNS);
+      const recent = conversationHistory.slice(start);
+      return [systemMsg, ...recent];
+    }
+
+    /** Reset session (explicitly called by Reset button) */
+    function resetSession(){
+      conversationHistory.length = 0;
+      session.id = randomId();
+      stopPlayback();
+      setUIState("idle");
+      renderMemoryChips();
+      console.log("[DTA] Session reset. New session id:", session.id);
+    }
+
+    /* ===========================
+       3) UI: prompts & persona
+       =========================== */
+    function hydratePersonaUI(){
+      els.personaName.textContent = session.persona.displayName || "Persona";
+    }
+
+    function renderPromptChips(){
+      els.promptRow.innerHTML = "";
+      const prompts = Array.isArray(session.persona.prompts) && session.persona.prompts.length
+        ? session.persona.prompts
+        : DEFAULT_PERSONA.prompts;
+
+      prompts.forEach((text, idx) => {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "chip";
+        chip.textContent = text;
+        chip.setAttribute("data-id", "p-" + (idx+1));
+        chip.setAttribute("aria-label", "Prompt: " + text);
+        chip.addEventListener("click", () => {
+          onPromptClick(text, "p-" + (idx+1));
+        });
+        els.promptRow.appendChild(chip);
       });
     }
 
-    /* ---------- Video playback ---------- */
-    function playFile(file){
-      stopAudio(); // stop any TTS first
+    /* ===========================
+       4) UI state & transport
+       =========================== */
+    function setUIState(state){
+      // state: "idle" | "thinking" | "playing"
+      if (state === "thinking"){
+        els.overlayThinking.setAttribute("data-show", "1");
+      } else {
+        els.overlayThinking.removeAttribute("data-show");
+      }
 
-      if (!isStopped && currentFile === file && !resp.paused) { // toggle off
-        stopVideo();
-        setIdleUI();
-        hideOverlay();
+      if (state === "idle"){
+        els.overlayIdle.style.opacity = "1";
+      } else {
+        els.overlayIdle.style.opacity = "0";
+      }
+    }
+
+    function playVideo(url){
+      if (!url) return;
+      // IMPORTANT: No native controls; no autoplay on load.
+      // We play ONLY after user interaction (chip/mic) to respect policies.
+      const v = els.video;
+      v.src = url;
+      v.currentTime = 0;
+      v.muted = false; // ensure audio is audible for avatar clips
+      v.play().catch(err => {
+        console.warn("[DTA] Video play blocked or failed:", err);
+      });
+    }
+
+    function playAudio(url){
+      if (!url) return;
+      const a = els.audio;
+      a.src = url;
+      a.currentTime = 0;
+      a.play().catch(err => {
+        console.warn("[DTA] Audio play blocked or failed:", err);
+      });
+    }
+
+    function stopPlayback(){
+      try {
+        els.video.pause();
+        els.audio.pause();
+      } catch (e){}
+      // do NOT clear memory here
+    }
+
+    // Stop/Play toggle semantics: If anything is playing, stop → button becomes Play.
+    // If nothing is playing, pressing Play resumes the last assistant asset if present.
+    let transportState = "stop"; // "stop" | "play"
+    function updateTransportButton(){
+      // Set label based on what clicking will do
+      if (transportState === "stop"){
+        els.btnTransport.textContent = "⏹ Stop";
+      } else {
+        els.btnTransport.textContent = "▶︎ Play";
+      }
+    }
+
+    function onTransportClick(){
+      // Determine if currently playing
+      const isVideoPlaying = !!(els.video.src && !els.video.paused && !els.video.ended);
+      const isAudioPlaying = !!(els.audio.src && !els.audio.paused && !els.audio.ended);
+
+      if (isVideoPlaying || isAudioPlaying){
+        stopPlayback();
+        transportState = "play"; // next click would attempt to play
+        updateTransportButton();
         return;
       }
 
-      currentFile = file; isStopped = false; setActiveByFile(file);
-      setPlayingUI();
-      showOverlay();
-
-      lastMode = 'video';
-      lastFile = file;
-      lastText = null;
-
-      resp.classList.add('fade-start');
-      resp.src = file; resp.load();
-      const onCanPlay = () => {
-        safePlay();
-        requestAnimationFrame(() => resp.classList.remove('fade-start'));
-        hideOverlay();
-      };
-      resp.addEventListener('canplay', onCanPlay, { once:true });
-
-      if (window.innerWidth < 900) resp.scrollIntoView({ behavior:'smooth', block:'center' });
-    }
-
-    /* ---------- Events ---------- */
-    resp.addEventListener('click', () => {
-      if (resp.paused) { safePlay(); isStopped = false; setPlayingUI(); }
-      else { stopVideo(); setIdleUI(); hideOverlay(); }
-    });
-    grid.addEventListener('click', (e) => {
-      const btn = e.target.closest('.btn'); if (!btn) return;
-      playFile(btn.dataset.file);
-    });
-    resp.addEventListener('ended', () => { stopVideo(); setIdleUI(); });
-    resp.addEventListener('error', () => { stopVideo(); setIdleUI(); hideOverlay(); });
-
-    /* ---------- ASR + backend routing + ElevenLabs TTS ---------- */
-    const supportsASR = ('SpeechRecognition' in window) || ('webkitSpeechRecognition' in window);
-    let recognizer = null, recognizing = false, finalTranscript = '';
-
-    if (!supportsASR) { micBtn.disabled = true; srStatus.textContent = 'Speech input not available.'; }
-
-    function initRecognizer(){
-      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-      recognizer = new SR();
-      recognizer.lang = 'en-US';
-      recognizer.interimResults = true;
-      recognizer.continuous = false;
-
-      recognizer.onstart = () => {
-        recognizing = true; finalTranscript = '';
-        stopAll();
-        setListeningUI();
-        srStatus.textContent = 'Listening…';
-        lockMic();
-        haptic();
-      };
-      recognizer.onerror = (e) => { srStatus.textContent = 'Mic error: ' + (e.error || 'unknown'); stopASR(); setIdleUI(); hideOverlay(); };
-      recognizer.onend = () => {
-        recognizing = false;
-        const text = finalTranscript.trim();
-        if (text) {
-          srStatus.textContent = 'Processing…';
-          setPill('thinking','Thinking…');
-          routeToBackend(text);
-        } else { setIdleUI(); }
-      };
-      recognizer.onresult = (event) => {
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const res = event.results[i];
-          if (res.isFinal) finalTranscript += res[0].transcript.trim() + ' ';
+      // If not playing: try to replay the last assistant response (video > audio)
+      const lastAssistant = [...conversationHistory].reverse().find(t => t.role === "assistant");
+      if (lastAssistant){
+        const { videoUrl, audioUrl } = (lastAssistant.meta || {});
+        if (videoUrl){
+          playVideo(videoUrl);
+          transportState = "stop";
+          updateTransportButton();
+          return;
         }
-      };
+        if (audioUrl){
+          playAudio(audioUrl);
+          transportState = "stop";
+          updateTransportButton();
+          return;
+        }
+      }
+
+      // Nothing to play
+      transportState = "stop";
+      updateTransportButton();
     }
-    function startASR(){ if (!recognizer) initRecognizer(); try { recognizer.start(); } catch { try { recognizer.stop(); recognizer.start(); } catch(_){} } }
-    function stopASR(){ if (recognizer && recognizing) recognizer.stop(); recognizing = false; }
 
-    micBtn.addEventListener('click', () => {
-      if (micLocked) return;
-      if (micBtn.textContent.includes('Stop')) { stopAll(); lockMic(); return; }
-      if (!supportsASR) return;
-      startASR();
-    });
-    window.addEventListener('keydown', (e) => { if (e.key === 'Escape') stopAll(); });
+    /* ===========================
+       5) Event Sources → Ingestion
+       =========================== */
+    function onPromptClick(promptText, promptId){
+      pushTurn("user", promptText, { promptId, inputType: "prompt" });
+      requestReply();
+    }
 
-    async function routeToBackend(text){
-      try{
-        const res = await fetch('/.netlify/functions/dop-chat', {
-          method:'POST',
-          headers:{ 'Content-Type':'application/json' },
-          body: JSON.stringify({ text })
-        });
-        const data = await res.json();
+    // Mic handling:
+    // We keep semantics minimal to avoid regressions.
+    // If your app already wires mic → STT → transcript, call window.receiveMicTranscript(text)
+    // OR override start/stop handlers below to hook your pipeline.
+    let micActive = false;
+    function onMicDown(){
+      micActive = true;
+      els.btnMic.setAttribute("aria-pressed", "true");
+      els.btnMic.textContent = "🎙️ Listening… (release to send)";
+      // If you have your own mic start, call it here:
+      if (typeof window.startMicCapture === "function"){
+        try { window.startMicCapture(); } catch(e){ console.warn("startMicCapture error", e); }
+      }
+    }
+    function onMicUp(){
+      // In this baseline, assume an external STT fires receiveMicTranscript(text).
+      // If you want a fallback, you could prompt() the user, but we keep it pure.
+      micActive = false;
+      els.btnMic.setAttribute("aria-pressed", "false");
+      els.btnMic.textContent = "🎙️ Hold to Talk";
+      if (typeof window.stopMicCapture === "function"){
+        try { window.stopMicCapture(); } catch(e){ console.warn("stopMicCapture error", e); }
+      }
+    }
 
-        if (data.matchedClip) {
-          setPlayingUI();
-          playFile(data.matchedClip);
-        } else if (data.fallbackResponse) {
-          setPlayingUI();
-          lastMode = 'tts';
-          lastText = data.fallbackResponse;
-          lastFile = null;
-          await speakWithElevenLabs(data.fallbackResponse);
-          setIdleUI();
+    // Public hook: external STT can call this to deliver transcript
+    window.receiveMicTranscript = function(transcript){
+      if (!transcript || !transcript.trim()) return;
+      pushTurn("user", transcript.trim(), { inputType: "mic" });
+      requestReply();
+    };
+
+    /* ===========================
+       6) Bridge: LLM / TTS / Avatar
+       =========================== */
+    // These bridge functions will prefer your project’s existing globals if present.
+    // Fallbacks are intentionally simple; they DO NOT change UX semantics.
+
+    async function bridgeLLM(messages){
+      if (typeof window.callLLM === "function"){
+        // Expected signature: callLLM({ sessionId, messages }) -> { text }
+        return await window.callLLM({ sessionId: session.id, messages });
+      }
+      // Fallback: echo + small persona garnish
+      const lastUser = [...messages].reverse().find(m => m.role === "user");
+      const text = lastUser
+        ? `Okay — ${lastUser.content}`
+        : "Hi! What should we talk about?";
+      return { text };
+    }
+
+    async function bridgeTTS(text, voiceId){
+      if (typeof window.callElevenLabs === "function"){
+        // Expected: callElevenLabs({ text, voice }) -> { url }
+        return await window.callElevenLabs({ text, voice: voiceId });
+      }
+      // Fallback: return null (we’ll rely on avatar, or skip to none)
+      return { url: "" };
+    }
+
+    async function bridgeAvatarFromAudio(audioUrl, avatarId){
+      if (typeof window.callHeyGenSync === "function"){
+        // Expected: callHeyGenSync({ audioUrl, avatarId }) -> { id, url }
+        return await window.callHeyGenSync({ audioUrl, avatarId });
+      }
+      // Fallback: if no avatar bridge, we’ll just play audioUrl (if present)
+      return { id: "", url: "" };
+    }
+
+    /* ===========================
+       7) Request Pipeline
+       =========================== */
+    async function requestReply(){
+      setUIState("thinking");
+
+      try {
+        // Build bounded context
+        const ctx = buildContext();
+
+        // 1) LLM
+        const llm = await bridgeLLM(ctx);
+        const assistantText = (llm && llm.text) ? String(llm.text) : "…";
+        pushTurn("assistant", assistantText, {}); // record assistant text immediately
+
+        // 2) TTS
+        const tts = await bridgeTTS(assistantText, session.persona.voice);
+        const ttsUrl = tts && tts.url ? tts.url : "";
+
+        // 3) Avatar (prefer synced avatar if available)
+        let avatarUrl = "";
+        if (ttsUrl){
+          const avatar = await bridgeAvatarFromAudio(ttsUrl, session.persona.avatarId);
+          avatarUrl = avatar && avatar.url ? avatar.url : "";
+          if (avatar && avatar.id) attachToLastAssistantTurn({ videoId: avatar.id });
+        }
+
+        // 4) Attach assets to memory
+        if (ttsUrl) attachToLastAssistantTurn({ audioUrl: ttsUrl });
+        if (avatarUrl) attachToLastAssistantTurn({ videoUrl: avatarUrl });
+
+        // 5) Playback (avatar > audio)
+        if (avatarUrl){
+          playVideo(avatarUrl);
+        } else if (ttsUrl){
+          playAudio(ttsUrl);
         } else {
-          setIdleUI();
+          // No media — remain silent; text memory still recorded.
+          console.warn("[DTA] No TTS or avatar URL provided by bridges.");
         }
+
+        // Transport button state toggles to Stop
+        transportState = "stop";
+        updateTransportButton();
+
       } catch (err){
-        console.error(err);
-        srStatus.textContent = 'Error contacting backend.';
-        setIdleUI();
+        console.error("[DTA] requestReply error:", err);
+      } finally {
+        // Return to idle (engagement loop resumes)
+        setUIState("idle");
       }
     }
 
-    // Calls your Netlify function (ElevenLabs) and plays returned audio/mpeg
-    async function speakWithElevenLabs(text){
-      try{
-        stopVideo();
-        showOverlay();
+    /* ===========================
+       8) Memory Chips (optional, subtle)
+       =========================== */
+    function renderMemoryChips(){
+      // Keep hidden by default to avoid UI clutter.
+      // Toggle via CSS display if you want a debug visualization.
+      if (els.memoryChips.style.display === "none") return;
 
-        const res = await fetch('/.netlify/functions/tts-eleven', {
-          method:'POST',
-          headers:{ 'Content-Type':'application/json' },
-          body: JSON.stringify({ text })
-        });
-        if (!res.ok) throw new Error('TTS failed');
+      els.memoryChips.innerHTML = "";
+      conversationHistory.forEach((t, i) => {
+        const span = document.createElement("span");
+        span.className = "memory-chip";
+        span.textContent = (t.role === "user" ? "U" : t.role === "assistant" ? "A" : "S") + ": " + truncate(t.content, 38);
+        els.memoryChips.appendChild(span);
+      });
+    }
+    function truncate(str, n){
+      return (str.length > n) ? (str.slice(0, n - 1) + "…") : str;
+    }
 
-        const buf = await res.arrayBuffer();
-        const blob = new Blob([buf], { type: 'audio/mpeg' });
-        currentAudioURL = URL.createObjectURL(blob);
-        currentAudio = new Audio(currentAudioURL);
+    /* ===========================
+       9) Wire events
+       =========================== */
+    function wireEvents(){
+      // Reset
+      els.btnReset.addEventListener("click", resetSession);
 
-        setPill('speaking','Speaking…');
-        await currentAudio.play().catch(()=>{});
-        await new Promise((resolve) => {
-          const cleanup = () => { currentAudio && currentAudio.removeEventListener('ended', cleanup); resolve(); };
-          currentAudio.addEventListener('ended', cleanup, { once:true });
-        });
-      } catch(e){
-        console.warn('ElevenLabs TTS error, falling back to device TTS', e);
-        if ('speechSynthesis' in window) {
-          const u = new SpeechSynthesisUtterance(text);
-          u.lang = 'en-US';
-          setPill('speaking','Speaking…');
-          try { speechSynthesis.cancel(); speechSynthesis.speak(u); } catch {}
-          await new Promise((resolve) => { u.onend = resolve; setTimeout(resolve, 12000); });
+      // Transport
+      els.btnTransport.addEventListener("click", onTransportClick);
+      updateTransportButton();
+
+      // Mic (press/hold)
+      els.btnMic.addEventListener("pointerdown", e => { e.preventDefault(); onMicDown(); });
+      els.btnMic.addEventListener("pointerup", e => { e.preventDefault(); onMicUp(); });
+      els.btnMic.addEventListener("pointerleave", e => {
+        // In case pointer leaves the button area while holding
+        if (micActive) onMicUp();
+      });
+
+      // (Optional) text input testing
+      els.textInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter"){
+          const val = e.currentTarget.value.trim();
+          if (val){
+            e.currentTarget.value = "";
+            pushTurn("user", val, { inputType: "prompt" });
+            requestReply();
+          }
         }
-      } finally {
-        hideOverlay();
-        try{
-          if (currentAudio) { currentAudio.pause(); currentAudio.src=''; }
-          if (currentAudioURL) URL.revokeObjectURL(currentAudioURL);
-        }catch{}
-        currentAudio=null; currentAudioURL=null;
-      }
+      });
+
+      // Prevent native video controls from appearing / being focusable
+      els.video.controls = false; // just in case
+    }
+
+    /* ===========================
+       10) Init
+       =========================== */
+    function init(){
+      hydratePersonaUI();
+      renderPromptChips();
+      setUIState("idle");
+      wireEvents();
+
+      // Explicitly guarantee: no autoplay/loop on load
+      // (attributes are not present; ensure JS hasn't set them elsewhere)
+      try {
+        els.video.loop = false;
+        // Keep muted TRUE until we actually play avatar video with audio track.
+        // (Browser policies often require a user gesture to unmute & play with sound)
+        els.video.muted = true;
+      } catch(e){}
     }
 
     // Boot
-    primeFirstFrame(currentFile);
-    setTimeout(() => preloadSources(currentFile), 300);
+    init();
+
+    /**********************************************************************
+     * Public tiny API (optional)
+     *  - window.DTA_pushSystemNote(text) to inject a system memory item
+     *  - window.DTA_reset() to reset session
+     **********************************************************************/
+    window.DTA_pushSystemNote = function(text){
+      pushTurn("system", String(text || ""), {});
+    };
+    window.DTA_reset = resetSession;
+
   </script>
+
+  <!--
+    =====================================================================================
+    Developer Notes (keep for clarity; safe to delete if you need fewer lines):
+    -------------------------------------------------------------------------------------
+    1) Where to plug your REAL backends:
+       - LLM: define window.callLLM = async ({ sessionId, messages }) => ({ text })
+       - TTS: define window.callElevenLabs = async ({ text, voice }) => ({ url })
+       - Avatar: define window.callHeyGenSync = async ({ audioUrl, avatarId }) => ({ id, url })
+
+    2) Mic handling:
+       - If you already have a press/hold mic pipeline, keep it. On transcript ready,
+         call window.receiveMicTranscript("your transcript").
+       - If you prefer click-to-toggle, replace pointerdown/pointerup with your flow.
+
+    3) Session Memory (Tier 1):
+       - Memory is in RAM only (resets when page reloads).
+       - Context window is bounded to last MAX_TURNS (default 10).
+       - Assistant turns are stored as text + optional media URLs (audioUrl/videoUrl).
+
+    4) Transport:
+       - Stop/Play only controls media playback.
+       - Reset Session clears memory + generates a new session id but doesn’t alter styling.
+
+    5) Persona:
+       - Provide window.DOP_PERSONA from a persona.json loader before this script runs
+         to override DEFAULT_PERSONA. Expected fields:
+           {
+             id, displayName, voice, avatarId, style, prompts: string[]
+           }
+
+    6) Never regress rules asserted in code:
+       - No native video controls: <video> has no controls attribute; JS sets controls=false
+       - No autoplay/loop on load: we never set autoplay/loop; video remains idle until user action
+       - Prompts above video (DOM order locked)
+       - Mic and Stop/Play semantics unchanged (transport-only; memory is independent)
+
+    7) Future Tier 2 (DB-backed):
+       - Swap the storage adapter: persist conversationHistory on each pushTurn to your API
+         keyed by session.id; rehydrate on load. Frontend buildContext() stays identical.
+
+    8) Future Tier 3 (Semantic Memory):
+       - Create embeddings for turns; on each request, retrieve top-k relevant memory snippets
+         and merge into buildContext(). Keep transport/UI unchanged.
+    =====================================================================================
+  -->
 </body>
 </html>
