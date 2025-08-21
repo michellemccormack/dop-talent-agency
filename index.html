@@ -48,9 +48,6 @@
     .stack-xl{margin-top:32px}
 
     /* Top mic + reset row */
-    .top-rail{
-      display:flex; justify-content:center; align-items:center; gap:10px;
-    }
     .reset{
       position:absolute; right:18px; top:18px;
       appearance:none; border:1px solid var(--stroke-strong);
@@ -174,7 +171,7 @@
       <button class="reset" id="resetBtn" type="button" title="Reset session (clears local memory)">Reset Session</button>
 
       <!-- BIG mic button -->
-      <div class="mic-rail top-rail">
+      <div class="mic-rail">
         <button class="mic" id="micBtn" aria-pressed="false">🎤 Tap to Talk</button>
       </div>
 
@@ -219,6 +216,20 @@
        Tier 1 Session Memory (Local) — added WITHOUT changing UI
        ============================================================ */
     const MAX_TURNS = 10;
+
+    // Map each video file to a short, human-readable assistant line
+    const CLIP_META = {
+      "assets/p_fun.mp4": {
+        transcript: "I’m a go‑out girl—coffee walks, thrifting, and a little dancing never hurt. 😉"
+      },
+      "assets/p_from.mp4": {
+        transcript: "I’m East‑coast raised with a Boston edge—but I’ve bounced around enough to pick up good pizza opinions."
+      },
+      "assets/p_relax.mp4": {
+        transcript: "Headphones on, hot shower, then a cozy movie night. Zero drama, maximum exhale."
+      }
+    };
+
     let sessionId = randId();
     /** @type {{role:'user'|'assistant'|'system', content:string, ts:number, meta?:any}[]} */
     const conversationHistory = [];
@@ -249,7 +260,7 @@
     // Expose tiny API for debugging
     window.DTA_reset = resetSession;
 
-    /* ---------- Elements & state (original) ---------- */
+    /* ---------- Elements & state (original baseline) ---------- */
     const resp = document.getElementById('resp');
     const grid = document.getElementById('promptGrid');
     const promptButtons = Array.from(grid.querySelectorAll('.btn'));
@@ -282,7 +293,7 @@
 
     function haptic(ms=12){ if (navigator.vibrate) try{ navigator.vibrate(ms);}catch{} }
 
-    /* ---------- Helpers (original) ---------- */
+    /* ---------- Helpers (baseline) ---------- */
     function setPill(mode, text){
       pill.classList.remove('listening','thinking','speaking','ready');
       pill.classList.add(mode);
@@ -334,7 +345,7 @@
       clearActive();
     }
 
-    /* ---------- UI states (original) ---------- */
+    /* ---------- UI states (baseline) ---------- */
     function setListeningUI(){
       micBtn.textContent = '■ Stop';
       micBtn.classList.add('listening');
@@ -367,7 +378,7 @@
       haptic();
     }
 
-    /* ---------- Video preload (original) ---------- */
+    /* ---------- Video preload (baseline) ---------- */
     function preloadSources(initialSrc){
       const uniqueSrcs = [...new Set(promptButtons.map(b => b.dataset.file))];
       uniqueSrcs.forEach(src => {
@@ -382,7 +393,7 @@
       });
     }
 
-    /* ---------- Video playback (original + memory hooks) ---------- */
+    /* ---------- Video playback (baseline + memory hooks) ---------- */
     function playFile(file){
       stopAudio(); // stop any TTS first
 
@@ -412,8 +423,11 @@
       resp.classList.add('fade-start');
       resp.src = file; resp.load();
       const onCanPlay = () => {
-        // MEMORY: assistant turn = playing a fixed clip
-        pushTurn('assistant', `Playing clip: ${file.split('/').pop()}`, { videoUrl:file });
+        // MEMORY: assistant turn = human-readable line tied to this clip
+        const meta = CLIP_META[file] || {};
+        const textForMemory = meta.transcript || `Playing clip: ${file.split('/').pop()}`;
+        pushTurn('assistant', textForMemory, { videoUrl: file, clip: file });
+
         safePlay();
         requestAnimationFrame(() => resp.classList.remove('fade-start'));
         hideOverlay();
@@ -423,7 +437,7 @@
       if (window.innerWidth < 900) resp.scrollIntoView({ behavior:'smooth', block:'center' });
     }
 
-    /* ---------- Events (original) ---------- */
+    /* ---------- Events (baseline) ---------- */
     resp.addEventListener('click', () => {
       if (resp.paused) { safePlay(); isStopped = false; setPlayingUI(); }
       else { stopVideo(); setIdleUI(); hideOverlay(); }
@@ -435,7 +449,7 @@
     resp.addEventListener('ended', () => { stopVideo(); setIdleUI(); });
     resp.addEventListener('error', () => { stopVideo(); setIdleUI(); hideOverlay(); });
 
-    /* ---------- ASR + backend routing + ElevenLabs TTS (original + memory hooks) ---------- */
+    /* ---------- ASR + backend routing + ElevenLabs TTS (baseline + memory hooks) ---------- */
     const supportsASR = ('SpeechRecognition' in window) || ('webkitSpeechRecognition' in window);
     let recognizer = null, recognizing = false, finalTranscript = '';
 
@@ -497,7 +511,7 @@
 
         if (data.matchedClip) {
           setPlayingUI();
-          playFile(data.matchedClip); // playFile will log assistant turn
+          playFile(data.matchedClip); // playFile will log assistant turn (with transcript)
         } else if (data.fallbackResponse) {
           setPlayingUI();
           lastMode = 'tts';
