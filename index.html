@@ -144,11 +144,21 @@
       width:38px; height:38px; border-radius:999px;
       border:3px solid rgba(255,255,255,.35);
       border-top-color:#fff; animation:spin 900ms linear infinite;
-      box-shadow:0 0 18px rgba(255,255,255,.25);
+      box-shadow:0 0 18px rgba(0,0,0,.25);
     }
     @keyframes spin{to{transform:rotate(360deg)}}
 
     .footer{font-size:12px; color:#b7b8c3; text-align:center; margin-top:26px; margin-bottom:60px}
+
+    /* Toast (subtle, non-intrusive) */
+    .toast{
+      position:absolute; left:50%; bottom:20px; transform:translateX(-50%);
+      background:#1b1c25; color:#eaeaf1; border:1px solid var(--stroke-strong);
+      padding:10px 14px; border-radius:12px; box-shadow:var(--shadow);
+      font-size:12px; letter-spacing:.2px;
+      opacity:0; pointer-events:none; transition:opacity .20s ease;
+    }
+    .toast.show{opacity:1}
 
     /* screen-reader-only status */
     .sr-only{
@@ -208,6 +218,9 @@
         AI built by Michelle McCormack ·
         <span id="memInfo">Session memory: Local (Tier 1). Context window capped to last 10 turns.</span>
       </div>
+
+      <!-- Toast -->
+      <div id="toast" class="toast" role="status" aria-live="polite"></div>
     </div>
   </div>
 
@@ -246,12 +259,25 @@
         conversationHistory.splice(0, conversationHistory.length - MAX_TURNS);
       }
     }
+
+    // Toast helpers
+    const toastEl = document.getElementById('toast');
+    let toastTimer = null;
+    function showToast(msg){
+      if (!toastEl) return;
+      toastEl.textContent = msg;
+      toastEl.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1500);
+    }
+
     function resetSession(){
       conversationHistory.length = 0;
       sessionId = randId();
       stopAll();
       setIdleUI();
       console.log('[DTA] Session reset →', sessionId);
+      showToast('Session reset');
     }
     function getBoundedContext(){
       const system = { role:'system', content:'You are Sasha — be brief, warm, playful. Respect boundaries.' };
