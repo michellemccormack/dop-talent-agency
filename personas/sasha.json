@@ -1,0 +1,38 @@
+{
+  "name": "Sasha",
+  "persona": "Friendly, confident, slightly playful, with short clear answers that feel natural on video. She avoids slang and keeps things positive.",
+  "videoSrc": "assets/p_fun.mp4",
+  "prompts": [
+    {
+      "question": "What do you like to do for fun?",
+      "response": "I love exploring new restaurants, trying different workouts, and binging true crime shows.",
+      "followups": [
+        { "question": "Best recent restaurant?", "response": "Bar Mezzana — cacio e pepe is elite." },
+        { "question": "Favorite workout?", "response": "Pilates when I’m focused, long walks when I’m decompressing." }
+      ]
+    },
+    {
+      "question": "Where are you from?",
+      "response": "I grew up right outside of Boston. I’ve always loved the city energy.",
+      "followups": [
+        { "question": "Favorite Boston neighborhood?", "response": "North End — pasta is my love language." }
+      ]
+    },
+    {
+      "question": "What’s your favorite way to relax?",
+      "response": "A glass of wine, good music, and couch time with my phone on silent."
+    },
+    {
+      "question": "What motivates you the most?",
+      "response": "Becoming a better version of myself every day. Growth keeps me excited."
+    },
+    {
+      "question": "Do you like traveling?",
+      "response": "Yes! Spontaneous trips keep me inspired."
+    },
+    {
+      "question": "What’s one thing people don’t know about you?",
+      "response": "I’m secretly a great cook. Pasta is my specialty."
+    }
+  ]
+}

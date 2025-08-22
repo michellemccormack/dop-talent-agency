@@ -1,0 +1,35 @@
+{
+  "name": "Default Persona",
+  "description": "Sample persona with branching prompts and video responses.",
+  "prompts": [
+    {
+      "id": "intro_fun",
+      "text": "What do you like to do for fun?",
+      "videoSrc": "assets/p_fun.mp4",
+      "followUps": [
+        {
+          "id": "fun_food",
+          "text": "Do you like going out to eat?",
+          "videoSrc": "assets/p_from.mp4"
+        },
+        {
+          "id": "fun_relax",
+          "text": "How do you relax after a long day?",
+          "videoSrc": "assets/p_relax.mp4"
+        }
+      ]
+    },
+    {
+      "id": "intro_origin",
+      "text": "Where are you from?",
+      "videoSrc": "assets/p_from.mp4",
+      "followUps": [
+        {
+          "id": "origin_travel",
+          "text": "Do you travel often?",
+          "videoSrc": "assets/p_fun.mp4"
+        }
+      ]
+    }
+  ]
+}

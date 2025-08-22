@@ -1,0 +1,7 @@
+{
+  "ui": { "switcher": false },
+  "personas": [
+    { "id": "sasha",   "name": "Sasha",           "file": "sasha.json" },
+    { "id": "persona", "name": "Default Persona", "file": "persona.json" }
+  ]
+}

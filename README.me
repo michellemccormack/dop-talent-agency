@@ -1,0 +1,59 @@
+# Dopple Talent Agency MVP
+
+Interactive AI Doppelgänger demo with personas, prompts, and video responses.
+
+---
+
+## 📂 Project Structure
+
+- `index.html` — Main UI for the DOP demo
+- `personas/`
+  - `personas.json` — Persona configuration file (controls name, video, prompts, etc.)
+  - Other persona folders (e.g. `/sasha/`) store videos, metadata, etc.
+
+---
+
+## 🧑‍🤝‍🧑 Personas
+
+- Each persona is defined inside `personas/` with a folder containing assets.
+- The master list is managed in `personas/personas.json`.
+
+Example:
+
+```json
+{
+  "activePersona": "sasha",
+  "switcher": false,
+  "personas": [
+    {
+      "id": "sasha",
+      "name": "Sasha",
+      "video": "personas/sasha/intro.mp4",
+      "prompts": [
+        "What do you like to do for fun?",
+        "Where are you from?",
+        "What's your favorite way to relax?"
+      ]
+    }
+  ]
+}
+---
+
+## 📝 Notes
+
+- Videos do **not autoplay or loop** — user engagement (prompt/mic) always starts interaction.
+- `ui.switcher: false` → Persona dropdown hidden (manual mode).
+- `ui.switcher: true` → Persona dropdown visible (shows “Sasha ▼” in header).
+- When adding a new persona, update `personas/personas.json`.
+
+---
+
+## 📌 Current Phase
+- ✅ Phase 1 (baseline UI complete)
+- ✅ Phase 2 / Task 20 (multi-prompt + persona support added)
+- Next: Task 21 (persona switcher toggle) → optional until multiple DOPs exist
+## Persona Switching
+
+- By default, if there is **only one persona** in `personas.json`, no dropdown will appear in the header.
+- Once you add a **second persona**, a dropdown will **automatically appear**, allowing you to switch between them.
+- If you want the dropdown to be visible even with a single persona (e.g., “Sasha ▼”), you would need to update the HTML/JS to always render it. Current setup hides it until multiple personas exist.
