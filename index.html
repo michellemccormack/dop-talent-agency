@@ -47,7 +47,7 @@
     .stack-l{margin-top:24px}
     .stack-xl{margin-top:32px}
 
-    /* Top mic + reset row */
+    /* Reset Session button */
     .reset{
       position:absolute; right:18px; top:18px;
       appearance:none; border:1px solid var(--stroke-strong);
@@ -150,7 +150,7 @@
 
     .footer{font-size:12px; color:#b7b8c3; text-align:center; margin-top:26px; margin-bottom:60px}
 
-    /* Toast (subtle, non-intrusive) */
+    /* Toast */
     .toast{
       position:absolute; left:50%; bottom:20px; transform:translateX(-50%);
       background:#1b1c25; color:#eaeaf1; border:1px solid var(--stroke-strong);
@@ -160,7 +160,7 @@
     }
     .toast.show{opacity:1}
 
-    /* screen-reader-only status */
+    /* SR-only */
     .sr-only{
       position:absolute !important; width:1px; height:1px; padding:0; margin:-1px;
       overflow:hidden; clip:rect(0,0,0,0); border:0;
@@ -226,11 +226,10 @@
 
   <script>
     /* ============================================================
-       Tier 1 Session Memory (Local) — added WITHOUT changing UI
+       Tier 1 Session Memory (Local) — baseline preserved
        ============================================================ */
     const MAX_TURNS = 10;
 
-    // Map each video file to a short, human-readable assistant line
     const CLIP_META = {
       "assets/p_fun.mp4": {
         transcript: "I’m a go‑out girl—coffee walks, thrifting, and a little dancing never hurt. 😉"
@@ -254,7 +253,6 @@
     }
     function pushTurn(role, content, meta){
       conversationHistory.push({ role, content: String(content||''), ts:Date.now(), meta: meta||{} });
-      // cap memory growth (keep latest MAX_TURNS)
       if (conversationHistory.length > MAX_TURNS) {
         conversationHistory.splice(0, conversationHistory.length - MAX_TURNS);
       }
@@ -283,10 +281,9 @@
       const system = { role:'system', content:'You are Sasha — be brief, warm, playful. Respect boundaries.' };
       return [system, ...conversationHistory.slice(-MAX_TURNS)];
     }
-    // Expose tiny API for debugging
     window.DTA_reset = resetSession;
 
-    /* ---------- Elements & state (original baseline) ---------- */
+    /* ---------- Elements & state (baseline) ---------- */
     const resp = document.getElementById('resp');
     const grid = document.getElementById('promptGrid');
     const promptButtons = Array.from(grid.querySelectorAll('.btn'));
@@ -301,11 +298,11 @@
     let currentFile = 'assets/p_fun.mp4';
     let isStopped = true;
 
-    // audio state (for ElevenLabs)
+    // audio state
     let currentAudio = null;
     let currentAudioURL = null;
 
-    // replay memory (kept, even though replay UI is hidden)
+    // replay memory
     let lastMode = null;  // 'video' | 'tts'
     let lastFile = null;
     let lastText = null;
@@ -408,7 +405,7 @@
     function preloadSources(initialSrc){
       const uniqueSrcs = [...new Set(promptButtons.map(b => b.dataset.file))];
       uniqueSrcs.forEach(src => {
-        if (src === initialSrc) return; // already primed by main video
+        if (src === initialSrc) return;
         if (preloadCache.has(src)) return;
         const v = document.createElement('video');
         v.preload = 'auto';
@@ -421,9 +418,8 @@
 
     /* ---------- Video playback (baseline + memory hooks) ---------- */
     function playFile(file){
-      stopAudio(); // stop any TTS first
+      stopAudio();
 
-      // MEMORY: user turn = clicked prompt (infer by file label)
       const labelBtn = promptButtons.find(b => b.dataset.file === file);
       if (labelBtn){
         pushTurn('user', labelBtn.textContent.trim(), { inputType:'prompt', file });
@@ -431,7 +427,7 @@
         pushTurn('user', 'Clicked prompt', { inputType:'prompt', file });
       }
 
-      if (!isStopped && currentFile === file && !resp.paused) { // toggle off
+      if (!isStopped && currentFile === file && !resp.paused) {
         stopVideo();
         setIdleUI();
         hideOverlay();
@@ -449,7 +445,6 @@
       resp.classList.add('fade-start');
       resp.src = file; resp.load();
       const onCanPlay = () => {
-        // MEMORY: assistant turn = human-readable line tied to this clip
         const meta = CLIP_META[file] || {};
         const textForMemory = meta.transcript || `Playing clip: ${file.split('/').pop()}`;
         pushTurn('assistant', textForMemory, { videoUrl: file, clip: file });
@@ -475,7 +470,7 @@
     resp.addEventListener('ended', () => { stopVideo(); setIdleUI(); });
     resp.addEventListener('error', () => { stopVideo(); setIdleUI(); hideOverlay(); });
 
-    /* ---------- ASR + backend routing + ElevenLabs TTS (baseline + memory hooks) ---------- */
+    /* ---------- ASR + backend routing + ElevenLabs TTS ---------- */
     const supportsASR = ('SpeechRecognition' in window) || ('webkitSpeechRecognition' in window);
     let recognizer = null, recognizing = false, finalTranscript = '';
 
@@ -501,7 +496,6 @@
         recognizing = false;
         const text = finalTranscript.trim();
         if (text) {
-          // MEMORY: user turn = transcript
           pushTurn('user', text, { inputType:'mic' });
           srStatus.textContent = 'Processing…';
           setPill('thinking','Thinking…');
@@ -526,40 +520,65 @@
     });
     window.addEventListener('keydown', (e) => { if (e.key === 'Escape') stopAll(); });
 
+    // ---- Step 2 change: call session-chat first, then gracefully fall back to dop-chat ----
+    async function safeJSON(res){
+      const txt = await res.text();
+      try { return JSON.parse(txt); }
+      catch { throw new Error('Non-JSON response: ' + txt.slice(0,120)); }
+    }
+
+    async function callFunction(url, payload){
+      const res = await fetch(url, {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error(`${url} ${res.status}`);
+      return await safeJSON(res);
+    }
+
     async function routeToBackend(text){
+      const payload = { text, sessionId, context: getBoundedContext() };
+
       try{
-        const res = await fetch('/.netlify/functions/session-chat', {
-          method:'POST',
-          headers:{ 'Content-Type':'application/json' },
-          body: JSON.stringify({ text, sessionId, context:getBoundedContext() })
-        });
-        const data = await res.json();
-
-        if (data.matchedClip) {
-          setPlayingUI();
-          playFile(data.matchedClip); // playFile will log assistant turn (with transcript)
-        } else if (data.fallbackResponse) {
-          setPlayingUI();
-          lastMode = 'tts';
-          lastText = data.fallbackResponse;
-          lastFile = null;
-
-          // MEMORY: assistant turn = TTS text
-          pushTurn('assistant', data.fallbackResponse, { audio:true });
-
-          await speakWithElevenLabs(data.fallbackResponse);
+        // Try new function first
+        const data = await callFunction('/.netlify/functions/session-chat', payload);
+        await handleBackendResponse(data);
+      } catch (e1){
+        console.warn('[DTA] session-chat failed, falling back → dop-chat', e1);
+        try{
+          const data = await callFunction('/.netlify/functions/dop-chat', { text });
+          await handleBackendResponse(data);
+          showToast('Using fallback chat');
+        } catch (e2){
+          console.error('[DTA] dop-chat also failed', e2);
+          srStatus.textContent = 'Backend error';
           setIdleUI();
-        } else {
-          setIdleUI();
+          showToast('Backend error');
         }
-      } catch (err){
-        console.error(err);
-        srStatus.textContent = 'Error contacting backend.';
+      }
+    }
+
+    async function handleBackendResponse(data){
+      if (data.matchedClip) {
+        setPlayingUI();
+        playFile(data.matchedClip); // playFile logs assistant turn (with transcript)
+      } else if (data.fallbackResponse) {
+        setPlayingUI();
+        lastMode = 'tts';
+        lastText = data.fallbackResponse;
+        lastFile = null;
+
+        pushTurn('assistant', data.fallbackResponse, { audio:true });
+
+        await speakWithElevenLabs(data.fallbackResponse);
+        setIdleUI();
+      } else {
         setIdleUI();
       }
     }
 
-    // Calls your Netlify function (ElevenLabs) and plays returned audio/mpeg
+    // TTS
     async function speakWithElevenLabs(text){
       try{
         stopVideo();
@@ -605,11 +624,11 @@
     // Reset button
     resetBtn.addEventListener('click', resetSession);
 
-    // Boot (original behavior preserved)
+    // Boot
     primeFirstFrame(currentFile);
     setTimeout(() => preloadSources(currentFile), 300);
 
-    // Debug helpers in console:
+    // Debug tips in console:
     // conversationHistory, getBoundedContext(), DTA_reset()
   </script>
 </body>
