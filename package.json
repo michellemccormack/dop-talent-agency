@@ -1,0 +1,25 @@
+{
+  "name": "dop-talent-agency",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/michellemccormack/dop-talent-agency.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/michellemccormack/dop-talent-agency/issues"
+  },
+  "homepage": "https://github.com/michellemccormack/dop-talent-agency#readme",
+  "dependencies": {
+    "@netlify/blobs": "^10.0.8",
+    "nanoid": "^5.1.5"
+  }
+}

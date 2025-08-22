@@ -1,8 +1,9 @@
-# netlify.toml — minimal; headers come from _headers
+# netlify.toml — Functions + static site, esbuild bundling
 [build]
   publish = "."
-  functions = "functions"
+  # We keep all source in repo root; no framework build step.
 
 [functions]
   directory = "functions"
   node_bundler = "esbuild"
+  included_files = ["personas/**", "assets/**"]
