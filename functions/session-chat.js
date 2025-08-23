@@ -1,29 +1,13 @@
 // functions/session-chat.js
-// Task 22: LLM reply wiring (Non‑regressive; Phase‑1 UI untouched)
-//
-// What this does:
-// 1) Accepts { sessionId, message, personaId?, meta? } via POST
-// 2) Loads existing session history from Netlify Blobs (fallback: memory for local dev)
-// 3) Appends the new user message
-// 4) Calls OpenAI with persona + recent session messages
-// 5) Appends assistant reply to the same session
-// 6) Returns { sessionId, messages, reply }
-//
-// Config:
-// - OPENAI_API_KEY (required)
-// - OPENAI_MODEL (optional, defaults to 'gpt-4o-mini')
-// - NETLIFY_SITE_ID / NETLIFY_BLOBS_TOKEN (recommended for persistent sessions)
-// - Personas: personas/<personaId>.json (optional). Include in netlify.toml `included_files`.
-//
-// Notes:
-// - CORS headers are included for same-origin browser calls.
-// - Storage gracefully falls back to ephemeral memory if Blobs aren’t available (local dev).
-// - This file intentionally does not touch Phase‑1 frontend behavior.
+// Task 22: LLM reply wiring (Phase‑1 UI untouched) — v22.0.1
 
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const SITE_ID = process.env.NETLIFY_SITE_ID;
 const BLOBS_TOKEN = process.env.NETLIFY_BLOBS_TOKEN;
+
+const VERSION = '22.0.1';
+console.info(`[session-chat] boot v${VERSION} — dir=functions, blobs:${!!SITE_ID && !!BLOBS_TOKEN}, model=${DEFAULT_MODEL}`);
 
 // --- Lightweight utils ---
 const nowTs = () => Date.now();
@@ -41,7 +25,7 @@ function ok(body) {
   return {
     statusCode: 200,
     headers: corsHeaders(),
-    body: JSON.stringify(body),
+    body: JSON.stringify({ version: VERSION, ...body }),
   };
 }
 
@@ -49,7 +33,7 @@ function bad(statusCode, message, extra = {}) {
   return {
     statusCode,
     headers: corsHeaders(),
-    body: JSON.stringify({ error: message, ...extra }),
+    body: JSON.stringify({ version: VERSION, error: message, ...extra }),
   };
 }
 
@@ -67,16 +51,13 @@ async function loadPersona(personaId) {
     const buf = await readFile(personaPath, 'utf-8');
     return JSON.parse(buf);
   } catch {
-    // Not fatal; just fall back to generic system prompt.
-    return null;
+    return null; // fall back
   }
 }
 
 // --- Session Storage ---
-// Primary: Netlify Blobs via REST (requires SITE_ID + BLOBS_TOKEN)
-// Fallback: in-memory Map (for local dev). Not for production durability.
 const MEM_STORE = new Map();
-const NS = 'sessions'; // namespace within Blobs
+const NS = 'sessions';
 
 async function blobsGet(key) {
   if (!SITE_ID || !BLOBS_TOKEN) return null;
@@ -91,11 +72,7 @@ async function blobsGet(key) {
     return null;
   }
   const text = await res.text();
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
+  try { return JSON.parse(text); } catch { return null; }
 }
 
 async function blobsSet(key, value) {
@@ -117,16 +94,13 @@ async function blobsSet(key, value) {
 }
 
 async function getSession(sessionId) {
-  // Try Blobs first
   const key = `${sessionId}.json`;
   const fromBlobs = await blobsGet(key);
   if (fromBlobs && fromBlobs.messages) return fromBlobs;
 
-  // Fallback: memory (handy for local)
   const mem = MEM_STORE.get(sessionId);
   if (mem) return mem;
 
-  // Initialize new session
   const session = { sessionId, messages: [] };
   MEM_STORE.set(sessionId, session);
   return session;
@@ -135,16 +109,12 @@ async function getSession(sessionId) {
 async function saveSession(session) {
   const key = `${session.sessionId}.json`;
   const okBlobs = await blobsSet(key, session);
-  if (!okBlobs) {
-    // Keep memory copy as last resort
-    MEM_STORE.set(session.sessionId, session);
-  }
+  if (!okBlobs) MEM_STORE.set(session.sessionId, session);
 }
 
-// --- History limiting (avoid overlong prompts) ---
+// --- History limiting ---
 function buildChatMessagesForLLM({ persona, history }) {
-  // Keep last N turns for brevity
-  const MAX_MESSAGES = 14; // (user+assistant pairs) ~ cautious default
+  const MAX_MESSAGES = 14;
   const recent = history.slice(-MAX_MESSAGES);
 
   const system = (() => {
@@ -165,22 +135,16 @@ function buildChatMessagesForLLM({ persona, history }) {
   return msgs;
 }
 
-// --- OpenAI call (chat.completions) ---
+// --- OpenAI call ---
 async function llmChat({ messages, model = DEFAULT_MODEL, temperature = 0.7 }) {
-  if (!OPENAI_API_KEY) {
-    throw new Error('OPENAI_API_KEY is not set');
-  }
+  if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY is not set');
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${OPENAI_API_KEY}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      model,
-      messages,
-      temperature,
-    }),
+    body: JSON.stringify({ model, messages, temperature }),
   });
   if (!res.ok) {
     const text = await res.text();
@@ -210,10 +174,8 @@ export async function handler(event) {
     if (!sessionId) return bad(400, 'sessionId is required');
     if (!userMessage) return bad(400, 'message is required');
 
-    // 1) Load session
     const session = await getSession(sessionId);
 
-    // 2) Append user message & persist (Task 21 behavior preserved)
     session.messages.push({
       role: 'user',
       content: userMessage,
@@ -222,10 +184,8 @@ export async function handler(event) {
     });
     await saveSession(session);
 
-    // 3) Load persona (optional)
     const persona = await loadPersona(personaId);
 
-    // 4) Build context and call LLM
     const llmMessages = buildChatMessagesForLLM({
       persona,
       history: session.messages,
@@ -236,7 +196,6 @@ export async function handler(event) {
       assistantText = await llmChat({ messages: llmMessages, model: DEFAULT_MODEL, temperature: 0.8 });
     } catch (e) {
       console.error('LLM call failed:', e?.message || e);
-      // We still return the user message history; frontend can handle error
       return ok({
         sessionId,
         messages: session.messages,
@@ -245,7 +204,6 @@ export async function handler(event) {
       });
     }
 
-    // 5) Append assistant reply & persist
     const assistantMsg = {
       role: 'assistant',
       content: assistantText,
@@ -255,7 +213,6 @@ export async function handler(event) {
     session.messages.push(assistantMsg);
     await saveSession(session);
 
-    // 6) Return updated session + reply
     return ok({
       sessionId,
       messages: session.messages,
