@@ -119,6 +119,20 @@
     .btn[disabled]{opacity:.45; cursor:not-allowed}
     .btn.active{background:linear-gradient(180deg,#e9ebff,#dfe1ff); border-color:#cfd1ff}
 
+    /* Stop/Start rail */
+    .ctl-rail{display:flex; justify-content:center}
+    #stopStartBtn{
+      appearance:none; border:1px solid var(--stroke-strong);
+      background:#191a23; color:#e6e7ef;
+      padding:9px 14px; border-radius:14px; font-size:12px;
+      letter-spacing:.2px; cursor:pointer;
+      transition:opacity .15s ease, transform .06s ease;
+      box-shadow:0 6px 16px rgba(0,0,0,.25);
+    }
+    #stopStartBtn.is-stop{opacity:1}
+    #stopStartBtn.is-start{opacity:.9}
+    #stopStartBtn:active{transform:scale(.98)}
+
     /* Video */
     .hero{display:flex; justify-content:center; position:relative}
     #resp{
@@ -190,6 +204,11 @@
         <div id="statusPill" class="pill ready" aria-live="polite">
           <span class="dot"></span><span id="pillText">Ready</span>
         </div>
+      </div>
+
+      <!-- Stop/Start control (new for Task 22.1) -->
+      <div class="ctl-rail stack-s">
+        <button id="stopStartBtn" class="is-start" aria-pressed="false" type="button">Start</button>
       </div>
 
       <!-- instructions -->
@@ -295,6 +314,9 @@
     const resetBtn = document.getElementById('resetBtn');
     const memInfo = document.getElementById('memInfo');
 
+    // NEW: Stop/Start control
+    const stopStartBtn = document.getElementById('stopStartBtn');
+
     let currentFile = 'assets/p_fun.mp4';
     let isStopped = true;
 
@@ -337,6 +359,7 @@
         isStopped = true;
         hideOverlay();
         setPill('ready','Ready');
+        syncStopStart(); // NEW: sync initial button state
       }, { once:true });
     }
     function safePlay(){
@@ -376,6 +399,7 @@
       micBtn.setAttribute('aria-pressed','true');
       disablePrompts(true);
       setPill('listening','Listening…');
+      syncStopStart();
     }
     function setPlayingUI(){
       micBtn.textContent = '■ Stop';
@@ -384,6 +408,7 @@
       micBtn.setAttribute('aria-pressed','true');
       disablePrompts(true);
       setPill('speaking','Speaking…');
+      syncStopStart();
     }
     function setIdleUI(){
       micBtn.textContent = '🎤 Tap to Talk';
@@ -392,6 +417,7 @@
       disablePrompts(false);
       srStatus.textContent = 'Idle';
       setPill('ready','Ready');
+      syncStopStart();
     }
 
     function stopAll(){
@@ -399,6 +425,30 @@
       stopVideo();
       setIdleUI();
       haptic();
+    }
+
+    // NEW: Stop/Start helpers
+    function mediaIsActive(){
+      const videoActive = !resp.paused && !resp.ended;
+      const audioActive = !!currentAudio;
+      return videoActive || audioActive;
+    }
+    function setBtnStopVisual(){
+      stopStartBtn.textContent = 'Stop';
+      stopStartBtn.classList.remove('is-start');
+      stopStartBtn.classList.add('is-stop');
+      stopStartBtn.setAttribute('aria-pressed','true');
+    }
+    function setBtnStartVisual(){
+      stopStartBtn.textContent = 'Start';
+      stopStartBtn.classList.remove('is-stop');
+      stopStartBtn.classList.add('is-start');
+      stopStartBtn.setAttribute('aria-pressed','false');
+    }
+    function syncStopStart(){
+      if (!stopStartBtn) return;
+      if (mediaIsActive()) setBtnStopVisual();
+      else setBtnStartVisual();
     }
 
     /* ---------- Video preload (baseline) ---------- */
@@ -452,6 +502,7 @@
         safePlay();
         requestAnimationFrame(() => resp.classList.remove('fade-start'));
         hideOverlay();
+        syncStopStart(); // NEW
       };
       resp.addEventListener('canplay', onCanPlay, { once:true });
 
@@ -597,6 +648,7 @@
         currentAudio = new Audio(currentAudioURL);
 
         setPill('speaking','Speaking…');
+        syncStopStart(); // NEW
         await currentAudio.play().catch(()=>{});
         await new Promise((resolve) => {
           const cleanup = () => { currentAudio && currentAudio.removeEventListener('ended', cleanup); resolve(); };
@@ -608,6 +660,7 @@
           const u = new SpeechSynthesisUtterance(text);
           u.lang = 'en-US';
           setPill('speaking','Speaking…');
+          syncStopStart(); // NEW
           try { speechSynthesis.cancel(); speechSynthesis.speak(u); } catch {}
           await new Promise((resolve) => { u.onend = resolve; setTimeout(resolve, 12000); });
         }
@@ -618,11 +671,36 @@
           if (currentAudioURL) URL.revokeObjectURL(currentAudioURL);
         }catch{}
         currentAudio=null; currentAudioURL=null;
+        syncStopStart(); // NEW
       }
     }
 
     // Reset button
     resetBtn.addEventListener('click', resetSession);
+
+    // NEW: Stop/Start button behavior
+    if (stopStartBtn) {
+      stopStartBtn.addEventListener('click', async () => {
+        if (mediaIsActive()) {
+          // Stop everything
+          stopAll();
+        } else {
+          // Start: prefer replaying whatever happened last; else play currentFile
+          if (lastMode === 'video' && lastFile) {
+            playFile(lastFile);
+          } else if (lastMode === 'tts' && lastText) {
+            await speakWithElevenLabs(lastText);
+          } else {
+            playFile(currentFile);
+          }
+        }
+        syncStopStart();
+      });
+    }
+
+    // Keep Stop/Start in sync with real media events
+    ['playing','pause','ended'].forEach(ev => resp.addEventListener(ev, syncStopStart));
+    document.addEventListener('visibilitychange', syncStopStart);
 
     // Boot
     primeFirstFrame(currentFile);
