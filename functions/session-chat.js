@@ -1,5 +1,5 @@
 // functions/session-chat.js
-// Task 22: LLM reply wiring (Phase‑1 UI untouched) — v22.1.0 (CommonJS)
+// Task 22: LLM reply wiring (Phase‑1 UI untouched) — v22.1.1 (CommonJS)
 
 const intentMap = require('../assets/intentMap.json'); // deterministic intent→clip map
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
@@ -7,7 +7,7 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const SITE_ID = process.env.NETLIFY_SITE_ID;
 const BLOBS_TOKEN = process.env.NETLIFY_BLOBS_TOKEN;
 
-const VERSION = '22.1.0';
+const VERSION = '22.1.1';
 console.info(`[session-chat] boot v${VERSION} — blobs:${!!SITE_ID && !!BLOBS_TOKEN}, model=${DEFAULT_MODEL}`);
 
 const { readFile } = require('fs/promises');
@@ -108,7 +108,7 @@ async function saveSession(session) {
   if (!ok) MEM_STORE.set(session.sessionId, session);
 }
 
-// --- History limiting ---
+// --- History limiting + system prompt ---
 function buildChatMessagesForLLM({ persona, history }) {
   const MAX_MESSAGES = 14;
   const recent = history.slice(-MAX_MESSAGES);
@@ -119,7 +119,14 @@ function buildChatMessagesForLLM({ persona, history }) {
       const instr = persona.system || persona.instructions || persona.description || '';
       return `${name}${instr}`.trim();
     }
-    return 'You are an engaging, concise assistant. Stay in character for the selected persona if provided.';
+    // Default fallback persona (demo-safe, concise, human tone)
+    return [
+      'You are Sasha — warm, playful, confident.',
+      'Stay in character; never say you are an AI.',
+      'Keep responses brief: 1–2 sentences (≤ 25 words).',
+      'If you don’t know, pivot lightly and invite another question.',
+      'Be respectful and avoid personal claims you can’t know.'
+    ].join(' ');
   })();
 
   const msgs = [{ role: 'system', content: system }];
