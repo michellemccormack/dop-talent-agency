@@ -1,14 +1,48 @@
 {
   "fun": {
     "clip": "assets/p_fun.mp4",
-    "keywords": ["what do you like to do for fun", "do for fun", "hobbies", "free time", "for fun"]
+    "keywords": [
+      "what do you like to do for fun",
+      "do for fun",
+      "what do you do for fun",
+      "what are your hobbies",
+      "hobbies",
+      "what do you like doing",
+      "what do you like to do",
+      "in your free time",
+      "free time",
+      "for fun",
+      "what are you into"
+    ]
   },
   "from": {
     "clip": "assets/p_from.mp4",
-    "keywords": ["where are you from", "where you from", "hometown", "grow up", "born"]
+    "keywords": [
+      "where are you from",
+      "where you from",
+      "where are u from",
+      "where did you grow up",
+      "grow up",
+      "hometown",
+      "where were you born",
+      "what's your background",
+      "what is your background"
+    ]
   },
   "relax": {
     "clip": "assets/p_relax.mp4",
-    "keywords": ["favorite way to relax", "how do you relax", "relax", "unwind", "de-stress", "destress", "chill"]
+    "keywords": [
+      "favorite way to relax",
+      "how do you relax",
+      "how do you unwind",
+      "relax",
+      "unwind",
+      "de-stress",
+      "destress",
+      "chill",
+      "wind down",
+      "how do you de stress",
+      "how do you de-stress"
+    ]
   }
 }
