@@ -1,0 +1,14 @@
+{
+  "fun": {
+    "clip": "assets/p_fun.mp4",
+    "keywords": ["what do you like to do for fun", "do for fun", "hobbies", "free time", "for fun"]
+  },
+  "from": {
+    "clip": "assets/p_from.mp4",
+    "keywords": ["where are you from", "where you from", "hometown", "grow up", "born"]
+  },
+  "relax": {
+    "clip": "assets/p_relax.mp4",
+    "keywords": ["favorite way to relax", "how do you relax", "relax", "unwind", "de-stress", "destress", "chill"]
+  }
+}

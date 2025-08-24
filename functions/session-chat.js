@@ -1,12 +1,13 @@
 // functions/session-chat.js
-// Task 22: LLM reply wiring (Phase‑1 UI untouched) — v22.0.2 (CommonJS)
+// Task 22: LLM reply wiring (Phase‑1 UI untouched) — v22.1.0 (CommonJS)
 
+const intentMap = require('../assets/intentMap.json'); // deterministic intent→clip map
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const SITE_ID = process.env.NETLIFY_SITE_ID;
 const BLOBS_TOKEN = process.env.NETLIFY_BLOBS_TOKEN;
 
-const VERSION = '22.0.2';
+const VERSION = '22.1.0';
 console.info(`[session-chat] boot v${VERSION} — blobs:${!!SITE_ID && !!BLOBS_TOKEN}, model=${DEFAULT_MODEL}`);
 
 const { readFile } = require('fs/promises');
@@ -171,6 +172,7 @@ module.exports.handler = async (event) => {
 
     const session = await getSession(sessionId);
 
+    // 1) Store the user message
     session.messages.push({
       role: 'user',
       content: userMessage,
@@ -179,6 +181,28 @@ module.exports.handler = async (event) => {
     });
     await saveSession(session);
 
+    // 2) Deterministic intent→clip short-circuit (before calling LLM)
+    const q = (userMessage || '').toLowerCase();
+    let matchedClip = null;
+    try {
+      for (const key of Object.keys(intentMap)) {
+        const entry = intentMap[key];
+        if (entry?.keywords?.some((w) => q.includes(w))) { matchedClip = entry.clip; break; }
+      }
+    } catch {}
+    if (matchedClip) {
+      const clipMsg = {
+        role: 'assistant',
+        content: `[clip:${matchedClip}]`,
+        meta: { clip: matchedClip },
+        ts: nowTs(),
+      };
+      session.messages.push(clipMsg);
+      await saveSession(session);
+      return ok({ sessionId, messages: session.messages, matchedClip });
+    }
+
+    // 3) No match → proceed to LLM
     const persona = await loadPersona(personaId);
     const llmMessages = buildChatMessagesForLLM({ persona, history: session.messages });
 
