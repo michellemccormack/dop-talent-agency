@@ -1,7 +1,51 @@
+/index.html
+  Cache-Control: no-store, must-revalidate
+  X-DTA-Version: 24.0.0
+
 /*
-  Cache-Control: no-store
+  X-Frame-Options: SAMEORIGIN
   X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+
+/assets/intentMap.json
+  Cache-Control: no-cache, must-revalidate
+  Timing-Allow-Origin: *
 
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
-  X-Content-Type-Options: nosniff
+  Timing-Allow-Origin: *
+
+/assets/*.mp4
+  Cache-Control: public, max-age=31536000, immutable
+  Timing-Allow-Origin: *
+
+/assets/*.webm
+  Cache-Control: public, max-age=31536000, immutable
+  Timing-Allow-Origin: *
+
+/assets/*.png
+  Cache-Control: public, max-age=31536000, immutable
+  Timing-Allow-Origin: *
+
+/assets/*.jpg
+  Cache-Control: public, max-age=31536000, immutable
+  Timing-Allow-Origin: *
+
+/assets/*.jpeg
+  Cache-Control: public, max-age=31536000, immutable
+  Timing-Allow-Origin: *
+
+/assets/*.gif
+  Cache-Control: public, max-age=31536000, immutable
+  Timing-Allow-Origin: *
+
+/assets/*.css
+  Cache-Control: public, max-age=31536000, immutable
+  Timing-Allow-Origin: *
+
+/assets/*.js
+  Cache-Control: public, max-age=31536000, immutable
+  Timing-Allow-Origin: *
+
+/.netlify/functions/*
+  Cache-Control: no-store
