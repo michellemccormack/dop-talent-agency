@@ -499,7 +499,8 @@
           pushTurn('user', text, { inputType:'mic' });
           srStatus.textContent = 'Processing…';
           setPill('thinking','Thinking…');
-          routeToBackend(text);
+          // ⬇️ Change: mic path forces conversational LLM
+          routeToBackend(text, { forceLLM: true });
         } else { setIdleUI(); }
       };
       recognizer.onresult = (event) => {
@@ -520,7 +521,7 @@
     });
     window.addEventListener('keydown', (e) => { if (e.key === 'Escape') stopAll(); });
 
-    // ---- Step 2 change: call session-chat first, then gracefully fall back to dop-chat ----
+    // ---- Call session-chat first, then gracefully fall back to dop-chat ----
     async function safeJSON(res){
       const txt = await res.text();
       try { return JSON.parse(txt); }
@@ -537,11 +538,11 @@
       return await safeJSON(res);
     }
 
-    async function routeToBackend(text){
-      const payload = { text, sessionId, context: getBoundedContext() };
+    // NOTE: opts may include { forceLLM: true }
+    async function routeToBackend(text, opts = {}){
+      const payload = { text, message: text, sessionId, context: getBoundedContext(), ...opts };
 
       try{
-        // Try new function first
         const data = await callFunction('/.netlify/functions/session-chat', payload);
         await handleBackendResponse(data);
       } catch (e1){
@@ -563,15 +564,15 @@
       if (data.matchedClip) {
         setPlayingUI();
         playFile(data.matchedClip); // playFile logs assistant turn (with transcript)
-      } else if (data.fallbackResponse) {
+      } else if (data.fallbackResponse || data.reply) {
         setPlayingUI();
+        const speech = data.fallbackResponse || data.reply;
         lastMode = 'tts';
-        lastText = data.fallbackResponse;
+        lastText = speech;
         lastFile = null;
 
-        pushTurn('assistant', data.fallbackResponse, { audio:true });
-
-        await speakWithElevenLabs(data.fallbackResponse);
+        pushTurn('assistant', speech, { audio:true });
+        await speakWithElevenLabs(speech);
         setIdleUI();
       } else {
         setIdleUI();
