@@ -229,7 +229,6 @@
        Tier 1 Session Memory (Local) — baseline preserved
        ============================================================ */
     const MAX_TURNS = 10;
-    const STREAM_ENDPOINT = "/.netlify/functions/stream-chat";
 
     const CLIP_META = {
       "assets/p_fun.mp4": {
@@ -471,7 +470,7 @@
     resp.addEventListener('ended', () => { stopVideo(); setIdleUI(); });
     resp.addEventListener('error', () => { stopVideo(); setIdleUI(); hideOverlay(); });
 
-    /* ---------- ASR + STREAM-CHAT (always) + ElevenLabs TTS ---------- */
+    /* ---------- ASR + backend routing + ElevenLabs TTS ---------- */
     const supportsASR = ('SpeechRecognition' in window) || ('webkitSpeechRecognition' in window);
     let recognizer = null, recognizing = false, finalTranscript = '';
 
@@ -500,8 +499,8 @@
           pushTurn('user', text, { inputType:'mic' });
           srStatus.textContent = 'Processing…';
           setPill('thinking','Thinking…');
-          // ALWAYS stream-chat for mic
-          streamChatSSE(text);
+          // ⬇️ NEW: use streaming endpoint for live tokens
+          routeToBackend(text, { forceLLM: true, stream: true });
         } else { setIdleUI(); }
       };
       recognizer.onresult = (event) => {
@@ -522,7 +521,7 @@
     });
     window.addEventListener('keydown', (e) => { if (e.key === 'Escape') stopAll(); });
 
-    // ---- JSON helper (kept for fallback path) ----
+    // ---- Helpers for JSON fetch ----
     async function safeJSON(res){
       const txt = await res.text();
       try { return JSON.parse(txt); }
@@ -539,11 +538,13 @@
     }
 
     /* ============================================================
-       SSE Streaming (mic path)
+       NEW: SSE Streaming Integration (no UI redesign)
        ============================================================ */
+    const STREAM_ENDPOINT = "/.netlify/functions/stream-chat";
     let currentEventSource = null;
 
     function streamChatSSE(userText){
+      // Make sure any prior stream is closed
       if (currentEventSource){ try { currentEventSource.close(); } catch(_){} currentEventSource = null; }
 
       setPill('thinking','Thinking…');
@@ -559,6 +560,10 @@
 
       let full = "";
 
+      es.addEventListener('open', () => {
+        // once tokens arrive, we’ll mark as Speaking
+      });
+
       es.addEventListener('token', (evt) => {
         if (pill.classList.contains('thinking')) setPill('speaking','Speaking…');
         try{
@@ -571,9 +576,10 @@
         try { es.close(); } catch(_){}
         currentEventSource = null;
 
+        // Save assistant turn locally; then TTS
         if (full.trim()){
           pushTurn('assistant', full.trim(), { streamed:true });
-          setPlayingUI(); // keep pill in Speaking during audio
+          setPlayingUI(); // keeps pill in Speaking during audio
           await speakWithElevenLabs(full.trim());
         }
         setIdleUI();
@@ -582,7 +588,7 @@
       es.addEventListener('error', async () => {
         try { es.close(); } catch(_){}
         currentEventSource = null;
-        // Fallback to non-stream function chain
+        // Fallback to existing non-stream flow
         try{
           const data = await callFunction('/.netlify/functions/session-chat', {
             text: userText, message: userText, sessionId, context: getBoundedContext(), forceLLM: true
@@ -604,10 +610,38 @@
       });
     }
 
+    // NOTE: opts may include { forceLLM: true, stream: true }
+    async function routeToBackend(text, opts = {}){
+      if (opts.stream) {
+        // streaming path
+        streamChatSSE(text);
+        return;
+      }
+
+      // legacy non-stream path (kept intact as backup)
+      const payload = { text, message: text, sessionId, context: getBoundedContext(), ...opts };
+      try{
+        const data = await callFunction('/.netlify/functions/session-chat', payload);
+        await handleBackendResponse(data);
+      } catch (e1){
+        console.warn('[DTA] session-chat failed, falling back → dop-chat', e1);
+        try{
+          const data = await callFunction('/.netlify/functions/dop-chat', { text });
+          await handleBackendResponse(data);
+          showToast('Using fallback chat');
+        } catch (e2){
+          console.error('[DTA] dop-chat also failed', e2);
+          srStatus.textContent = 'Backend error';
+          setIdleUI();
+          showToast('Backend error');
+        }
+      }
+    }
+
     async function handleBackendResponse(data){
       if (data.matchedClip) {
         setPlayingUI();
-        playFile(data.matchedClip);
+        playFile(data.matchedClip); // playFile logs assistant turn (with transcript)
       } else if (data.fallbackResponse || data.reply) {
         setPlayingUI();
         const speech = data.fallbackResponse || data.reply;
