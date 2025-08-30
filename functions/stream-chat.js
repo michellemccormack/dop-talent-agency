@@ -1,5 +1,5 @@
 // functions/stream-chat.js
-// Minimal SSE smoke-test to rule out syntax/paste issues.
+// Minimal SSE smoke-test using the correct Netlify signature.
 
 const { stream } = require("@netlify/functions");
 
@@ -14,31 +14,29 @@ function cors(origin) {
   };
 }
 
-function line(event, payload) {
+function sse(event, payload) {
   return (event ? `event: ${event}\n` : "") + `data: ${JSON.stringify(payload)}\n\n`;
 }
 
-module.exports.handler = async (event) => {
-  // CORS preflight
-  if ((event.httpMethod || "").toUpperCase() === "OPTIONS") {
-    return { statusCode: 204, headers: cors(event.headers?.origin), body: "" };
+// ✅ Correct pattern: export the wrapped handler.
+module.exports.handler = stream(async (event, context, response) => {
+  // CORS preflight (note: for OPTIONS you’d normally return early via a non-stream handler,
+  // but for a smoke test we just open SSE on GET/POST)
+  const method = (event.httpMethod || "").toUpperCase();
+  if (method === "OPTIONS") {
+    response.writeHead(204, cors(event.headers?.origin));
+    return response.end();
   }
 
-  // Correct Netlify streaming signature
-  return stream(event, (res) => {
-    // SSE headers
-    res.writeHead(200, {
-      ...cors(event.headers?.origin),
-      "Content-Type": "text/event-stream; charset=utf-8",
-    });
-
-    // Emit a few test events
-    res.write(line("open", { ok: true, test: "sse-smoke" }));
-    res.write(line("token", { content: "hello " }));
-    res.write(line("token", { content: "world" }));
-    res.write(line("done", { ok: true }));
-
-    // Close
-    res.end();
+  // Open SSE
+  response.writeHead(200, {
+    ...cors(event.headers?.origin),
+    "Content-Type": "text/event-stream; charset=utf-8",
   });
-};
+
+  response.write(sse("open", { ok: true, test: "netlify-stream" }));
+  response.write(sse("token", { content: "hello " }));
+  response.write(sse("token", { content: "world" }));
+  response.write(sse("done", { ok: true }));
+  response.end();
+});
