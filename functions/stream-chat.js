@@ -1,8 +1,9 @@
 // functions/stream-chat.js
-// Phase 2.5 — Task 24a (SSE via Netlify Functions, using stream())
-// ✅ Uses @netlify/functions.stream() with the correct signature:
-//    exports.handler = stream(async (event, ctx) => { return async (res) => { ... }})
-// ✅ Streams tokens over SSE + heartbeat
+// Phase 2.5 — Task 24a (SSE via Netlify Functions, compat signature)
+//
+// ✅ Uses @netlify/functions.stream(wrapper) where wrapper is NON-async
+//    and returns (res) => { ... } — the most compatible form.
+// ✅ SSE token streaming + heartbeat
 // ✅ Blobs storage via getStore({ name: "sessions" }) with in-memory fallback
 // ✅ Default model aligned with session-chat.js
 
@@ -158,8 +159,8 @@ function getSessionsStore() {
 
 /* ------------------------- handler ------------------------- */
 
-exports.handler = stream(async (event, context) => {
-  // Non-stream preflight path
+exports.handler = stream((event, context) => {
+  // Non-stream preflight path (return normal response)
   if ((event.httpMethod || "").toUpperCase() === "OPTIONS") {
     return {
       statusCode: 204,
@@ -169,12 +170,23 @@ exports.handler = stream(async (event, context) => {
   }
 
   // Return a function that receives the Node `res` stream
-  return async (res) => {
+  return (res) => {
+    // Guard: if res is missing, bail gracefully (no 502)
+    if (!res || typeof res.writeHead !== "function") {
+      console.error("[stream-chat] res not available — falling back");
+      return;
+    }
+
     // SSE headers
-    res.writeHead(200, {
-      ...corsHeaders(event.headers?.origin),
-      "Content-Type": "text/event-stream; charset=utf-8",
-    });
+    try {
+      res.writeHead(200, {
+        ...corsHeaders(event.headers?.origin),
+        "Content-Type": "text/event-stream; charset=utf-8",
+      });
+    } catch (e) {
+      console.error("[stream-chat] writeHead failed:", e?.message || e);
+      return;
+    }
 
     const send = (eventName, payload) => {
       try {
@@ -184,142 +196,144 @@ exports.handler = stream(async (event, context) => {
       }
     };
 
-    try {
-      const { sessionId, message, persona: personaName } = parseInput(event);
-
-      if (!OPENAI_API_KEY) {
-        send("error", { error: "Missing OPENAI_API_KEY" });
-        return res.end();
-      }
-      if (!sessionId || !message) {
-        send("error", { error: "Missing required fields: sessionId and message" });
-        return res.end();
-      }
-
-      const sessions = getSessionsStore();
-
-      // Load/init session
-      let session = (await sessions.get(sessionId).catch(() => null)) || null;
-      if (!session) {
-        session = {
-          id: sessionId,
-          messages: [],
-          persona: null,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        };
-      }
-
-      const persona = await loadPersona(session.persona || personaName || "sasha");
-      session.persona = persona.name;
-      session.updatedAt = Date.now();
-
-      // Append user message and persist
-      session.messages = trimHistory(
-        [...(session.messages || []), { role: "user", content: message, ts: Date.now() }],
-        MAX_HISTORY_MESSAGES
-      );
-      await sessions.set(sessionId, session).catch(() => {});
-
-      // Announce open + heartbeat
-      send("open", { ok: true, model: DEFAULT_MODEL, persona: session.persona, sessionId });
-      const ping = setInterval(() => {
-        try { res.write(`: ping\n\n`); } catch {}
-      }, 15000);
-
-      let fullText = "";
-
-      // Prepare OpenAI request
-      const messages = buildMessages(persona, session.messages);
-      const body = {
-        model: DEFAULT_MODEL,
-        stream: true,
-        messages,
-        temperature: 0.7,
-      };
-
-      let openaiResp;
+    (async () => {
       try {
-        openaiResp = await fetch("https://api.openai.com/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${OPENAI_API_KEY}`,
-          },
-          body: JSON.stringify(body),
-        });
-      } catch (err) {
-        clearInterval(ping);
-        send("error", { error: String(err || "fetch failed") });
-        return res.end();
-      }
+        const { sessionId, message, persona: personaName } = parseInput(event);
 
-      if (!openaiResp.ok || !openaiResp.body) {
-        clearInterval(ping);
-        const text = await openaiResp.text().catch(() => "");
-        send("error", {
-          error: "OpenAI request failed",
-          status: openaiResp.status,
-          statusText: openaiResp.statusText,
-          body: text.slice(0, 500),
-        });
-        return res.end();
-      }
-
-      // Stream OpenAI SSE → forward token events
-      const reader = openaiResp.body.getReader();
-      const decoder = new TextDecoder();
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split("\n");
-
-          for (const rawLine of lines) {
-            const line = rawLine.trim();
-            if (!line || !line.startsWith("data:")) continue;
-
-            const data = line.slice(5).trim();
-            if (data === "[DONE]") continue;
-
-            try {
-              const json = JSON.parse(data);
-              const delta = json?.choices?.[0]?.delta || {};
-              const piece = delta?.content || "";
-              if (piece) {
-                fullText += piece;
-                send("token", { content: piece });
-              }
-            } catch {
-              send("meta", { raw: data });
-            }
-          }
+        if (!OPENAI_API_KEY) {
+          send("error", { error: "Missing OPENAI_API_KEY" });
+          return res.end();
         }
-      } catch (err) {
-        send("error", { error: String(err) });
-      } finally {
-        clearInterval(ping);
-      }
+        if (!sessionId || !message) {
+          send("error", { error: "Missing required fields: sessionId and message" });
+          return res.end();
+        }
 
-      // Persist assistant turn
-      try {
+        const sessions = getSessionsStore();
+
+        // Load/init session
+        let session = (await sessions.get(sessionId).catch(() => null)) || null;
+        if (!session) {
+          session = {
+            id: sessionId,
+            messages: [],
+            persona: null,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          };
+        }
+
+        const persona = await loadPersona(session.persona || personaName || "sasha");
+        session.persona = persona.name;
+        session.updatedAt = Date.now();
+
+        // Append user message and persist
         session.messages = trimHistory(
-          [...(session.messages || []), { role: "assistant", content: fullText, ts: Date.now() }],
+          [...(session.messages || []), { role: "user", content: message, ts: Date.now() }],
           MAX_HISTORY_MESSAGES
         );
-        session.updatedAt = Date.now();
-        await sessions.set(sessionId, session);
-      } catch {}
+        await sessions.set(sessionId, session).catch(() => {});
 
-      send("done", { bytes: Buffer.byteLength(fullText || "", "utf8"), chars: (fullText || "").length });
-      return res.end();
-    } catch (fatal) {
-      console.error("[stream-chat] fatal:", fatal);
-      try { send("error", { error: "internal", detail: String(fatal?.message || fatal) }); } catch {}
-      return res.end();
-    }
+        // Announce open + heartbeat
+        send("open", { ok: true, model: DEFAULT_MODEL, persona: session.persona, sessionId });
+        const ping = setInterval(() => {
+          try { res.write(`: ping\n\n`); } catch {}
+        }, 15000);
+
+        let fullText = "";
+
+        // Prepare OpenAI request
+        const messages = buildMessages(persona, session.messages);
+        const body = {
+          model: DEFAULT_MODEL,
+          stream: true,
+          messages,
+          temperature: 0.7,
+        };
+
+        let openaiResp;
+        try {
+          openaiResp = await fetch("https://api.openai.com/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${OPENAI_API_KEY}`,
+            },
+            body: JSON.stringify(body),
+          });
+        } catch (err) {
+          clearInterval(ping);
+          send("error", { error: String(err || "fetch failed") });
+          return res.end();
+        }
+
+        if (!openaiResp.ok || !openaiResp.body) {
+          clearInterval(ping);
+          const text = await openaiResp.text().catch(() => "");
+          send("error", {
+            error: "OpenAI request failed",
+            status: openaiResp.status,
+            statusText: openaiResp.statusText,
+            body: text.slice(0, 500),
+          });
+          return res.end();
+        }
+
+        // Stream OpenAI SSE → forward token events
+        const reader = openaiResp.body.getReader();
+        const decoder = new TextDecoder();
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split("\n");
+
+            for (const rawLine of lines) {
+              const line = rawLine.trim();
+              if (!line || !line.startsWith("data:")) continue;
+
+              const data = line.slice(5).trim();
+              if (data === "[DONE]") continue;
+
+              try {
+                const json = JSON.parse(data);
+                const delta = json?.choices?.[0]?.delta || {};
+                const piece = delta?.content || "";
+                if (piece) {
+                  fullText += piece;
+                  send("token", { content: piece });
+                }
+              } catch {
+                send("meta", { raw: data });
+              }
+            }
+          }
+        } catch (err) {
+          send("error", { error: String(err) });
+        } finally {
+          clearInterval(ping);
+        }
+
+        // Persist assistant turn
+        try {
+          session.messages = trimHistory(
+            [...(session.messages || []), { role: "assistant", content: fullText, ts: Date.now() }],
+            MAX_HISTORY_MESSAGES
+          );
+          session.updatedAt = Date.now();
+          await sessions.set(sessionId, session);
+        } catch {}
+
+        send("done", { bytes: Buffer.byteLength(fullText || "", "utf8"), chars: (fullText || "").length });
+        return res.end();
+      } catch (fatal) {
+        console.error("[stream-chat] fatal:", fatal);
+        try { send("error", { error: "internal", detail: String(fatal?.message || fatal) }); } catch {}
+        return res.end();
+      }
+    })();
   };
 });
