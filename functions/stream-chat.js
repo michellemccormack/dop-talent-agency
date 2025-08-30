@@ -1,13 +1,14 @@
 // functions/stream-chat.js
-// Phase 2.5 — Task 24a (SSE via Netlify Functions)
-// ✅ Uses streamifyResponse so `res` is always defined in your runtime
-// ✅ SSE token streaming + heartbeats
+// Phase 2.5 — Task 24a (SSE via Netlify Functions, using stream())
+// ✅ Uses @netlify/functions.stream() with the correct signature:
+//    exports.handler = stream(async (event, ctx) => { return async (res) => { ... }})
+// ✅ Streams tokens over SSE + heartbeat
 // ✅ Blobs storage via getStore({ name: "sessions" }) with in-memory fallback
 // ✅ Default model aligned with session-chat.js
 
 const path = require("path");
 const fs = require("fs/promises");
-const { streamifyResponse } = require("@netlify/functions");
+const { stream } = require("@netlify/functions");
 
 // Prefer widely-available Blobs API
 let getStore;
@@ -157,14 +158,18 @@ function getSessionsStore() {
 
 /* ------------------------- handler ------------------------- */
 
-exports.handler = async (event, context) => {
-  // CORS preflight (no streaming)
+exports.handler = stream(async (event, context) => {
+  // Non-stream preflight path
   if ((event.httpMethod || "").toUpperCase() === "OPTIONS") {
-    return { statusCode: 204, headers: corsHeaders(event.headers?.origin), body: "" };
+    return {
+      statusCode: 204,
+      headers: corsHeaders(event.headers?.origin),
+      body: "",
+    };
   }
 
-  // The stream MUST be returned from streamifyResponse
-  return streamifyResponse(async (res) => {
+  // Return a function that receives the Node `res` stream
+  return async (res) => {
     // SSE headers
     res.writeHead(200, {
       ...corsHeaders(event.headers?.origin),
@@ -172,7 +177,11 @@ exports.handler = async (event, context) => {
     });
 
     const send = (eventName, payload) => {
-      try { res.write(sseLine(eventName, payload)); } catch {}
+      try {
+        res.write(sseLine(eventName, payload));
+      } catch {
+        // client disconnected
+      }
     };
 
     try {
@@ -312,5 +321,5 @@ exports.handler = async (event, context) => {
       try { send("error", { error: "internal", detail: String(fatal?.message || fatal) }); } catch {}
       return res.end();
     }
-  });
-};
+  };
+});
