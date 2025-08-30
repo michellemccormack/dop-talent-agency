@@ -1,14 +1,13 @@
 // functions/stream-chat.js
-// Phase 2.5 — Task 24a (SSE, Netlify-native, correct stream() signature)
-//
-// ✅ Uses Netlify's stream() wrapper correctly: return (res) => { ... }
-// ✅ SSE over classic Functions (no Edge runtime required)
+// Phase 2.5 — Task 24a (SSE via Netlify Functions)
+// ✅ Uses streamifyResponse so `res` is always defined in your runtime
+// ✅ SSE token streaming + heartbeats
 // ✅ Blobs storage via getStore({ name: "sessions" }) with in-memory fallback
-// ✅ Robust error guards; aligns default model with session-chat.js
+// ✅ Default model aligned with session-chat.js
 
 const path = require("path");
 const fs = require("fs/promises");
-const { stream } = require("@netlify/functions");
+const { streamifyResponse } = require("@netlify/functions");
 
 // Prefer widely-available Blobs API
 let getStore;
@@ -25,6 +24,8 @@ const DEFAULT_MODEL =
   "gpt-4o-mini";
 
 const MAX_HISTORY_MESSAGES = 20;
+
+/* ------------------------- helpers ------------------------- */
 
 function corsHeaders(origin) {
   return {
@@ -154,18 +155,16 @@ function getSessionsStore() {
   };
 }
 
-exports.handler = stream(async (event, context) => {
-  // Handle preflight without streaming
+/* ------------------------- handler ------------------------- */
+
+exports.handler = async (event, context) => {
+  // CORS preflight (no streaming)
   if ((event.httpMethod || "").toUpperCase() === "OPTIONS") {
-    return {
-      statusCode: 204,
-      headers: corsHeaders(event.headers?.origin),
-      body: "",
-    };
+    return { statusCode: 204, headers: corsHeaders(event.headers?.origin), body: "" };
   }
 
-  // Return a function that receives the Node `res` stream.
-  return async (res) => {
+  // The stream MUST be returned from streamifyResponse
+  return streamifyResponse(async (res) => {
     // SSE headers
     res.writeHead(200, {
       ...corsHeaders(event.headers?.origin),
@@ -173,11 +172,7 @@ exports.handler = stream(async (event, context) => {
     });
 
     const send = (eventName, payload) => {
-      try {
-        res.write(sseLine(eventName, payload));
-      } catch {
-        // ignore broken pipe
-      }
+      try { res.write(sseLine(eventName, payload)); } catch {}
     };
 
     try {
@@ -220,9 +215,7 @@ exports.handler = stream(async (event, context) => {
       // Announce open + heartbeat
       send("open", { ok: true, model: DEFAULT_MODEL, persona: session.persona, sessionId });
       const ping = setInterval(() => {
-        try {
-          res.write(`: ping\n\n`);
-        } catch {}
+        try { res.write(`: ping\n\n`); } catch {}
       }, 15000);
 
       let fullText = "";
@@ -316,10 +309,8 @@ exports.handler = stream(async (event, context) => {
       return res.end();
     } catch (fatal) {
       console.error("[stream-chat] fatal:", fatal);
-      try {
-        send("error", { error: "internal", detail: String(fatal?.message || fatal) });
-      } catch {}
+      try { send("error", { error: "internal", detail: String(fatal?.message || fatal) }); } catch {}
       return res.end();
     }
-  };
-});
+  });
+};
