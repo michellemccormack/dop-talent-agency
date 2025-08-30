@@ -1,12 +1,16 @@
-cat > functions/stream-chat.js <<'EOF'
 // functions/stream-chat.js
 // Phase 2.5 — Task 24a (SSE via Netlify Functions; correct stream(event, res) usage)
+//
+// ✅ Correct Netlify signature: module.exports.handler = async (event) => stream(event, (res) => { ... })
+// ✅ SSE token streaming + heartbeat
+// ✅ Blobs storage via getStore({ name: "sessions" }) with in-memory fallback
+// ✅ Default model aligned with session-chat.js (gpt-4o-mini)
 
 const path = require("path");
 const fs = require("fs/promises");
 const { stream } = require("@netlify/functions");
 
-// Prefer widely-available Blobs API (getStore)
+// Prefer widely-available Blobs API
 let getStore;
 try {
   ({ getStore } = require("@netlify/blobs"));
@@ -124,7 +128,6 @@ function getSessionsStore() {
   if (typeof getStore === "function") {
     try {
       const store = getStore({ name: "sessions" });
-      console.log("[stream-chat] storage: Netlify Blobs getStore(sessions)");
       return {
         async get(id) {
           const text = await store.get(id);
@@ -154,7 +157,7 @@ function getSessionsStore() {
 
 /* ------------------------- handler ------------------------- */
 
-module.exports.handler = async (event, context) => {
+module.exports.handler = async (event) => {
   // Non-stream preflight path
   if ((event.httpMethod || "").toUpperCase() === "OPTIONS") {
     return {
@@ -162,7 +165,7 @@ module.exports.handler = async (event, context) => {
       headers: corsHeaders(event.headers?.origin),
       body: "",
     };
-  }
+    }
 
   // Use the correct Netlify streaming entry point
   return stream(event, (res) => {
@@ -322,5 +325,3 @@ module.exports.handler = async (event, context) => {
     })();
   });
 };
-EOF
-git add functions/stream-chat.js && git commit -m "fix(stream-chat): correct Netlify stream(event,res) usage" && git push
