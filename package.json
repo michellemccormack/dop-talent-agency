@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
+  "type": "commonjs",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -13,14 +14,13 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
   "bugs": {
     "url": "https://github.com/michellemccormack/dop-talent-agency/issues"
   },
   "homepage": "https://github.com/michellemccormack/dop-talent-agency#readme",
   "dependencies": {
-    "@netlify/blobs": "^10.0.8",
-    "@netlify/functions": "^4.2.5",
+    "@netlify/blobs": "^6.3.0",
+    "@netlify/functions": "^2.8.1",
     "nanoid": "^5.1.5"
   }
 }
