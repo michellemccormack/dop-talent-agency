@@ -1,17 +1,12 @@
+cat > functions/stream-chat.js <<'EOF'
 // functions/stream-chat.js
-// Phase 2.5 — Task 24a (SSE via Netlify Functions, compat signature)
-//
-// ✅ Uses @netlify/functions.stream(wrapper) where wrapper is NON-async
-//    and returns (res) => { ... } — the most compatible form.
-// ✅ SSE token streaming + heartbeat
-// ✅ Blobs storage via getStore({ name: "sessions" }) with in-memory fallback
-// ✅ Default model aligned with session-chat.js
+// Phase 2.5 — Task 24a (SSE via Netlify Functions; correct stream(event, res) usage)
 
 const path = require("path");
 const fs = require("fs/promises");
 const { stream } = require("@netlify/functions");
 
-// Prefer widely-available Blobs API
+// Prefer widely-available Blobs API (getStore)
 let getStore;
 try {
   ({ getStore } = require("@netlify/blobs"));
@@ -159,8 +154,8 @@ function getSessionsStore() {
 
 /* ------------------------- handler ------------------------- */
 
-exports.handler = stream((event, context) => {
-  // Non-stream preflight path (return normal response)
+module.exports.handler = async (event, context) => {
+  // Non-stream preflight path
   if ((event.httpMethod || "").toUpperCase() === "OPTIONS") {
     return {
       statusCode: 204,
@@ -169,14 +164,8 @@ exports.handler = stream((event, context) => {
     };
   }
 
-  // Return a function that receives the Node `res` stream
-  return (res) => {
-    // Guard: if res is missing, bail gracefully (no 502)
-    if (!res || typeof res.writeHead !== "function") {
-      console.error("[stream-chat] res not available — falling back");
-      return;
-    }
-
+  // Use the correct Netlify streaming entry point
+  return stream(event, (res) => {
     // SSE headers
     try {
       res.writeHead(200, {
@@ -189,11 +178,7 @@ exports.handler = stream((event, context) => {
     }
 
     const send = (eventName, payload) => {
-      try {
-        res.write(sseLine(eventName, payload));
-      } catch {
-        // client disconnected
-      }
+      try { res.write(sseLine(eventName, payload)); } catch {}
     };
 
     (async () => {
@@ -335,5 +320,7 @@ exports.handler = stream((event, context) => {
         return res.end();
       }
     })();
-  };
-});
+  });
+};
+EOF
+git add functions/stream-chat.js && git commit -m "fix(stream-chat): correct Netlify stream(event,res) usage" && git push

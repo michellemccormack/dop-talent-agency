@@ -1,238 +1,247 @@
 // functions/session-chat.js
-// Task 22: LLM reply wiring (Phase‑1 UI untouched) — v22.1.1 (CommonJS)
+// Phase 1/2 baseline — non-streaming chat endpoint (CommonJS)
+// - Intent → clip short-circuit using assets/intentMap.json
+// - Persona loader from /personas
+// - Session memory persisted with Netlify Blobs getStore("sessions") when available
+// - Fallback to in-memory store if Blobs isn’t available (local dev)
+// - Returns JSON: { version, sessionId, messages, matchedClip? , reply? }
 
-const intentMap = require('../assets/intentMap.json'); // deterministic intent→clip map
-const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const path = require("path");
+const { readFile } = require("fs/promises");
+
+// Deterministic intent → clip map (keep file next to assets/)
+let intentMap = {};
+try {
+  intentMap = require("../assets/intentMap.json");
+} catch {
+  intentMap = {};
+}
+
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const SITE_ID = process.env.NETLIFY_SITE_ID;
-const BLOBS_TOKEN = process.env.NETLIFY_BLOBS_TOKEN;
+const DEFAULT_MODEL =
+  process.env.OPENAI_MODEL ||
+  process.env.OPENAI_CHAT_MODEL ||
+  "gpt-4o-mini";
 
-const VERSION = '22.1.1';
-console.info(`[session-chat] boot v${VERSION} — blobs:${!!SITE_ID && !!BLOBS_TOKEN}, model=${DEFAULT_MODEL}`);
+const VERSION = "24.0.0-session-chat";
 
-const { readFile } = require('fs/promises');
-const path = require('path');
+// Prefer widely-available Blobs API (no tokens needed inside Netlify Functions)
+let getStore;
+try {
+  ({ getStore } = require("@netlify/blobs"));
+} catch {
+  getStore = undefined;
+}
 
-// --- utils ---
-const nowTs = () => Date.now();
+/* ------------------------- tiny utils ------------------------- */
 
 function corsHeaders() {
   return {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Content-Type': 'application/json; charset=utf-8',
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "POST,OPTIONS",
+    "Access-Control-Allow-Headers": "content-type, authorization",
+    "Content-Type": "application/json; charset=utf-8",
   };
 }
-function ok(body) {
+const nowTs = () => Date.now();
+
+/** sessions store (getStore if available, else in-memory) */
+function getSessionsStore() {
+  if (typeof getStore === "function") {
+    try {
+      const store = getStore({ name: "sessions" });
+      return {
+        async get(id) {
+          const text = await store.get(id);
+          return text ? JSON.parse(text) : null;
+        },
+        async set(id, val) {
+          return store.set(id, JSON.stringify(val), {
+            contentType: "application/json",
+          });
+        },
+      };
+    } catch (err) {
+      console.warn("[session-chat] getStore threw; fallback to memory:", err?.message || err);
+    }
+  }
+  console.warn("[session-chat] storage: in-memory (no persistence between cold starts)");
+  const mem = new Map();
   return {
-    statusCode: 200,
-    headers: corsHeaders(),
-    body: JSON.stringify({ version: VERSION, ...body }),
-  };
-}
-function bad(statusCode, message, extra = {}) {
-  return {
-    statusCode,
-    headers: corsHeaders(),
-    body: JSON.stringify({ version: VERSION, error: message, ...extra }),
+    async get(id) {
+      return mem.get(id) || null;
+    },
+    async set(id, val) {
+      mem.set(id, val);
+    },
   };
 }
 
-// --- Persona loader (optional) ---
 async function loadPersona(personaId) {
   if (!personaId) return null;
   try {
-    const personaPath = path.join(__dirname, '..', 'personas', `${personaId}.json`);
-    const buf = await readFile(personaPath, 'utf-8');
+    const personaPath = path.join(__dirname, "..", "personas", `${personaId}.json`);
+    const buf = await readFile(personaPath, "utf-8");
     return JSON.parse(buf);
   } catch {
-    return null; // fall back to generic system prompt
-  }
-}
-
-// --- Session Storage ---
-const MEM_STORE = new Map();
-const NS = 'sessions';
-
-async function blobsGet(key) {
-  if (!SITE_ID || !BLOBS_TOKEN) return null;
-  const url = `https://api.netlify.com/api/v1/sites/${encodeURIComponent(SITE_ID)}/blobs/${encodeURIComponent(NS)}/${encodeURIComponent(key)}`;
-  const res = await fetch(url, {
-    method: 'GET',
-    headers: { Authorization: `Bearer ${BLOBS_TOKEN}` },
-  });
-  if (res.status === 404) return null;
-  if (!res.ok) {
-    console.error('Blobs GET failed', res.status, await res.text());
     return null;
   }
-  const text = await res.text();
-  try { return JSON.parse(text); } catch { return null; }
 }
 
-async function blobsSet(key, value) {
-  if (!SITE_ID || !BLOBS_TOKEN) return false;
-  const url = `https://api.netlify.com/api/v1/sites/${encodeURIComponent(SITE_ID)}/blobs/${encodeURIComponent(NS)}/${encodeURIComponent(key)}`;
-  const res = await fetch(url, {
-    method: 'PUT',
-    headers: {
-      Authorization: `Bearer ${BLOBS_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(value),
-  });
-  if (!res.ok) {
-    console.error('Blobs PUT failed', res.status, await res.text());
-    return false;
-  }
-  return true;
-}
-
-async function getSession(sessionId) {
-  const key = `${sessionId}.json`;
-  const fromBlobs = await blobsGet(key);
-  if (fromBlobs && fromBlobs.messages) return fromBlobs;
-
-  const mem = MEM_STORE.get(sessionId);
-  if (mem) return mem;
-
-  const session = { sessionId, messages: [] };
-  MEM_STORE.set(sessionId, session);
-  return session;
-}
-
-async function saveSession(session) {
-  const key = `${session.sessionId}.json`;
-  const ok = await blobsSet(key, session);
-  if (!ok) MEM_STORE.set(session.sessionId, session);
-}
-
-// --- History limiting + system prompt ---
 function buildChatMessagesForLLM({ persona, history }) {
   const MAX_MESSAGES = 14;
-  const recent = history.slice(-MAX_MESSAGES);
+  const recent = (history || []).slice(-MAX_MESSAGES);
 
   const system = (() => {
     if (persona && (persona.system || persona.description || persona.instructions)) {
-      const name = persona.name ? `You are ${persona.name}. ` : '';
-      const instr = persona.system || persona.instructions || persona.description || '';
+      const name = persona.name ? `You are ${persona.name}. ` : "";
+      const instr = persona.system || persona.instructions || persona.description || "";
       return `${name}${instr}`.trim();
     }
-    // Default fallback persona (demo-safe, concise, human tone)
+    // Safe, concise default
     return [
-      'You are Sasha — warm, playful, confident.',
-      'Stay in character; never say you are an AI.',
-      'Keep responses brief: 1–2 sentences (≤ 25 words).',
-      'If you don’t know, pivot lightly and invite another question.',
-      'Be respectful and avoid personal claims you can’t know.'
-    ].join(' ');
+      "You are Sasha — warm, playful, confident.",
+      "Stay in character; never say you are an AI.",
+      "Keep responses brief: 1–2 sentences (≤ 25 words).",
+      "If you don’t know, pivot lightly and invite another question.",
+      "Be respectful and avoid personal claims you can’t know."
+    ].join(" ");
   })();
 
-  const msgs = [{ role: 'system', content: system }];
+  const msgs = [{ role: "system", content: system }];
   for (const m of recent) {
-    if (m.role === 'user' || m.role === 'assistant' || m.role === 'system') {
-      msgs.push({ role: m.role, content: String(m.content ?? '') });
+    if (m && (m.role === "user" || m.role === "assistant" || m.role === "system")) {
+      msgs.push({ role: m.role, content: String(m.content ?? "") });
     }
   }
   return msgs;
 }
 
-// --- OpenAI call ---
 async function llmChat({ messages, model = DEFAULT_MODEL, temperature = 0.7 }) {
-  if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY is not set');
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
+  if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not set");
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
     headers: {
       Authorization: `Bearer ${OPENAI_API_KEY}`,
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({ model, messages, temperature }),
   });
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`OpenAI error ${res.status}: ${text}`);
+    const text = await res.text().catch(() => "");
+    throw new Error(`OpenAI error ${res.status}: ${text.slice(0, 600)}`);
   }
   const json = await res.json();
-  const choice = json?.choices?.[0];
-  return choice?.message?.content ?? '';
+  return json?.choices?.[0]?.message?.content ?? "";
 }
 
-// --- Netlify handler (CommonJS export) ---
+/* ------------------------- handler ------------------------- */
+
 module.exports.handler = async (event) => {
   try {
-    if (event.httpMethod === 'OPTIONS') {
-      return { statusCode: 204, headers: corsHeaders(), body: '' };
+    // Preflight
+    if ((event.httpMethod || "").toUpperCase() === "OPTIONS") {
+      return { statusCode: 204, headers: corsHeaders(), body: "" };
     }
-    if (event.httpMethod !== 'POST') {
-      return bad(405, 'Method Not Allowed');
+    if ((event.httpMethod || "").toUpperCase() !== "POST") {
+      return {
+        statusCode: 405,
+        headers: corsHeaders(),
+        body: JSON.stringify({ version: VERSION, error: "Method Not Allowed" }),
+      };
     }
 
-    const body = JSON.parse(event.body || '{}');
+    // Parse input
+    let body = {};
+    try { body = JSON.parse(event.body || "{}"); } catch {}
     const sessionId = body.sessionId || body.id || null;
-    const userMessage = (body.message ?? '').toString();
+    const userMessage = (body.message ?? body.text ?? "").toString();
     const personaId = body.personaId || body.persona || null;
     const meta = body.meta || {};
+    const forceLLM = !!body.forceLLM;
 
-    if (!sessionId) return bad(400, 'sessionId is required');
-    if (!userMessage) return bad(400, 'message is required');
+    if (!sessionId) {
+      return { statusCode: 400, headers: corsHeaders(), body: JSON.stringify({ version: VERSION, error: "sessionId is required" }) };
+    }
+    if (!userMessage) {
+      return { statusCode: 400, headers: corsHeaders(), body: JSON.stringify({ version: VERSION, error: "message is required" }) };
+    }
 
-    const session = await getSession(sessionId);
+    const sessions = getSessionsStore();
+    let session = (await sessions.get(sessionId).catch(() => null)) || { sessionId, messages: [] };
 
     // 1) Store the user message
     session.messages.push({
-      role: 'user',
+      role: "user",
       content: userMessage,
       meta,
       ts: nowTs(),
     });
-    await saveSession(session);
+    await sessions.set(sessionId, session).catch(() => {});
 
-    // 2) Deterministic intent→clip short-circuit (before calling LLM)
-    const q = (userMessage || '').toLowerCase();
-    let matchedClip = null;
-    try {
-      for (const key of Object.keys(intentMap)) {
-        const entry = intentMap[key];
-        if (entry?.keywords?.some((w) => q.includes(w))) { matchedClip = entry.clip; break; }
+    // 2) Deterministic intent → clip (unless forceLLM explicitly demands LLM first)
+    if (!forceLLM) {
+      const q = userMessage.toLowerCase();
+      let matchedClip = null;
+      try {
+        for (const key of Object.keys(intentMap)) {
+          const entry = intentMap[key];
+          if (entry?.keywords?.some((w) => q.includes(w))) { matchedClip = entry.clip; break; }
+        }
+      } catch {}
+      if (matchedClip) {
+        const clipMsg = {
+          role: "assistant",
+          content: `[clip:${matchedClip}]`,
+          meta: { clip: matchedClip },
+          ts: nowTs(),
+        };
+        session.messages.push(clipMsg);
+        await sessions.set(sessionId, session);
+        return {
+          statusCode: 200,
+          headers: corsHeaders(),
+          body: JSON.stringify({ version: VERSION, sessionId, messages: session.messages, matchedClip }),
+        };
       }
-    } catch {}
-    if (matchedClip) {
-      const clipMsg = {
-        role: 'assistant',
-        content: `[clip:${matchedClip}]`,
-        meta: { clip: matchedClip },
-        ts: nowTs(),
-      };
-      session.messages.push(clipMsg);
-      await saveSession(session);
-      return ok({ sessionId, messages: session.messages, matchedClip });
     }
 
-    // 3) No match → proceed to LLM
+    // 3) LLM path (non-streaming)
     const persona = await loadPersona(personaId);
     const llmMessages = buildChatMessagesForLLM({ persona, history: session.messages });
 
-    let assistantText = '';
+    let assistantText = "";
     try {
       assistantText = await llmChat({ messages: llmMessages, model: DEFAULT_MODEL, temperature: 0.8 });
-    } catch (e) {
-      console.error('LLM call failed:', e?.message || e);
-      return ok({ sessionId, messages: session.messages, reply: null, error: 'llm_failed' });
+    } catch (err) {
+      console.error("[session-chat] LLM call failed:", err?.message || err);
+      return {
+        statusCode: 200,
+        headers: corsHeaders(),
+        body: JSON.stringify({ version: VERSION, sessionId, messages: session.messages, reply: null, error: "llm_failed" }),
+      };
     }
 
     const assistantMsg = {
-      role: 'assistant',
+      role: "assistant",
       content: assistantText,
       meta: { model: DEFAULT_MODEL, personaId: personaId || null },
       ts: nowTs(),
     };
     session.messages.push(assistantMsg);
-    await saveSession(session);
+    await sessions.set(sessionId, session);
 
-    return ok({ sessionId, messages: session.messages, reply: assistantText });
+    return {
+      statusCode: 200,
+      headers: corsHeaders(),
+      body: JSON.stringify({ version: VERSION, sessionId, messages: session.messages, reply: assistantText }),
+    };
   } catch (err) {
-    console.error('session-chat unhandled error:', err);
-    return bad(500, 'Internal error');
+    console.error("[session-chat] unhandled:", err);
+    return {
+      statusCode: 500,
+      headers: corsHeaders(),
+      body: JSON.stringify({ version: VERSION, error: "internal_error" }),
+    };
   }
 };
