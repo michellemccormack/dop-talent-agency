@@ -226,6 +226,35 @@
 
   <script>
     /* ============================================================
+       Voice-per-prompt (Step 1)
+       ============================================================ */
+    const VOICE_MAP = {
+      fun:  "WEyBkfNR4P8pL1cFo2jV",
+      from: "DqdcNywG9XLHBlbqaZYM",
+      relax:"IcsVrJwpE5wPKqWalifC",
+    };
+    const FALLBACK_VOICE = "kDIJK53VQMjfQj3fCrML";
+    let _nextVoiceIdForTTS = FALLBACK_VOICE;
+
+    function setVoiceForNextTTSByFile(file) {
+      try {
+        const key = String(file || "")
+          .replace(/^assets\//, "")
+          .replace(/\.mp4$/i, "")
+          .replace(/^p_/, ""); // p_fun -> fun
+        _nextVoiceIdForTTS = VOICE_MAP[key] || FALLBACK_VOICE;
+      } catch { _nextVoiceIdForTTS = FALLBACK_VOICE; }
+    }
+    function forceFallbackVoiceForMic() {
+      _nextVoiceIdForTTS = FALLBACK_VOICE;
+    }
+    function getVoiceIdForNextTTS() {
+      const v = _nextVoiceIdForTTS || FALLBACK_VOICE;
+      _nextVoiceIdForTTS = FALLBACK_VOICE; // reset after use
+      return v;
+    }
+
+    /* ============================================================
        Tier 1 Session Memory (Local) — baseline preserved
        ============================================================ */
     const MAX_TURNS = 10;
@@ -462,10 +491,16 @@
       if (resp.paused) { safePlay(); isStopped = false; setPlayingUI(); }
       else { stopVideo(); setIdleUI(); hideOverlay(); }
     });
+
+    // Set voice by prompt BEFORE playing the clip
+    const grid = document.getElementById('promptGrid');
     grid.addEventListener('click', (e) => {
       const btn = e.target.closest('.btn'); if (!btn) return;
-      playFile(btn.dataset.file);
+      const file = btn.dataset.file;
+      setVoiceForNextTTSByFile(file); // fun/from/relax → maps to specific voice
+      playFile(file);
     });
+
     resp.addEventListener('ended', () => { stopVideo(); setIdleUI(); });
     resp.addEventListener('error', () => { stopVideo(); setIdleUI(); hideOverlay(); });
 
@@ -489,6 +524,8 @@
         srStatus.textContent = 'Listening…';
         lockMic();
         haptic();
+        // mic path → always fallback voice
+        forceFallbackVoiceForMic();
       };
       recognizer.onerror = (e) => { srStatus.textContent = 'Mic error: ' + (e.error || 'unknown'); stopASR(); setIdleUI(); hideOverlay(); };
       recognizer.onend = () => {
@@ -576,7 +613,7 @@
       }
     }
 
-    // TTS — sends clip hint so server picks the right voice
+    // TTS — now passes selected voiceId
     async function speakWithElevenLabs(text){
       try{
         stopVideo();
@@ -591,7 +628,11 @@
         const res = await fetch('/.netlify/functions/tts-eleven', {
           method:'POST',
           headers:{ 'Content-Type':'application/json' },
-          body: JSON.stringify({ text, clip: clipHint })
+          body: JSON.stringify({
+            text,
+            clip: clipHint,
+            voiceId: getVoiceIdForNextTTS()
+          })
         });
         if (!res.ok) throw new Error('TTS failed');
 

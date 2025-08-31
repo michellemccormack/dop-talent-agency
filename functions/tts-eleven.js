@@ -1,119 +1,82 @@
 // functions/tts-eleven.js
-// Non-streaming TTS endpoint for ElevenLabs (returns audio/mpeg)
-// Uses per-prompt voices when a clip hint is provided; otherwise uses a default.
+// CJS • Netlify Functions (Node 18+)
+// Request:  POST JSON { text:string, voiceId?:string }
+// Response: audio/mpeg bytes (binary; client uses res.arrayBuffer())
 
-const ELEVEN_API_KEY = process.env.ELEVENLABS_API_KEY;
+const ELEVEN_API = 'https://api.elevenlabs.io/v1/text-to-speech';
+const DEFAULT_VOICE_ID = process.env.DEFAULT_VOICE_ID || 'kDIJK53VQMjfQj3fCrML'; // LLM/mic fallback
 
-// === YOUR VOICE MAP (from your message) ===
-// p_fun     → WEyBkfNR4P8pL1cFo2jV
-// p_from    → DqdcNywG9XLHBlbqaZYM
-// p_relax   → IcsVrJwpE5wPKqWalifC
-// default   → kDIJK53VQMjfQj3fCrML
-const VOICES = {
-  default: "kDIJK53VQMjfQj3fCrML",
-  p_fun:   "WEyBkfNR4P8pL1cFo2jV",
-  p_from:  "DqdcNywG9XLHBlbqaZYM",
-  p_relax: "IcsVrJwpE5wPKqWalifC",
-};
+module.exports.handler = async (event) => {
+  try {
+    if (event.httpMethod !== 'POST') {
+      return { statusCode: 405, body: 'Method Not Allowed' };
+    }
 
-// Basic CORS for the browser
-function corsHeaders(origin) {
-  return {
-    "Access-Control-Allow-Origin": origin || "*",
-    "Access-Control-Allow-Headers": "content-type, authorization",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-  };
-}
+    const apiKey = process.env.ELEVENLABS_API_KEY;
+    if (!apiKey) {
+      return { statusCode: 500, body: JSON.stringify({ error: 'Missing ELEVENLABS_API_KEY' }) };
+    }
 
-exports.handler = async (event) => {
-  const method = (event.httpMethod || "").toUpperCase();
-  if (method === "OPTIONS") {
-    return { statusCode: 204, headers: corsHeaders(event.headers?.origin), body: "" };
-  }
-  if (method !== "POST") {
-    return {
-      statusCode: 405,
-      headers: corsHeaders(event.headers?.origin),
-      body: JSON.stringify({ error: "Method Not Allowed" }),
+    let payload = {};
+    try {
+      payload = JSON.parse(event.body || '{}');
+    } catch {
+      return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON' }) };
+    }
+
+    const text = (payload.text || '').toString();
+    if (!text) {
+      return { statusCode: 400, body: JSON.stringify({ error: 'Missing "text"' }) };
+    }
+
+    // honor explicit voiceId from client; otherwise use default
+    const voiceId = (payload.voiceId || DEFAULT_VOICE_ID).toString();
+
+    // ElevenLabs request body (non-stream)
+    const body = {
+      text,
+      model_id: 'eleven_monolingual_v1',
+      voice_settings: {
+        stability: 0.4,
+        similarity_boost: 0.8
+      }
     };
-  }
 
-  if (!ELEVEN_API_KEY) {
+    const r = await fetch(`${ELEVEN_API}/${encodeURIComponent(voiceId)}`, {
+      method: 'POST',
+      headers: {
+        'xi-api-key': apiKey,
+        'content-type': 'application/json',
+        'accept': 'audio/mpeg'
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!r.ok) {
+      const details = await r.text().catch(() => '');
+      return {
+        statusCode: r.status,
+        body: JSON.stringify({ error: 'ElevenLabs TTS failed', details: details.slice(0, 600) })
+      };
+    }
+
+    // Netlify supports base64 responses for binary; the platform decodes for the browser fetch
+    const arrayBuf = await r.arrayBuffer();
+    const base64Audio = Buffer.from(arrayBuf).toString('base64');
+
+    return {
+      statusCode: 200,
+      headers: {
+        'Content-Type': 'audio/mpeg',
+        'Cache-Control': 'no-store'
+      },
+      isBase64Encoded: true,
+      body: base64Audio
+    };
+  } catch (err) {
     return {
       statusCode: 500,
-      headers: corsHeaders(event.headers?.origin),
-      body: JSON.stringify({ error: "Missing ELEVENLABS_API_KEY" }),
+      body: JSON.stringify({ error: 'TTS function error', message: String(err?.message || err) })
     };
   }
-
-  let text = "";
-  let clip = "";
-  try {
-    const body = JSON.parse(event.body || "{}");
-    text = (body.text || "").toString();
-    clip = (body.clip || "").toString(); // optional hint like "p_fun", "p_from", "p_relax"
-  } catch {
-    // ignore
-  }
-
-  if (!text) {
-    return {
-      statusCode: 400,
-      headers: corsHeaders(event.headers?.origin),
-      body: JSON.stringify({ error: "text is required" }),
-    };
-  }
-
-  // figure voiceId from clip hint
-  const clipKey = clip.replace(/^assets\//, "").replace(/\.mp4$/i, ""); // assets/p_fun.mp4 -> p_fun
-  const voiceId = VOICES[clipKey] || VOICES.default;
-
-  // Build ElevenLabs request
-  const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
-  const payload = {
-    text,
-    model_id: "eleven_multilingual_v2", // safe default; change if you use another
-    voice_settings: { stability: 0.5, similarity_boost: 0.75 },
-  };
-
-  let resp;
-  try {
-    resp = await fetch(url, {
-      method: "POST",
-      headers: {
-        "xi-api-key": ELEVEN_API_KEY,
-        "Content-Type": "application/json",
-        "Accept": "audio/mpeg",
-      },
-      body: JSON.stringify(payload),
-    });
-  } catch (e) {
-    return {
-      statusCode: 502,
-      headers: corsHeaders(event.headers?.origin),
-      body: JSON.stringify({ error: "elevenlabs fetch failed", detail: String(e) }),
-    };
-  }
-
-  if (!resp.ok) {
-    const errText = await resp.text().catch(() => "");
-    return {
-      statusCode: 502,
-      headers: corsHeaders(event.headers?.origin),
-      body: JSON.stringify({ error: "elevenlabs error", status: resp.status, body: errText.slice(0, 400) }),
-    };
-  }
-
-  const audio = Buffer.from(await resp.arrayBuffer());
-
-  return {
-    statusCode: 200,
-    headers: {
-      ...corsHeaders(event.headers?.origin),
-      "Content-Type": "audio/mpeg",
-      "Cache-Control": "no-store",
-    },
-    body: audio.toString("base64"),
-    isBase64Encoded: true,
-  };
 };
