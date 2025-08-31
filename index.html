@@ -144,7 +144,7 @@
       width:38px; height:38px; border-radius:999px;
       border:3px solid rgba(255,255,255,.35);
       border-top-color:#fff; animation:spin 900ms linear infinite;
-      box-shadow:0 0 18px rgba(0,0,0,.25);
+      box-shadow:0 0 18px rgba(255,255,255,.25);
     }
     @keyframes spin{to{transform:rotate(360deg)}}
 
@@ -226,6 +226,45 @@
 
   <script>
     /* ============================================================
+       Voice-per-prompt (Step 1)  — ADD-ONLY: make selection persistent
+       ============================================================ */
+    const VOICE_MAP = {
+      fun:  "WEyBkfNR4P8pL1cFo2jV",
+      from: "DqdcNywG9XLHBlbqaZYM",
+      relax:"IcsVrJwpE5wPKqWalifC",
+    };
+    const FALLBACK_VOICE = "kDIJK53VQMjfQj3fCrML";
+
+    // ADD-ONLY: persistent selected voice across prompts + mic
+    let SELECTED_VOICE_ID = FALLBACK_VOICE;
+
+    // (kept name for compatibility) — now sets persistent voice; does NOT just set "next only"
+    function setVoiceForNextTTSByFile(file) {
+      try {
+        const key = String(file || "")
+          .replace(/^assets\//, "")
+          .replace(/\.mp4$/i, "")
+          .replace(/^p_/, ""); // p_fun -> fun
+        SELECTED_VOICE_ID = VOICE_MAP[key] || FALLBACK_VOICE;
+      } catch { SELECTED_VOICE_ID = FALLBACK_VOICE; }
+    }
+
+    // (kept name for compatibility) — NO LONGER forces fallback if a prompt was chosen
+    function forceFallbackVoiceForMic() {
+      // ADD-ONLY: do nothing if a prompt voice has been chosen already
+      if (window.DOP_LAST_PROMPT) return;
+      SELECTED_VOICE_ID = FALLBACK_VOICE;
+    }
+
+    // Now just return the persistent selection (no reset)
+    function getVoiceIdForNextTTS() {
+      return SELECTED_VOICE_ID || FALLBACK_VOICE;
+    }
+
+    // ADD-ONLY: remember last pressed prompt clip key for mic clip hint (e.g., "p_fun")
+    window.DOP_LAST_PROMPT = null;
+
+    /* ============================================================
        Tier 1 Session Memory (Local) — baseline preserved
        ============================================================ */
     const MAX_TURNS = 10;
@@ -276,8 +315,9 @@
       setIdleUI();
       console.log('[DTA] Session reset →', sessionId);
       showToast('Session reset');
-      // ADD-ONLY: also clear last prompt hint
+      // ADD-ONLY: clear remembered prompt + voice
       window.DOP_LAST_PROMPT = null;
+      SELECTED_VOICE_ID = FALLBACK_VOICE;
     }
     function getBoundedContext(){
       const system = { role:'system', content:'You are Sasha — be brief, warm, playful. Respect boundaries.' };
@@ -287,7 +327,7 @@
 
     /* ---------- Elements & state (baseline) ---------- */
     const resp = document.getElementById('resp');
-    const grid = document.getElementById('promptGrid');
+    const grid = document.getElementById('promptGrid'); // <-- single declaration (fixed)
     const promptButtons = Array.from(grid.querySelectorAll('.btn'));
     const micBtn  = document.getElementById('micBtn');
     const srStatus = document.getElementById('asrStatus');
@@ -307,9 +347,6 @@
     let lastMode = null;  // 'video' | 'tts'
     let lastFile = null;
     let lastText = null;
-
-    // ADD-ONLY: keep the last pressed prompt key for TTS hint (fun/from/relax)
-    window.DOP_LAST_PROMPT = null;
 
     // mic debounce
     let micLocked = false;
@@ -446,7 +483,7 @@
       lastFile = file;
       lastText = null;
 
-      // ADD-ONLY: remember last prompt key for TTS voice hint (e.g., "p_fun" -> "p_fun")
+      // ADD-ONLY: remember last prompt clip key for mic path (e.g., "assets/p_fun.mp4" -> "p_fun")
       window.DOP_LAST_PROMPT = String(file).replace(/^assets\//,'').replace(/\.mp4$/i,'');
 
       resp.classList.add('fade-start');
@@ -470,16 +507,22 @@
       if (resp.paused) { safePlay(); isStopped = false; setPlayingUI(); }
       else { stopVideo(); setIdleUI(); hideOverlay(); }
     });
+
+    // Set voice by prompt BEFORE playing the clip
     grid.addEventListener('click', (e) => {
       const btn = e.target.closest('.btn'); if (!btn) return;
-      playFile(btn.dataset.file);
+      const file = btn.dataset.file;
+      setVoiceForNextTTSByFile(file); // fun/from/relax → maps to specific voice (persistent now)
+      playFile(file);
     });
+
     resp.addEventListener('ended', () => { stopVideo(); setIdleUI(); });
     resp.addEventListener('error', () => { stopVideo(); setIdleUI(); hideOverlay(); });
 
     /* ---------- ASR + backend routing + ElevenLabs TTS ---------- */
     const supportsASR = ('SpeechRecognition' in window) || ('webkitSpeechRecognition' in window);
     let recognizer = null, recognizing = false, finalTranscript = '';
+    let asrFinalSent = false; // fire immediately on first final chunk
 
     if (!supportsASR) { micBtn.disabled = true; srStatus.textContent = 'Speech input not available.'; }
 
@@ -491,29 +534,37 @@
       recognizer.continuous = false;
 
       recognizer.onstart = () => {
-        recognizing = true; finalTranscript = '';
+        recognizing = true; finalTranscript = ''; asrFinalSent = false;
         stopAll();
         setListeningUI();
         srStatus.textContent = 'Listening…';
         lockMic();
         haptic();
+        // NOTE: do NOT blow away the selected voice; we keep last prompt's voice for mic
+        forceFallbackVoiceForMic(); // harmless now if a prompt was chosen (no-op when DOP_LAST_PROMPT is set)
       };
       recognizer.onerror = (e) => { srStatus.textContent = 'Mic error: ' + (e.error || 'unknown'); stopASR(); setIdleUI(); hideOverlay(); };
       recognizer.onend = () => {
         recognizing = false;
-        const text = finalTranscript.trim();
-        if (text) {
-          pushTurn('user', text, { inputType:'mic' });
-          srStatus.textContent = 'Processing…';
-          setPill('thinking','Thinking…');
-          // force NON-stream path
-          routeToBackend(text, { forceLLM: true });
-        } else { setIdleUI(); }
+        if (!asrFinalSent) setIdleUI();
       };
       recognizer.onresult = (event) => {
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const res = event.results[i];
-          if (res.isFinal) finalTranscript += res[0].transcript.trim() + ' ';
+          if (res.isFinal) {
+            finalTranscript += res[0].transcript.trim() + ' ';
+            if (!asrFinalSent) {
+              asrFinalSent = true;
+              const text = finalTranscript.trim();
+              if (text) {
+                try { stopASR(); } catch {}
+                pushTurn('user', text, { inputType:'mic' });
+                srStatus.textContent = 'Processing…';
+                setPill('thinking','Thinking…');
+                routeToBackend(text, { forceLLM: true });
+              }
+            }
+          }
         }
       };
     }
@@ -574,7 +625,7 @@
         const speech = data.fallbackResponse || data.reply;
         lastMode = 'tts';
         lastText = speech;
-        // NOTE: we do NOT clear lastFile here; we want to keep last prompt hint alive
+        // keep lastFile as-is; we want the prompt hint to persist
 
         pushTurn('assistant', speech, { audio:true });
         await speakWithElevenLabs(speech);
@@ -584,7 +635,7 @@
       }
     }
 
-    // TTS — sends clip hint so server picks the right voice
+    // TTS — pass voice AND clip hint so server picks the right voice deterministically
     async function speakWithElevenLabs(text){
       try{
         stopVideo();
@@ -595,8 +646,7 @@
         if (lastFile && typeof lastFile === 'string') {
           clipHint = lastFile.replace(/^assets\//,'').replace(/\.mp4$/i,'');
         }
-
-        // ADD-ONLY: if no lastFile (mic-only), use the remembered prompt key
+        // ADD-ONLY: if mic-only (no lastFile), reuse last prompt key
         if (!clipHint && window.DOP_LAST_PROMPT) {
           clipHint = window.DOP_LAST_PROMPT; // e.g., "p_fun"
         }
@@ -604,14 +654,19 @@
         const res = await fetch('/.netlify/functions/tts-eleven', {
           method:'POST',
           headers:{ 'Content-Type':'application/json' },
-          body: JSON.stringify({ text, clip: clipHint })
+          body: JSON.stringify({
+            text,
+            clip: clipHint,
+            voiceId: getVoiceIdForNextTTS() // persistent selection
+          })
         });
         if (!res.ok) throw new Error('TTS failed');
 
         const buf = await res.arrayBuffer();
         const blob = new Blob([buf], { type: 'audio/mpeg' });
-        currentAudioURL = URL.createObjectURL(blob);
-        currentAudio = new Audio(currentAudioURL);
+        const url = URL.createObjectURL(blob);
+        currentAudioURL = url;
+        currentAudio = new Audio(url);
 
         setPill('speaking','Speaking…');
         await currentAudio.play().catch(()=>{});
@@ -644,6 +699,11 @@
     // Boot
     primeFirstFrame(currentFile);
     setTimeout(() => preloadSources(currentFile), 300);
+
+    // Pre-warm TTS function to cut first-utterance latency
+    window.addEventListener('load', () => {
+      fetch('/.netlify/functions/tts-eleven', { method:'OPTIONS' }).catch(()=>{});
+    });
 
     // Debug tips in console:
     // conversationHistory, getBoundedContext(), DTA_reset()
