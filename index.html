@@ -245,9 +245,7 @@
         _nextVoiceIdForTTS = VOICE_MAP[key] || FALLBACK_VOICE;
       } catch { _nextVoiceIdForTTS = FALLBACK_VOICE; }
     }
-    function forceFallbackVoiceForMic() {
-      _nextVoiceIdForTTS = FALLBACK_VOICE;
-    }
+    function forceFallbackVoiceForMic() { _nextVoiceIdForTTS = FALLBACK_VOICE; }
     function getVoiceIdForNextTTS() {
       const v = _nextVoiceIdForTTS || FALLBACK_VOICE;
       _nextVoiceIdForTTS = FALLBACK_VOICE; // reset after use
@@ -493,7 +491,6 @@
     });
 
     // Set voice by prompt BEFORE playing the clip
-    const grid = document.getElementById('promptGrid');
     grid.addEventListener('click', (e) => {
       const btn = e.target.closest('.btn'); if (!btn) return;
       const file = btn.dataset.file;
@@ -507,6 +504,7 @@
     /* ---------- ASR + backend routing + ElevenLabs TTS ---------- */
     const supportsASR = ('SpeechRecognition' in window) || ('webkitSpeechRecognition' in window);
     let recognizer = null, recognizing = false, finalTranscript = '';
+    let asrFinalSent = false; // NEW: fire immediately on first final chunk
 
     if (!supportsASR) { micBtn.disabled = true; srStatus.textContent = 'Speech input not available.'; }
 
@@ -518,7 +516,7 @@
       recognizer.continuous = false;
 
       recognizer.onstart = () => {
-        recognizing = true; finalTranscript = '';
+        recognizing = true; finalTranscript = ''; asrFinalSent = false;
         stopAll();
         setListeningUI();
         srStatus.textContent = 'Listening…';
@@ -530,19 +528,27 @@
       recognizer.onerror = (e) => { srStatus.textContent = 'Mic error: ' + (e.error || 'unknown'); stopASR(); setIdleUI(); hideOverlay(); };
       recognizer.onend = () => {
         recognizing = false;
-        const text = finalTranscript.trim();
-        if (text) {
-          pushTurn('user', text, { inputType:'mic' });
-          srStatus.textContent = 'Processing…';
-          setPill('thinking','Thinking…');
-          // force NON-stream path
-          routeToBackend(text, { forceLLM: true });
-        } else { setIdleUI(); }
+        // If we already sent the first final chunk, do nothing. Otherwise just reset UI.
+        if (!asrFinalSent) setIdleUI();
       };
       recognizer.onresult = (event) => {
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const res = event.results[i];
-          if (res.isFinal) finalTranscript += res[0].transcript.trim() + ' ';
+          if (res.isFinal) {
+            finalTranscript += res[0].transcript.trim() + ' ';
+            if (!asrFinalSent) {
+              asrFinalSent = true;
+              const text = finalTranscript.trim();
+              if (text) {
+                // Immediately proceed — don't wait for onend
+                try { stopASR(); } catch {}
+                pushTurn('user', text, { inputType:'mic' });
+                srStatus.textContent = 'Processing…';
+                setPill('thinking','Thinking…');
+                routeToBackend(text, { forceLLM: true });
+              }
+            }
+          }
         }
       };
     }
@@ -672,6 +678,11 @@
     // Boot
     primeFirstFrame(currentFile);
     setTimeout(() => preloadSources(currentFile), 300);
+
+    // NEW: pre-warm TTS function to cut first-utterance latency
+    window.addEventListener('load', () => {
+      fetch('/.netlify/functions/tts-eleven', { method:'OPTIONS' }).catch(()=>{});
+    });
 
     // Debug tips in console:
     // conversationHistory, getBoundedContext(), DTA_reset()
