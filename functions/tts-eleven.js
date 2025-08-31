@@ -1,12 +1,11 @@
 // functions/tts-eleven.js
 // CJS • Netlify Functions (Node 18+)
-// POST  { text:string, voiceId?:string, intent?:'fun'|'from'|'relax', clip?:string }
-//        -> audio/mpeg (base64 body)
+// POST  { text:string, clip?:string, voiceId?:string } -> audio/mpeg (base64)
 // GET/OPTIONS -> 204 (pre-warm/health)
 
 const ELEVEN_API = 'https://api.elevenlabs.io/v1/text-to-speech';
 
-// Deterministic voice map (Phase 2 #15)
+// Deterministic voice map
 const VOICES = {
   fun:   'WEyBkfNR4P8pL1cFo2jV',
   from:  'DqdcNywG9XLHBlbqaZYM',
@@ -23,35 +22,23 @@ function cors(extra = {}) {
   };
 }
 
-// Heuristic intent chooser so front-end changes are NOT required
-function inferIntent({ intent, clip, text }) {
-  if (intent && (intent in VOICES)) return intent;
-
-  // clip like "p_fun" / "assets/p_relax.mp4"
-  if (clip) {
-    const m = String(clip).toLowerCase().match(/(?:^|[_/])(fun|from|relax)(?:\.|$)/);
-    if (m) return m[1];
-  }
-
-  const t = String(text || '').toLowerCase();
-  if (!t) return null;
-
-  // Order matters; "from" is common, so use tight phrases
-  if (/\bwhere\s+(are|r)\s+you\s+from\b/.test(t)) return 'from';
-  if (/\brelax(ing)?\b|\bfavorite way to relax\b/.test(t)) return 'relax';
-  if (/\bfor\s+fun\b|\bwhat.*do.*for.*fun\b|\bfun\b/.test(t)) return 'fun';
-
-  return null;
+// Infer intent strictly from the clip hint (NO text guessing)
+function intentFromClip(clip) {
+  if (!clip) return null;
+  const s = String(clip).toLowerCase();
+  // accepts: "assets/p_fun.mp4", "p_fun", "fun"
+  let m = s.match(/(?:^|[/_])p?_(fun|from|relax)(?:\.|$)/);
+  if (!m) m = s.match(/(?:^|[/_])(fun|from|relax)(?:\.|$)/);
+  return m ? m[1] : null;
 }
 
 function pickVoiceId(payload) {
-  if (payload.voiceId) return String(payload.voiceId);
-  const guessed = inferIntent(payload);
-  if (guessed) return VOICES[guessed];
-  return VOICES.fallback;
+  if (payload.voiceId) return String(payload.voiceId); // explicit wins
+  const guessed = intentFromClip(payload.clip);
+  return guessed ? VOICES[guessed] : VOICES.fallback;
 }
 
-function clampText(s, max = 280) {
+function clampText(s, max = 220) {
   const str = String(s || '').trim();
   if (str.length <= max) return str;
   const cut = str.slice(0, max);
@@ -61,7 +48,7 @@ function clampText(s, max = 280) {
 
 module.exports.handler = async (event) => {
   try {
-    // Pre-warm / health check (keeps first request snappy)
+    // Pre-warm / health
     if (event.httpMethod === 'OPTIONS' || event.httpMethod === 'GET') {
       return { statusCode: 204, headers: cors({ 'Cache-Control': 'no-store' }), body: '' };
     }
@@ -72,7 +59,7 @@ module.exports.handler = async (event) => {
 
     const apiKey = process.env.ELEVENLABS_API_KEY;
     if (!apiKey) {
-      console.error('[tts-eleven] ELEVENLABS_API_KEY is missing.');
+      console.error('[tts-eleven] ELEVENLABS_API_KEY is not set.');
       return {
         statusCode: 401,
         headers: cors({ 'Content-Type': 'application/json' }),
@@ -94,14 +81,14 @@ module.exports.handler = async (event) => {
 
     const voiceId = pickVoiceId(payload);
 
-    // Faster ElevenLabs model (Phase 2 #21 perf)
+    // Faster model for lower latency
     const body = {
       text,
       model_id: 'eleven_turbo_v2',
       voice_settings: { stability: 0.4, similarity_boost: 0.8 }
     };
 
-    // Hard timeout so we never hang
+    // Hard timeout to avoid hangs
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 7000);
 
