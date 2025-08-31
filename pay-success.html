@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Dopple Talent — Upload your DOP assets</title>
+  <style>
+    :root { --accent:#111; --muted:#666; --bg:#fff; }
+    body { margin:0; font-family:system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background:var(--bg); color:#111; }
+    .wrap { max-width:760px; margin:40px auto; padding:0 16px; }
+    h1 { margin:0 0 8px; font-size:28px; }
+    p { color:var(--muted); margin:6px 0 18px; }
+    form { border:1px solid #eee; border-radius:12px; padding:20px; box-shadow:0 6px 24px rgba(0,0,0,.04); }
+    .row { display:flex; gap:16px; flex-wrap:wrap; }
+    .card { flex:1 1 320px; border:1px dashed #ddd; padding:16px; border-radius:12px; background:#fafafa; }
+    label { font-weight:600; display:block; margin:0 0 8px; }
+    input[type=file] { width:100%; }
+    .btn { appearance:none; background:#111; color:#fff; border:0; padding:12px 16px; border-radius:10px; font-weight:700; cursor:pointer; }
+    .btn[disabled] { opacity:.6; cursor:not-allowed; }
+    .hint { font-size:12px; color:#888; }
+    .result { margin-top:18px; padding:14px; border:1px solid #eee; border-radius:10px; background:#f6fff7; display:none; }
+    .err { margin-top:18px; padding:14px; border:1px solid #fee; border-radius:10px; background:#fff6f6; color:#b00020; display:none; white-space:pre-wrap; }
+    .progress { margin-top:10px; font-size:13px; color:#444; }
+    .links a { color:#111; text-decoration:underline; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Payment received ✅</h1>
+    <p>Upload a <strong>photo</strong> and a short <strong>voice sample</strong> to create your DOP.</p>
+
+    <form id="uploadForm">
+      <div class="row">
+        <div class="card">
+          <label for="photo">Photo (JPG/PNG, ≤ 6 MB)</label>
+          <input id="photo" name="photo" type="file" accept="image/jpeg,image/png" required />
+          <div class="hint">Clear face, single person is best.</div>
+        </div>
+        <div class="card">
+          <label for="voice">Voice sample (WEBM/WAV/MP3/M4A, ≤ 8 MB)</label>
+          <input id="voice" name="voice" type="file" accept="audio/webm,audio/wav,audio/mpeg,audio/mp4,audio/x-m4a" required />
+          <div class="hint">10–30 seconds is plenty.</div>
+        </div>
+      </div>
+
+      <div class="progress" id="progress" aria-live="polite"></div>
+      <div style="margin-top:16px; display:flex; gap:10px; align-items:center;">
+        <button class="btn" id="submitBtn" type="submit">Save & create my DOP</button>
+        <span class="hint">We’ll generate a <code>dopId</code> and store your files securely.</span>
+      </div>
+
+      <div class="result" id="result"></div>
+      <div class="err" id="err"></div>
+    </form>
+
+    <div class="links" style="margin-top:24px;">
+      <a href="/">← Back to home</a>
+    </div>
+  </div>
+
+  <script>
+    const byId = (id) => document.getElementById(id);
+
+    // Convert File to base64 (strip data URL prefix).
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => {
+          const res = r.result; // data:<mime>;base64,<...>
+          const comma = res.indexOf(',');
+          resolve({ base64: res.slice(comma + 1), type: file.type, name: file.name });
+        };
+        r.onerror = reject;
+        r.readAsDataURL(file);
+      });
+    }
+
+    function setProgress(msg) { byId('progress').textContent = msg; }
+    function showError(msg) { const el = byId('err'); el.style.display='block'; el.textContent = msg; }
+    function showResult(html) { const el = byId('result'); el.style.display='block'; el.innerHTML = html; }
+
+    async function handleUpload(e) {
+      e.preventDefault();
+      byId('err').style.display = 'none';
+      byId('result').style.display = 'none';
+
+      const photo = byId('photo').files[0];
+      const voice = byId('voice').files[0];
+      if (!photo || !voice) return showError("Please pick both a photo and a voice file.");
+
+      // Basic size limits to avoid giant payloads
+      if (photo.size > 6 * 1024 * 1024) return showError("Photo is larger than 6 MB.");
+      if (voice.size > 8 * 1024 * 1024) return showError("Voice file is larger than 8 MB.");
+
+      byId('submitBtn').disabled = true;
+      setProgress("Preparing files…");
+
+      try {
+        const [img, aud] = await Promise.all([fileToBase64(photo), fileToBase64(voice)]);
+        setProgress("Uploading…");
+
+        const res = await fetch("/.netlify/functions/dop-upload", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            imageBase64: img.base64,
+            imageType: img.type || "image/jpeg",
+            imageName: img.name || "photo.jpg",
+            audioBase64: aud.base64,
+            audioType: aud.type || "audio/webm",
+            audioName: aud.name || "voice.webm"
+          }),
+        });
+
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`Upload failed: ${res.status} ${text}`);
+        }
+        const data = await res.json();
+        setProgress("");
+        showResult(
+          `✅ Saved! <br/>Your <strong>dopId</strong>: <code>${data.dopId}</code><br/>
+           Next: you can open <code>/dop/${data.dopId}</code> once it’s live (Step #27).`
+        );
+      } catch (err) {
+        showError(err.message || String(err));
+      } finally {
+        byId('submitBtn').disabled = false;
+      }
+    }
+
+    byId('uploadForm').addEventListener('submit', handleUpload);
+  </script>
+</body>
+</html>
