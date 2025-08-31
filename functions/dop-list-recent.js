@@ -1,5 +1,6 @@
 // functions/dop-list-recent.js
-// Lists recent dop uploads from the 'dop-uploads' blob store (grouped by dopId).
+// Lists recent DOP uploads from the "dop-uploads" blob store.
+// Secure with ?key=... that must match process.env.ADMIN_KEY
 
 const { getStore } = require('@netlify/blobs');
 
@@ -7,71 +8,85 @@ const CORS = {
   'access-control-allow-origin': '*',
   'access-control-allow-methods': 'GET, OPTIONS',
   'access-control-allow-headers': 'content-type',
+  'content-type': 'application/json',
 };
 
 exports.handler = async (event) => {
+  // CORS preflight
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: CORS };
   }
   if (event.httpMethod !== 'GET') {
-    return { statusCode: 405, headers: CORS, body: 'Method Not Allowed' };
-  }
-
-  // Gate with ADMIN_KEY
-  const url = new URL(event.rawUrl || `https://${event.headers.host}${event.path}`);
-  const key = url.searchParams.get('key');
-  if (!process.env.ADMIN_KEY) {
-    return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: 'ADMIN_KEY not set' }) };
-  }
-  if (key !== process.env.ADMIN_KEY) {
-    return { statusCode: 401, headers: CORS, body: JSON.stringify({ error: 'Unauthorized' }) };
+    return { statusCode: 405, headers: CORS, body: JSON.stringify({ error: 'Method Not Allowed' }) };
   }
 
   try {
-    // Same siteId/token you used for uploads; env first, then fallbacks
-    const siteId = process.env.BLOBS_SITE_ID || 'e70ba1fd-64fe-41a4-bba5-dbc18fe30fc8';
-    const token  = process.env.BLOBS_TOKEN   || 'nfp_BdZF6oCWf9H2scBdEpfjgimeR11FRnXf0e24';
+    // --- auth ---
+    const key = (event.queryStringParameters && event.queryStringParameters.key) || '';
+    if (!process.env.ADMIN_KEY || key !== process.env.ADMIN_KEY) {
+      return { statusCode: 401, headers: CORS, body: JSON.stringify({ error: 'Unauthorized' }) };
+    }
+
+    // --- Blobs store (explicit siteId + token just like dop-uploads) ---
+    const siteId =
+      process.env.NETLIFY_SITE_ID ||
+      process.env.BLOBS_SITE_ID ||
+      process.env.NETLIFY_SITE_ID_FALLBACK; // optional extra
+    const token =
+      process.env.NETLIFY_BLOBS_TOKEN ||
+      process.env.BLOBS_TOKEN;
+
+    if (!siteId || !token) {
+      return {
+        statusCode: 500,
+        headers: CORS,
+        body: JSON.stringify({
+          error:
+            'Missing siteId/token. Set NETLIFY_SITE_ID (or BLOBS_SITE_ID) and NETLIFY_BLOBS_TOKEN (or BLOBS_TOKEN).',
+        }),
+      };
+    }
 
     const store = getStore({ name: 'dop-uploads', siteId, token });
 
-    // fetch all blobs (paged)
-    const all = [];
+    // --- page through the blobs ---
+    const blobs = [];
     let cursor;
     do {
-      const { blobs = [], cursor: next } = await store.list({ cursor, limit: 1000 });
-      all.push(...blobs);
-      cursor = next;
+      const page = await store.list({ cursor });
+      (page.blobs || []).forEach((b) => blobs.push(b));
+      cursor = page.cursor;
     } while (cursor);
 
-    // group by dopId extracted from key: images/{dopId}/... or voices/{dopId}/...
-    const map = new Map();
-    for (const b of all) {
-      const m = /^(images|voices)\/([^/]+)\//.exec(b.key);
+    // Group by dopId (keys look like: images/<dopId>/..., voices/<dopId>/...)
+    const byId = new Map();
+    for (const b of blobs) {
+      const m = /^(?:images|voices)\/([^/]+)\//.exec(b.key || '');
       if (!m) continue;
-      const dopId = m[2];
-      if (!map.has(dopId)) map.set(dopId, []);
-      map.get(dopId).push(b);
+      const dopId = m[1];
+      const rec = byId.get(dopId) || { dopId, files: [], totalBytes: 0, updatedAt: 0 };
+      rec.files.push({ key: b.key, size: b.size || 0, updatedAt: b.updatedAt || null });
+      rec.totalBytes += b.size || 0;
+
+      const ts = b.updatedAt ? Date.parse(b.updatedAt) : 0;
+      if (ts > rec.updatedAt) rec.updatedAt = ts;
+
+      byId.set(dopId, rec);
     }
 
-    const rows = [...map.entries()].map(([dopId, files]) => {
-      const bytesTotal = files.reduce((s, f) => s + (f.size || 0), 0);
-      const updatedAt = new Date(
-        Math.max(
-          ...files.map(f => Date.parse(f.lastModified || f.updatedAt || 0) || 0)
-        )
-      ).toISOString();
-      return { dopId, bytesTotal, files, updatedAt };
-    }).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+    const latest = Array.from(byId.values())
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+      .slice(0, 100);
 
     return {
       statusCode: 200,
-      headers: { ...CORS, 'content-type': 'application/json' },
-      body: JSON.stringify({ ok: true, count: rows.length, items: rows }),
+      headers: CORS,
+      body: JSON.stringify({ ok: true, count: latest.length, latest }),
     };
   } catch (err) {
     return {
       statusCode: 500,
-      headers: { ...CORS, 'content-type': 'application/json' },
+      headers: CORS,
       body: JSON.stringify({ error: err.message || String(err) }),
     };
   }
