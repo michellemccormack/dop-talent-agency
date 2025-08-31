@@ -144,7 +144,7 @@
       width:38px; height:38px; border-radius:999px;
       border:3px solid rgba(255,255,255,.35);
       border-top-color:#fff; animation:spin 900ms linear infinite;
-      box-shadow:0 0 18px rgba(255,255,255,.25);
+      box-shadow:0 0 18px rgba(0,0,0,.25);
     }
     @keyframes spin{to{transform:rotate(360deg)}}
 
@@ -312,7 +312,7 @@
 
     /* ---------- Elements & state (baseline) ---------- */
     const resp = document.getElementById('resp');
-    const grid = document.getElementById('promptGrid');
+    const grid = document.getElementById('promptGrid'); // <-- single declaration (fixed)
     const promptButtons = Array.from(grid.querySelectorAll('.btn'));
     const micBtn  = document.getElementById('micBtn');
     const srStatus = document.getElementById('asrStatus');
@@ -504,7 +504,7 @@
     /* ---------- ASR + backend routing + ElevenLabs TTS ---------- */
     const supportsASR = ('SpeechRecognition' in window) || ('webkitSpeechRecognition' in window);
     let recognizer = null, recognizing = false, finalTranscript = '';
-    let asrFinalSent = false; // NEW: fire immediately on first final chunk
+    let asrFinalSent = false; // fire immediately on first final chunk
 
     if (!supportsASR) { micBtn.disabled = true; srStatus.textContent = 'Speech input not available.'; }
 
@@ -528,7 +528,6 @@
       recognizer.onerror = (e) => { srStatus.textContent = 'Mic error: ' + (e.error || 'unknown'); stopASR(); setIdleUI(); hideOverlay(); };
       recognizer.onend = () => {
         recognizing = false;
-        // If we already sent the first final chunk, do nothing. Otherwise just reset UI.
         if (!asrFinalSent) setIdleUI();
       };
       recognizer.onresult = (event) => {
@@ -540,7 +539,6 @@
               asrFinalSent = true;
               const text = finalTranscript.trim();
               if (text) {
-                // Immediately proceed — don't wait for onend
                 try { stopASR(); } catch {}
                 pushTurn('user', text, { inputType:'mic' });
                 srStatus.textContent = 'Processing…';
@@ -619,13 +617,12 @@
       }
     }
 
-    // TTS — now passes selected voiceId
+    // TTS — passes selected voiceId
     async function speakWithElevenLabs(text){
       try{
         stopVideo();
         showOverlay();
 
-        // clip hint from lastFile (e.g., "assets/p_fun.mp4" -> "p_fun")
         let clipHint = null;
         if (lastFile && typeof lastFile === 'string') {
           clipHint = lastFile.replace(/^assets\//,'').replace(/\.mp4$/i,'');
@@ -644,8 +641,9 @@
 
         const buf = await res.arrayBuffer();
         const blob = new Blob([buf], { type: 'audio/mpeg' });
-        currentAudioURL = URL.createObjectURL(blob);
-        currentAudio = new Audio(currentAudioURL);
+        const url = URL.createObjectURL(blob);
+        currentAudioURL = url;
+        currentAudio = new Audio(url);
 
         setPill('speaking','Speaking…');
         await currentAudio.play().catch(()=>{});
@@ -679,7 +677,7 @@
     primeFirstFrame(currentFile);
     setTimeout(() => preloadSources(currentFile), 300);
 
-    // NEW: pre-warm TTS function to cut first-utterance latency
+    // Pre-warm TTS function to cut first-utterance latency
     window.addEventListener('load', () => {
       fetch('/.netlify/functions/tts-eleven', { method:'OPTIONS' }).catch(()=>{});
     });
