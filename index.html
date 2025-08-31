@@ -498,7 +498,7 @@
           pushTurn('user', text, { inputType:'mic' });
           srStatus.textContent = 'Processing…';
           setPill('thinking','Thinking…');
-          // force non-stream JSON path
+          // force NON-stream path
           routeToBackend(text, { forceLLM: true });
         } else { setIdleUI(); }
       };
@@ -536,7 +536,7 @@
       return await safeJSON(res);
     }
 
-    // non-stream route only
+    // NON-STREAM route only
     async function routeToBackend(text, opts = {}){
       const payload = { text, message: text, sessionId, context: getBoundedContext(), ...opts };
       try{
@@ -576,16 +576,22 @@
       }
     }
 
-    // TTS
+    // TTS — sends clip hint so server picks the right voice
     async function speakWithElevenLabs(text){
       try{
         stopVideo();
         showOverlay();
 
+        // clip hint from lastFile (e.g., "assets/p_fun.mp4" -> "p_fun")
+        let clipHint = null;
+        if (lastFile && typeof lastFile === 'string') {
+          clipHint = lastFile.replace(/^assets\//,'').replace(/\.mp4$/i,'');
+        }
+
         const res = await fetch('/.netlify/functions/tts-eleven', {
           method:'POST',
           headers:{ 'Content-Type':'application/json' },
-          body: JSON.stringify({ text })
+          body: JSON.stringify({ text, clip: clipHint })
         });
         if (!res.ok) throw new Error('TTS failed');
 

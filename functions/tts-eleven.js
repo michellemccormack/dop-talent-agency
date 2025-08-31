@@ -1,77 +1,79 @@
 // functions/tts-eleven.js
-// Phase 1/2 compatibility — ElevenLabs TTS (CommonJS, CORS-safe)
-// Uses a fixed voice ID (from env ELEVENLABS_VOICE_ID) so the voice never flips.
+// Non-streaming TTS endpoint for ElevenLabs (returns audio/mpeg)
+// Uses per-prompt voices when a clip hint is provided; otherwise uses a default.
 
-const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
-const DEFAULT_VOICE_ID =
-  process.env.ELEVENLABS_VOICE_ID || "EXAVITQu4vr4xnSDxMaL"; // <-- set your real voice ID in Netlify env
+const ELEVEN_API_KEY = process.env.ELEVENLABS_API_KEY;
 
+// === YOUR VOICE MAP (from your message) ===
+// p_fun     → WEyBkfNR4P8pL1cFo2jV
+// p_from    → DqdcNywG9XLHBlbqaZYM
+// p_relax   → IcsVrJwpE5wPKqWalifC
+// default   → kDIJK53VQMjfQj3fCrML
+const VOICES = {
+  default: "kDIJK53VQMjfQj3fCrML",
+  p_fun:   "WEyBkfNR4P8pL1cFo2jV",
+  p_from:  "DqdcNywG9XLHBlbqaZYM",
+  p_relax: "IcsVrJwpE5wPKqWalifC",
+};
+
+// Basic CORS for the browser
 function corsHeaders(origin) {
   return {
     "Access-Control-Allow-Origin": origin || "*",
-    "Access-Control-Allow-Methods": "POST,OPTIONS",
     "Access-Control-Allow-Headers": "content-type, authorization",
-    // ensure the browser treats this as a binary stream
-    "Cache-Control": "no-cache",
-  };
-}
-
-function bad(statusCode, msg, origin, extra = {}) {
-  return {
-    statusCode,
-    headers: {
-      ...corsHeaders(origin),
-      "Content-Type": "application/json; charset=utf-8",
-    },
-    body: JSON.stringify({ ok: false, error: msg, ...extra }),
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
   };
 }
 
 exports.handler = async (event) => {
-  const origin = event.headers?.origin || "*";
-
-  // Preflight
-  if ((event.httpMethod || "").toUpperCase() === "OPTIONS") {
-    return { statusCode: 204, headers: corsHeaders(origin), body: "" };
+  const method = (event.httpMethod || "").toUpperCase();
+  if (method === "OPTIONS") {
+    return { statusCode: 204, headers: corsHeaders(event.headers?.origin), body: "" };
+  }
+  if (method !== "POST") {
+    return {
+      statusCode: 405,
+      headers: corsHeaders(event.headers?.origin),
+      body: JSON.stringify({ error: "Method Not Allowed" }),
+    };
   }
 
-  if ((event.httpMethod || "").toUpperCase() !== "POST") {
-    return bad(405, "Method Not Allowed", origin);
+  if (!ELEVEN_API_KEY) {
+    return {
+      statusCode: 500,
+      headers: corsHeaders(event.headers?.origin),
+      body: JSON.stringify({ error: "Missing ELEVENLABS_API_KEY" }),
+    };
   }
 
-  if (!ELEVENLABS_API_KEY) {
-    return bad(500, "ELEVENLABS_API_KEY is not set", origin);
-  }
-
-  let body;
+  let text = "";
+  let clip = "";
   try {
-    body = JSON.parse(event.body || "{}");
+    const body = JSON.parse(event.body || "{}");
+    text = (body.text || "").toString();
+    clip = (body.clip || "").toString(); // optional hint like "p_fun", "p_from", "p_relax"
   } catch {
-    return bad(400, "Invalid JSON body", origin);
+    // ignore
   }
 
-  const text = (body.text || "").toString().trim();
-  const voiceId = (body.voiceId || DEFAULT_VOICE_ID).trim();
+  if (!text) {
+    return {
+      statusCode: 400,
+      headers: corsHeaders(event.headers?.origin),
+      body: JSON.stringify({ error: "text is required" }),
+    };
+  }
 
-  if (!text) return bad(400, "Text is required", origin);
-  if (!voiceId) return bad(500, "Voice ID missing (set ELEVENLABS_VOICE_ID)", origin);
+  // figure voiceId from clip hint
+  const clipKey = clip.replace(/^assets\//, "").replace(/\.mp4$/i, ""); // assets/p_fun.mp4 -> p_fun
+  const voiceId = VOICES[clipKey] || VOICES.default;
 
-  // ElevenLabs streaming TTS endpoint
-  const url = `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(
-    voiceId
-  )}/stream`;
-
-  // Sensible defaults to keep voice consistent
+  // Build ElevenLabs request
+  const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
   const payload = {
     text,
-    model_id: "eleven_monolingual_v1", // stable English model (adjust if you use a different one)
-    optimize_streaming_latency: 0,     // 0 = max quality; 4 = lowest latency
-    voice_settings: {
-      stability: 0.55,
-      similarity_boost: 0.75,
-      style: 0.0,
-      use_speaker_boost: true,
-    },
+    model_id: "eleven_multilingual_v2", // safe default; change if you use another
+    voice_settings: { stability: 0.5, similarity_boost: 0.75 },
   };
 
   let resp;
@@ -79,31 +81,39 @@ exports.handler = async (event) => {
     resp = await fetch(url, {
       method: "POST",
       headers: {
-        "xi-api-key": ELEVENLABS_API_KEY,
+        "xi-api-key": ELEVEN_API_KEY,
         "Content-Type": "application/json",
-        Accept: "audio/mpeg",
+        "Accept": "audio/mpeg",
       },
       body: JSON.stringify(payload),
     });
-  } catch (err) {
-    return bad(502, "Failed to reach ElevenLabs", origin, { detail: String(err) });
+  } catch (e) {
+    return {
+      statusCode: 502,
+      headers: corsHeaders(event.headers?.origin),
+      body: JSON.stringify({ error: "elevenlabs fetch failed", detail: String(e) }),
+    };
   }
 
   if (!resp.ok) {
     const errText = await resp.text().catch(() => "");
-    return bad(502, "ElevenLabs error", origin, { status: resp.status, body: errText.slice(0, 500) });
+    return {
+      statusCode: 502,
+      headers: corsHeaders(event.headers?.origin),
+      body: JSON.stringify({ error: "elevenlabs error", status: resp.status, body: errText.slice(0, 400) }),
+    };
   }
 
-  const arrayBuf = await resp.arrayBuffer();
+  const audio = Buffer.from(await resp.arrayBuffer());
 
   return {
     statusCode: 200,
     headers: {
-      ...corsHeaders(origin),
+      ...corsHeaders(event.headers?.origin),
       "Content-Type": "audio/mpeg",
-      "Content-Length": String(arrayBuf.byteLength),
+      "Cache-Control": "no-store",
     },
-    body: Buffer.from(arrayBuf).toString("base64"),
+    body: audio.toString("base64"),
     isBase64Encoded: true,
   };
 };
