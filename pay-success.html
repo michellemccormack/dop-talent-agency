@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Dopple Talent — Upload</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 24px; }
+    .wrap { max-width: 720px; margin: 0 auto; }
+    h1 { margin: 0 0 8px; }
+    p { color:#444; }
+    fieldset { border:1px solid #ddd; border-radius:12px; padding:16px; margin:20px 0; }
+    label { display:block; font-weight:600; margin-bottom:6px; }
+    input[type=file]{ width:100%; padding:10px; border:1px dashed #bbb; border-radius:12px; background:#fafafa; }
+    button { padding:12px 18px; border-radius:12px; border:0; background:#111; color:#fff; font-weight:700; cursor:pointer; }
+    button[disabled]{ opacity:.6; cursor:not-allowed; }
+    .note{font-size:13px; color:#666;}
+    .msg-ok{ background:#e8f8ed; border:1px solid #bfe7cc; padding:12px; border-radius:12px; }
+    .msg-err{ background:#fdecec; border:1px solid #f3c1c1; padding:12px; border-radius:12px; }
+    .row{ display:grid; gap:14px; grid-template-columns:1fr 1fr; }
+    @media (max-width:640px){ .row{ grid-template-columns:1fr; } }
+    .footer{ margin-top:16px; font-size:13px; color:#666; }
+    code{ background:#f4f4f4; padding:2px 6px; border-radius:6px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Upload to create your DOP</h1>
+    <p class="note">Thanks for paying 🎉. Add one photo and a short voice sample (10–30s). We’ll save them under a new <em>dopId</em>.</p>
+
+    <form id="dopForm">
+      <fieldset>
+        <div class="row">
+          <div>
+            <label for="photo">Photo (JPG/PNG)</label>
+            <input id="photo" type="file" accept="image/*" required />
+            <div class="note">Max ~8MB.</div>
+          </div>
+          <div>
+            <label for="voice">Voice (WAV/MP3/M4A/WEBM)</label>
+            <input id="voice" type="file" accept="audio/*" required />
+            <div class="note">Max ~8MB. 10–30 seconds is perfect.</div>
+          </div>
+        </div>
+      </fieldset>
+
+      <button id="submitBtn" type="submit">Save &amp; create my DOP</button>
+    </form>
+
+    <div id="out" style="margin-top:16px;"></div>
+
+    <div class="footer">
+      Having trouble? Refresh and try smaller files. This page is temporary; final viewer will be at <code>/dop/:dopId</code>.
+    </div>
+  </div>
+
+  <script>
+    const MAX_BYTES = 8 * 1024 * 1024; // ~8MB
+
+    function readAsBase64(file) {
+      return new Promise((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onerror = () => reject(new Error("Read failed"));
+        fr.onload = () => {
+          const s = String(fr.result || "");
+          const i = s.indexOf("base64,");
+          resolve(i >= 0 ? s.slice(i + 7) : s);
+        };
+        fr.readAsDataURL(file);
+      });
+    }
+
+    function el(id){ return document.getElementById(id); }
+
+    document.getElementById("dopForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const out = el("out");
+      const btn = el("submitBtn");
+      out.innerHTML = "";
+      btn.disabled = true;
+
+      try {
+        const photo = el("photo").files[0];
+        const voice = el("voice").files[0];
+        if(!photo || !voice) throw new Error("Select both a photo and a voice file.");
+
+        if (photo.size > MAX_BYTES) throw new Error("Photo is too large (max ~8MB).");
+        if (voice.size > MAX_BYTES) throw new Error("Voice file is too large (max ~8MB).");
+
+        const [imageBase64, audioBase64] = await Promise.all([
+          readAsBase64(photo),
+          readAsBase64(voice),
+        ]);
+
+        const resp = await fetch("/.netlify/functions/dop-upload", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            imageBase64, imageType: photo.type || "image/jpeg",
+            audioBase64, audioType: voice.type || "audio/wav",
+          }),
+        });
+
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.error || "Upload failed.");
+
+        out.innerHTML = `
+          <div class="msg-ok">
+            <strong>Saved!</strong> Your <code>dopId</code> is <code>${data.dopId}</code>.
+            <div style="margin-top:6px" class="note">
+              We’ll publish your viewer at <code>/dop/${data.dopId}</code> in a later step.
+            </div>
+          </div>`;
+      } catch (err) {
+        out.innerHTML = `<div class="msg-err">${err.message || err}</div>`;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
