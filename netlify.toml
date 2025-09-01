@@ -7,3 +7,8 @@
   directory = "functions"
   node_bundler = "esbuild"
   included_files = ["personas/**", "assets/**"]
+# Pretty URL -> function
+[[redirects]]
+  from = "/dop/:id"
+  to = "/.netlify/functions/dop-view?id=:id"
+  status = 200
