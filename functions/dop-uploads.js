@@ -2,7 +2,7 @@
 // Saves an image + voice file (base64 fields OR data: URLs) into Netlify Blobs (CommonJS).
 // Also writes a tiny meta JSON at metas/<dopId>.json for the admin QA page.
 
-const { getStore } = require('@netlify/blobs');
+const { uploadsStore } = require('./_blobs'); // centralizes siteId/token
 
 const CORS_HEADERS = {
   'access-control-allow-origin': '*',
@@ -36,9 +36,8 @@ exports.handler = async (event) => {
       };
     }
 
-    const siteId = process.env.BLOBS_SITE_ID || 'e70ba1fd-64fe-41a4-bba5-dbc18fe30fc8';
-    const token  = process.env.BLOBS_TOKEN   || 'nfp_BdZF6oCWf9H2scBdEpfjgimeR11FRnXf0e24';
-    const store  = getStore({ name: 'dop-uploads', siteId, token });
+    // Store (already configured with siteId + token inside _blobs.js)
+    const store = uploadsStore();
 
     // ID per upload
     const dopId = (globalThis.crypto && globalThis.crypto.randomUUID)
@@ -46,6 +45,7 @@ exports.handler = async (event) => {
       : String(Date.now());
 
     const safe = (s) => String(s || '').trim().replace(/\s+/g, '_').replace(/[^\w.-]/g, '') || 'file';
+    const stripExt = (s) => String(s || '').replace(/\.[^./\\]+$/i, '');
     const extFromMime = (mime) => (mime.split('/')[1] || 'bin').toLowerCase();
 
     const parseDataUrl = (dataUrl) => {
@@ -61,24 +61,24 @@ exports.handler = async (event) => {
     if (hasBase64Pair) {
       imgBuf  = Buffer.from(body.imageBase64, 'base64');
       imgMime = body.imageType || 'image/png';
-      imgName = safe(body.imageName || `photo.${extFromMime(imgMime)}`);
+      imgName = safe(stripExt(body.imageName) || 'photo');
 
       audBuf  = Buffer.from(body.audioBase64, 'base64');
       audMime = body.audioType || 'audio/mpeg';
-      audName = safe(body.audioName || `voice.${extFromMime(audMime)}`);
+      audName = safe(stripExt(body.audioName) || 'voice');
     } else {
       const i = parseDataUrl(body.image);
       const a = parseDataUrl(body.voice);
       imgBuf  = i.buffer;
       imgMime = i.mime;
-      imgName = safe(body.imageName || `photo.${extFromMime(imgMime)}`);
+      imgName = safe(stripExt(body.imageName) || 'photo');
 
       audBuf  = a.buffer;
       audMime = a.mime;
-      audName = safe(body.voiceName || `voice.${extFromMime(audMime)}`);
+      audName = safe(stripExt(body.voiceName) || 'voice');
     }
 
-    // Keys
+    // Keys (ensure single extension)
     const imgKey   = `images/${dopId}/${imgName}.${extFromMime(imgMime)}`;
     const voiceKey = `voices/${dopId}/${audName}.${extFromMime(audMime)}`;
 

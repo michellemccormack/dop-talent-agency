@@ -1,7 +1,7 @@
 // functions/dop-list-recent.js
 // List recent DOP uploads from the 'dop-uploads' store.
 
-const { getStore } = require('@netlify/blobs');
+const { uploadsStore } = require('./_blobs');
 
 const CORS = {
   'access-control-allow-origin': '*',
@@ -10,12 +10,8 @@ const CORS = {
   'content-type': 'application/json',
 };
 
-// Your admin key
+// Admin key (env or fallback for testing)
 const ADMIN_KEY = process.env.ADMIN_API_KEY || 'adm_8d2e3c9b7a4b4f6cbd1b9d8a3c';
-
-// Use YOUR env var names (you showed these in Netlify UI)
-const SITE_ID = process.env.NETLIFY_SITE_ID || 'e70ba1fd-64fe-41a4-bba5-dbc18fe30fc8';
-const BLOBS_TOKEN = process.env.NETLIFY_BLOBS_TOKEN || 'nfp_z9XGX9kR8DqEoCVeamSxErwQKbzgKxFg33f0';
 
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: CORS };
@@ -26,13 +22,7 @@ exports.handler = async (event) => {
   if (key !== ADMIN_KEY) return { statusCode: 401, headers: CORS, body: JSON.stringify({ error: 'Unauthorized' }) };
 
   try {
-    // Pass both siteId and siteID to be bulletproof across lib versions.
-    const store = getStore({
-      name: 'dop-uploads',
-      siteId: SITE_ID,
-      siteID: SITE_ID,
-      token: BLOBS_TOKEN,
-    });
+    const store = uploadsStore();
 
     let cursor;
     const grouped = {}; // dopId -> { dopId, lastModified, files:{image:[], voice:[]} }

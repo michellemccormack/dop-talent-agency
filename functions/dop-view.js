@@ -3,7 +3,7 @@
 //  - /dop/:id  (via redirect in netlify.toml)
 //  - /.netlify/functions/dop-view?id=:id
 
-const { getStore } = require('@netlify/blobs');
+const { uploadsStore } = require('./_blobs');
 
 const H = { 'content-type': 'application/json' };
 
@@ -23,27 +23,8 @@ exports.handler = async (event) => {
       return { statusCode: 400, headers: H, body: JSON.stringify({ error: 'Missing dopId' }) };
     }
 
-    // 2) Netlify Blobs credentials — prefer NETLIFY_* (your actual env names)
-    const siteId =
-      process.env.NETLIFY_SITE_ID ||
-      process.env.BLOBS_SITE_ID;
-    const token =
-      process.env.NETLIFY_BLOBS_TOKEN ||
-      process.env.BLOBS_TOKEN;
-
-    if (!siteId || !token) {
-      return {
-        statusCode: 500,
-        headers: H,
-        body: JSON.stringify({
-          error:
-            'The environment has not been configured to use Netlify Blobs. Please set NETLIFY_SITE_ID and NETLIFY_BLOBS_TOKEN.',
-        }),
-      };
-    }
-
-    // 3) Open the dop-uploads store and list files
-    const store = getStore({ name: 'dop-uploads', siteId, token });
+    // 2) Open the dop-uploads store and list files
+    const store = uploadsStore();
 
     const [imgList, voiceList] = await Promise.all([
       store.list({ prefix: `images/${dopId}/` }),
