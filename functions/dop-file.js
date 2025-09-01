@@ -1,8 +1,5 @@
 // functions/dop-file.js
-// Streams a blob (image or audio) from the dop-uploads store.
-// Fixed to handle Netlify Blobs API internal error with 200 response.
-
-const { uploadsStore } = require('./_lib/blobs');
+// Plan B: Use Netlify Blobs REST API directly to avoid SDK issues
 
 const guessType = (key = '') => {
   const k = key.toLowerCase();
@@ -26,127 +23,58 @@ exports.handler = async (event) => {
       };
     }
 
-    console.log(`[dop-file] Attempting to retrieve key: "${key}"`);
+    const siteId = process.env.NETLIFY_SITE_ID;
+    const token = process.env.NETLIFY_BLOBS_TOKEN;
 
-    const store = uploadsStore();
-
-    // Try to get the blob with explicit error handling for the "200 response" internal error
-    let raw;
-    
-    try {
-      // Method 1: Try without any options first
-      console.log('[dop-file] Trying store.get() with no options...');
-      raw = await store.get(key);
-      console.log('[dop-file] Raw response type:', typeof raw, 'isBuffer:', Buffer.isBuffer(raw));
-      
-      if (raw === null || raw === undefined) {
-        console.log('[dop-file] Key not found (null response)');
-        return {
-          statusCode: 404,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'File not found' })
-        };
-      }
-
-    } catch (error1) {
-      console.log('[dop-file] Method 1 failed:', error1.message);
-      
-      try {
-        // Method 2: Try with arrayBuffer option
-        console.log('[dop-file] Trying store.get() with arrayBuffer...');
-        raw = await store.get(key, { type: 'arrayBuffer' });
-        console.log('[dop-file] ArrayBuffer response, length:', raw?.byteLength);
-        
-        if (raw) {
-          raw = Buffer.from(raw);
-        }
-        
-      } catch (error2) {
-        console.log('[dop-file] Method 2 failed:', error2.message);
-        
-        try {
-          // Method 3: Try with text and assume it's base64
-          console.log('[dop-file] Trying store.get() as text...');
-          raw = await store.get(key, { type: 'text' });
-          console.log('[dop-file] Text response length:', raw?.length);
-          
-          if (raw && typeof raw === 'string') {
-            // Try to decode as base64
-            raw = Buffer.from(raw, 'base64');
-          }
-          
-        } catch (error3) {
-          console.error('[dop-file] All methods failed:', {
-            error1: error1.message,
-            error2: error2.message,
-            error3: error3.message
-          });
-          
-          return {
-            statusCode: 500,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              error: 'Failed to retrieve file from storage',
-              key: key,
-              details: `Tried multiple methods: ${error1.message}` 
-            })
-          };
-        }
-      }
-    }
-
-    // Handle the response based on what we got
-    let buffer;
-    
-    if (Buffer.isBuffer(raw)) {
-      buffer = raw;
-      console.log('[dop-file] Using Buffer directly, size:', buffer.length);
-    } else if (raw instanceof Uint8Array) {
-      buffer = Buffer.from(raw);
-      console.log('[dop-file] Converted Uint8Array to Buffer, size:', buffer.length);
-    } else if (raw instanceof ArrayBuffer) {
-      buffer = Buffer.from(raw);
-      console.log('[dop-file] Converted ArrayBuffer to Buffer, size:', buffer.length);
-    } else if (typeof raw === 'string') {
-      // Assume base64 encoded
-      try {
-        buffer = Buffer.from(raw, 'base64');
-        console.log('[dop-file] Decoded base64 string to Buffer, size:', buffer.length);
-      } catch (b64Error) {
-        console.error('[dop-file] Failed to decode base64:', b64Error.message);
-        return {
-          statusCode: 500,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Failed to decode file data' })
-        };
-      }
-    } else if (raw && typeof raw === 'object' && raw.body) {
-      // Handle { body: Buffer, contentType: string } format
-      buffer = Buffer.isBuffer(raw.body) ? raw.body : Buffer.from(raw.body);
-      console.log('[dop-file] Extracted buffer from response object, size:', buffer.length);
-    } else {
-      console.error('[dop-file] Unexpected data format:', typeof raw, raw);
+    if (!siteId || !token) {
       return {
         statusCode: 500,
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: 'Missing Netlify Blobs credentials' })
+      };
+    }
+
+    console.log(`[dop-file] Fetching key "${key}" via REST API`);
+
+    // Use Netlify Blobs REST API directly
+    const blobUrl = `https://api.netlify.com/api/v1/sites/${siteId}/blobs/dop-uploads/${encodeURIComponent(key)}`;
+    
+    const response = await fetch(blobUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/octet-stream'
+      }
+    });
+
+    if (response.status === 404) {
+      console.log('[dop-file] File not found via REST API');
+      return {
+        statusCode: 404,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: 'File not found' })
+      };
+    }
+
+    if (!response.ok) {
+      console.error('[dop-file] REST API error:', response.status, response.statusText);
+      const errorText = await response.text().catch(() => '');
+      return {
+        statusCode: response.status,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          error: 'Unexpected file data format',
-          dataType: typeof raw
+          error: 'Failed to fetch from Netlify Blobs',
+          status: response.status,
+          details: errorText
         })
       };
     }
 
-    // Validate we have a non-empty buffer
-    if (!buffer || buffer.length === 0) {
-      console.error('[dop-file] Empty or invalid buffer');
-      return {
-        statusCode: 500,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ error: 'File data is empty or invalid' })
-      };
-    }
+    // Get the blob data
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
 
-    console.log(`[dop-file] Successfully retrieved file, size: ${buffer.length} bytes`);
+    console.log(`[dop-file] Successfully fetched ${buffer.length} bytes via REST API`);
 
     // Return as base64-encoded response
     return {
@@ -162,14 +90,13 @@ exports.handler = async (event) => {
     };
 
   } catch (err) {
-    console.error('[dop-file] Unhandled error:', err);
+    console.error('[dop-file] Error:', err);
     return {
       statusCode: 500,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         error: 'Internal server error',
-        message: err.message || String(err),
-        stack: err.stack
+        message: err.message || String(err)
       })
     };
   }
