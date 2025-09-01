@@ -1,7 +1,7 @@
 // functions/dop-list-recent.js
 // List recent DOP uploads from the 'dop-uploads' store.
 
-const { uploadsStore } = require('./_blobs');
+const { uploadsStore } = require('./_lib/blobs');
 
 const CORS = {
   'access-control-allow-origin': '*',

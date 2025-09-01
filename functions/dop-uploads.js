@@ -2,7 +2,7 @@
 // Saves an image + voice file (base64 fields OR data: URLs) into Netlify Blobs (CommonJS).
 // Also writes a tiny meta JSON at metas/<dopId>.json for the admin QA page.
 
-const { uploadsStore } = require('./_blobs'); // centralizes siteId/token
+const { uploadsStore } = require('./_lib/blobs'); // centralizes siteId/token
 
 const CORS_HEADERS = {
   'access-control-allow-origin': '*',

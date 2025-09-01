@@ -3,7 +3,7 @@
 //  - /dop/:id  (via redirect in netlify.toml)
 //  - /.netlify/functions/dop-view?id=:id
 
-const { uploadsStore } = require('./_blobs');
+const { uploadsStore } = require('./_lib/blobs');
 
 const H = { 'content-type': 'application/json' };
 
