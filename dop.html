@@ -3,44 +3,79 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>DOP Viewer</title>
 <style>
-  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:760px;margin:24px auto;padding:0 16px}
+  :root { --muted:#666; --err:#b00020; }
+  body{
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    max-width:760px;margin:24px auto;padding:0 16px
+  }
   .card{border:1px solid #eee;border-radius:12px;padding:16px;box-shadow:0 6px 20px rgba(0,0,0,.05)}
-  img{max-width:100%;border-radius:12px}
+  img{max-width:100%;border-radius:12px;background:#f4f4f4}
   audio{width:100%;margin-top:12px}
-  .err{color:#b00020;margin-top:12px}
+  .err{color:var(--err);margin-top:12px}
+  .muted{color:var(--muted);font-size:14px}
   code{background:#f4f4f4;padding:2px 6px;border-radius:6px}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .chip{font-size:12px;background:#f4f4f4;border-radius:999px;padding:2px 8px}
 </style>
+
 <div class="card">
   <h1>Your DOP</h1>
   <div id="out">Loading…</div>
 </div>
+
 <script>
 (async () => {
-  const params = new URLSearchParams(location.search);
-  let id = params.get('id');
-
-  if (!id) {
-    const m = /\/dop\/([^/?#]+)/i.exec(location.pathname);
-    if (m) id = decodeURIComponent(m[1]);
-  }
   const out = document.getElementById('out');
-  if (!id) { out.innerHTML = '<div class="err">Missing dopId</div>'; return; }
+
+  // Get dopId from ?id= or /dop/:id
+  const qs = new URLSearchParams(location.search);
+  let dopId = qs.get('id');
+  if (!dopId) {
+    const m = /\/dop\/([^/?#]+)/i.exec(location.pathname);
+    if (m) dopId = decodeURIComponent(m[1]);
+  }
+  if (!dopId) { out.innerHTML = '<div class="err">Missing dopId</div>'; return; }
+
+  const cacheBust = () => `&t=${Date.now()}`;
+  const fileURL  = (key) => `/.netlify/functions/dop-file?key=${encodeURIComponent(key)}${cacheBust()}`;
 
   try {
-    const res = await fetch(`/.netlify/functions/dop-view?id=${encodeURIComponent(id)}`);
+    // Fetch listing JSON
+    const res  = await fetch(`/.netlify/functions/dop-view?id=${encodeURIComponent(dopId)}${cacheBust()}`);
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed');
+    if (!res.ok) throw new Error(data.error || 'Failed to load DOP.');
 
-    const imgKey = data.images?.[0]?.key;
-    const voiceKey = data.voices?.[0]?.key;
+    // Pick newest image/voice if multiple exist
+    const newest = (arr=[]) => {
+      return [...arr].sort((a,b) =>
+        new Date(b.uploadedAt || b.lastModified || 0) - new Date(a.uploadedAt || a.lastModified || 0)
+      )[0];
+    };
+    const img   = newest(data.images || []);
+    const voice = newest(data.voices || []);
 
-    const imgURL = imgKey ? `/.netlify/functions/dop-file?key=${encodeURIComponent(imgKey)}` : null;
-    const audURL = voiceKey ? `/.netlify/functions/dop-file?key=${encodeURIComponent(voiceKey)}` : null;
+    const imgUrl = img ? fileURL(img.key) : null;
+    const audUrl = voice ? fileURL(voice.key) : null;
 
     out.innerHTML = `
-      <div style="font-size:14px;color:#666;margin-bottom:8px">dopId: <code>${data.dopId}</code></div>
-      ${imgURL ? `<img alt="DOP image" src="${imgURL}">` : '<div class="err">No image found</div>'}
-      ${audURL ? `<audio controls src="${audURL}"></audio>` : '<div class="err">No voice found</div>'}
+      <div class="muted">dopId: <code>${data.dopId || dopId}</code></div>
+
+      ${imgUrl
+        ? `<img alt="DOP image" src="${imgUrl}"
+               onerror="this.outerHTML='<div class=&quot;err&quot;>Image failed to load.</div>'">`
+        : `<div class="err">No image found</div>`}
+
+      ${audUrl
+        ? `<audio controls preload="metadata"
+                  onerror="this.outerHTML='<div class=&quot;err&quot;>Audio failed to load.</div>'"
+                  src="${audUrl}"></audio>`
+        : `<div class="err">No voice found</div>`}
+
+      <div class="row" style="margin-top:10px">
+        <span class="chip">${img ? img.key.split('/').pop() : 'no-image'}</span>
+        <span class="chip">${voice ? voice.key.split('/').pop() : 'no-voice'}</span>
+        <a class="muted" href="/.netlify/functions/dop-view?id=${encodeURIComponent(dopId)}" target="_blank" rel="noopener">view JSON</a>
+      </div>
     `;
   } catch (e) {
     out.innerHTML = `<div class="err">${e.message || e}</div>`;
