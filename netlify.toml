@@ -7,8 +7,19 @@
   directory = "functions"
   node_bundler = "esbuild"
   included_files = ["personas/**", "assets/**"]
-# Pretty URL -> function
+
+# --- Pretty URLs -> functions ---
+
+# 1) Exact one-segment dop id: /dop/:id  → dop-view?id=:id
 [[redirects]]
   from = "/dop/:id"
-  to = "/.netlify/functions/dop-view?id=:id"
+  to   = "/.netlify/functions/dop-view?id=:id"
   status = 200
+  force = true
+
+# 2) Fallback for anything under /dop/* (covers extra segments or edge cases)
+[[redirects]]
+  from = "/dop/*"
+  to   = "/.netlify/functions/dop-view?id=:splat"
+  status = 200
+  force = true
