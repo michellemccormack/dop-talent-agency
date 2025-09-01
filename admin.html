@@ -5,57 +5,78 @@
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>DOP Admin — Recent uploads</title>
   <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:24px;}
-    h1{margin:0 0 12px;}
-    .note{color:#555;margin:0 0 16px;}
-    table{border-collapse:collapse;width:100%;}
-    th,td{border:1px solid #eee;padding:10px;text-align:left;font-size:14px;vertical-align:top;}
-    th{background:#fafafa;}
-    code{background:#f6f6f6;padding:2px 6px;border-radius:6px;}
-    .err{color:#b00020;margin-top:12px;}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:24px}
+    table{width:100%;border-collapse:collapse;margin-top:16px}
+    th,td{border:1px solid #e5e5e5;padding:8px;text-align:left;vertical-align:top}
+    th{background:#f8f8f8}
+    code{background:#f4f4f4;padding:2px 6px;border-radius:6px}
+    .muted{color:#666}
   </style>
 </head>
 <body>
-  <h1>Recent DOP uploads</h1>
-  <p class="note">
-    Append <code>?key=YOUR_ADMIN_KEY</code> to this page’s URL.  
-    Example: <code>/admin.html?key=adm_8d2e3c9b7a4b4f6cbd1b9d8a3c</code>
-  </p>
-  <div id="out">Loading…</div>
-  <script>
-    const params = new URLSearchParams(location.search);
-    const key = params.get('key');
-    const out = document.getElementById('out');
+  <h1>DOP Admin — Recent uploads</h1>
+  <div class="muted">Pass <code>?key=YOUR_ADMIN_KEY</code> in the URL.</div>
+  <div id="out" class="muted" style="margin-top:10px;">Loading…</div>
 
-    async function run() {
-      if (!key) { out.innerHTML = '<div class="err">Missing ?key=…</div>'; return; }
-      const endpoint = '/.netlify/functions/dop-list-recent?key=' + encodeURIComponent(key);
-      const resp = await fetch(endpoint);
-      const data = await resp.json().catch(()=> ({}));
-      if (!resp.ok) { out.innerHTML = '<div class="err">' + (data.error || 'Error') + '</div>'; return; }
-      if (!data.items || data.items.length === 0) { out.textContent = 'No uploads yet.'; return; }
+  <table id="tbl" style="display:none">
+    <thead>
+      <tr>
+        <th>dopId</th>
+        <th>image</th>
+        <th>voice</th>
+        <th>latest</th>
+        <th>link</th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
 
-      const rows = data.items.map(item => {
-        const files = item.files.map(f =>
-          `<div><code>${f.key}</code> <small>(${(f.size||0).toLocaleString()} bytes)</small></div>`
-        ).join('');
-        return `<tr>
-          <td><code>${item.dopId}</code><div><a href="/dop/${item.dopId}">/dop/${item.dopId}</a></div></td>
-          <td>${new Date(item.updatedAt).toLocaleString()}</td>
-          <td>${(item.bytesTotal||0).toLocaleString()}</td>
-          <td>${files}</td>
-        </tr>`;
-      }).join('');
+<script>
+(async function () {
+  const out = document.getElementById('out');
+  const tbl = document.getElementById('tbl');
+  const rows = document.getElementById('rows');
 
-      out.innerHTML = `
-        <table>
-          <thead>
-            <tr><th>dopId</th><th>Updated</th><th>Total bytes</th><th>Files</th></tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>`;
+  const params = new URLSearchParams(location.search);
+  const key = params.get('key') || '';
+  if (!key) { out.textContent = 'Missing ?key='; return; }
+
+  try {
+    const url = '/.netlify/functions/dop-list-recent?key=' + encodeURIComponent(key);
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (!res.ok) {
+      out.textContent = data && data.error ? data.error : ('HTTP ' + res.status);
+      return;
     }
-    run();
-  </script>
+
+    if (!data.items || !data.items.length) {
+      out.textContent = 'No uploads yet.';
+      return;
+    }
+
+    out.style.display = 'none';
+    tbl.style.display = 'table';
+
+    for (const item of data.items) {
+      const img = (item.files.image[0] && item.files.image[0].key) || '';
+      const voc = (item.files.voice[0] && item.files.voice[0].key) || '';
+      const latest = item.lastModified ? new Date(item.lastModified).toLocaleString() : '';
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><code>${item.dopId}</code></td>
+        <td><code>${img}</code></td>
+        <td><code>${voc}</code></td>
+        <td>${latest}</td>
+        <td><a href="/dop/${item.dopId}" target="_blank">/dop/${item.dopId}</a></td>`;
+      rows.appendChild(tr);
+    }
+  } catch (e) {
+    out.textContent = e.message || String(e);
+  }
+})();
+</script>
 </body>
 </html>
