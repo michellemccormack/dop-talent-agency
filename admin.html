@@ -1,82 +1,78 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>DOP Admin — Recent uploads</title>
   <style>
     body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:24px}
-    table{width:100%;border-collapse:collapse;margin-top:16px}
-    th,td{border:1px solid #e5e5e5;padding:8px;text-align:left;vertical-align:top}
-    th{background:#f8f8f8}
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    input[type=text]{padding:8px 10px;border:1px solid #ccc;border-radius:8px;min-width:320px}
+    button{padding:10px 14px;border:0;border-radius:8px;background:#111;color:#fff;font-weight:700;cursor:pointer}
+    table{border-collapse:collapse;width:100%;margin-top:14px}
+    th,td{padding:8px 10px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
     code{background:#f4f4f4;padding:2px 6px;border-radius:6px}
     .muted{color:#666}
   </style>
 </head>
 <body>
   <h1>DOP Admin — Recent uploads</h1>
-  <div class="muted">Pass <code>?key=YOUR_ADMIN_KEY</code> in the URL.</div>
-  <div id="out" class="muted" style="margin-top:10px;">Loading…</div>
+  <div class="row">
+    <label for="adm">Admin key:</label>
+    <input id="adm" type="text" placeholder="adm_..." />
+    <button id="refresh">Refresh</button>
+    <span class="muted" id="status"></span>
+  </div>
+  <div id="out"></div>
 
-  <table id="tbl" style="display:none">
-    <thead>
-      <tr>
-        <th>dopId</th>
-        <th>image</th>
-        <th>voice</th>
-        <th>latest</th>
-        <th>link</th>
-      </tr>
-    </thead>
-    <tbody id="rows"></tbody>
-  </table>
+  <script>
+    const qs = new URLSearchParams(location.search);
+    const adm = document.getElementById('adm');
+    const out = document.getElementById('out');
+    const statusEl = document.getElementById('status');
+    adm.value = qs.get('key') || '';
 
-<script>
-(async function () {
-  const out = document.getElementById('out');
-  const tbl = document.getElementById('tbl');
-  const rows = document.getElementById('rows');
+    async function load(){
+      const key = adm.value.trim();
+      if(!key){ out.innerHTML = '<p class="muted">Add your admin key and click Refresh.</p>'; return; }
+      statusEl.textContent = 'Loading…';
+      out.innerHTML = '';
+      try{
+        const res = await fetch(`/.netlify/functions/dop-list-recent?key=${encodeURIComponent(key)}&v=${Date.now()}`);
+        const data = await res.json();
+        if(!res.ok) throw new Error(data.error || res.statusText);
 
-  const params = new URLSearchParams(location.search);
-  const key = params.get('key') || '';
-  if (!key) { out.textContent = 'Missing ?key='; return; }
+        const rows = (data.items || []).map(item => {
+          const when = new Date(item.lastModified||Date.now()).toLocaleString();
+          const imgCount = (item.files?.image||[]).length;
+          const voiceCount = (item.files?.voice||[]).length;
+          const fileLines = []
+            .concat((item.files?.image||[]).map(f=>`image · <code>${f.key}</code> (${f.size||0}B)`))
+            .concat((item.files?.voice||[]).map(f=>`voice · <code>${f.key}</code> (${f.size||0}B)`))
+            .join('<br/>');
 
-  try {
-    const url = '/.netlify/functions/dop-list-recent?key=' + encodeURIComponent(key);
-    const res = await fetch(url);
-    const data = await res.json();
+          return `<tr>
+            <td><code>${item.dopId}</code><br><a href="/dop/${item.dopId}">/dop/${item.dopId}</a></td>
+            <td>${when}</td>
+            <td>${imgCount} image(s), ${voiceCount} voice(s)</td>
+            <td>${fileLines}</td>
+          </tr>`;
+        }).join('');
 
-    if (!res.ok) {
-      out.textContent = data && data.error ? data.error : ('HTTP ' + res.status);
-      return;
+        out.innerHTML = `
+          <table>
+            <thead><tr><th>dopId</th><th>Last modified</th><th>Counts</th><th>Files</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="4" class="muted">No items yet.</td></tr>'}</tbody>
+          </table>`;
+        statusEl.textContent = `${(data.items||[]).length} item(s)`;
+      }catch(err){
+        out.innerHTML = `<p style="color:#b00020">Error: ${err.message||err}</p>`;
+        statusEl.textContent = '';
+      }
     }
 
-    if (!data.items || !data.items.length) {
-      out.textContent = 'No uploads yet.';
-      return;
-    }
-
-    out.style.display = 'none';
-    tbl.style.display = 'table';
-
-    for (const item of data.items) {
-      const img = (item.files.image[0] && item.files.image[0].key) || '';
-      const voc = (item.files.voice[0] && item.files.voice[0].key) || '';
-      const latest = item.lastModified ? new Date(item.lastModified).toLocaleString() : '';
-
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td><code>${item.dopId}</code></td>
-        <td><code>${img}</code></td>
-        <td><code>${voc}</code></td>
-        <td>${latest}</td>
-        <td><a href="/dop/${item.dopId}" target="_blank">/dop/${item.dopId}</a></td>`;
-      rows.appendChild(tr);
-    }
-  } catch (e) {
-    out.textContent = e.message || String(e);
-  }
-})();
-</script>
+    document.getElementById('refresh').addEventListener('click', load);
+    if (adm.value) load();
+  </script>
 </body>
 </html>
