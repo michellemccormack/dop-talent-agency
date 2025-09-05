@@ -253,7 +253,7 @@
       errorDetails.textContent = message;
     }
 
-    // Chat functions with TTS
+    // Chat functions with TTS only (no popup)
     function askPrompt(promptText) {
       console.log('Asking:', promptText);
       setPill('thinking', 'Thinking...');
@@ -274,10 +274,7 @@
         if (data.reply) {
           console.log('DOP replied:', data.reply);
           
-          // Show alert AND speak the response
-          alert(`${persona.name} says: ${data.reply}`);
-          
-          // Add TTS
+          // Only speak - no popup
           speakText(data.reply);
         } else {
           setPill('ready', 'Ready');
@@ -285,6 +282,7 @@
       })
       .catch(error => {
         console.error('Chat error:', error);
+        // Only show popup on error
         alert('Sorry, there was an error with the conversation.');
         setPill('ready', 'Ready');
       });
