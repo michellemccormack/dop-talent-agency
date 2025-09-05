@@ -1,80 +1,199 @@
 // functions/heygen-proxy.js
-// Proxy for HeyGen avatar sync (Task 19). Desktop-only.
-// Safe by default: if HEYGEN_API_KEY isn't set, this returns {enabled:false} gracefully.
+// Complete HeyGen integration for avatar creation and video generation
+
+const HEYGEN_API_KEY = process.env.HEYGEN_API_KEY;
+const HEYGEN_API_BASE = 'https://api.heygen.com/v2';
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
 
 exports.handler = async (event) => {
-  // CORS (Netlify Functions)
-  const cors = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-  };
   if (event.httpMethod === "OPTIONS") {
-    return { statusCode: 204, headers: cors, body: "" };
+    return { statusCode: 204, headers: corsHeaders, body: "" };
   }
 
-  const HEYGEN_API_KEY = process.env.HEYGEN_API_KEY || "";
-  const enabled = !!HEYGEN_API_KEY;
-
-  // Basic router
+  // Health check
   if (event.httpMethod === "GET") {
-    // Health / feature-flag probe
     return {
       statusCode: 200,
-      headers: { "Content-Type": "application/json", ...cors },
-      body: JSON.stringify({ enabled }),
+      headers: { "Content-Type": "application/json", ...corsHeaders },
+      body: JSON.stringify({ 
+        enabled: !!HEYGEN_API_KEY,
+        status: 'ready'
+      }),
     };
   }
 
   if (event.httpMethod !== "POST") {
     return {
       statusCode: 405,
-      headers: { ...cors, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
       body: JSON.stringify({ error: "Method not allowed" }),
     };
   }
 
-  // Parse body
-  let payload = {};
-  try {
-    payload = JSON.parse(event.body || "{}");
-  } catch (_) {
-    /* noop */
-  }
-  const { text = "", sessionId = "" } = payload;
-
-  // If not configured, reply gracefully so the UI falls back to placeholder video
-  if (!enabled) {
+  if (!HEYGEN_API_KEY) {
     return {
       statusCode: 200,
-      headers: { "Content-Type": "application/json", ...cors },
+      headers: { "Content-Type": "application/json", ...corsHeaders },
       body: JSON.stringify({
         enabled: false,
-        reason: "HEYGEN_API_KEY not set",
+        reason: "HEYGEN_API_KEY not configured"
       }),
     };
   }
 
-  // --- NOTE ---
-  // Real HeyGen Streaming Avatar requires WebRTC/WS session setup.
-  // This proxy is intentionally minimal: it returns a temporary "ticket"
-  // for the front-end to know HeyGen is available and to flip into "live" mode.
-  // You can expand this to negotiate a stream or call a text->talk session
-  // once you finalize the exact HeyGen streaming method you want to use.
-  // -----------------
+  try {
+    const body = JSON.parse(event.body || '{}');
+    const { action, ...params } = body;
 
-  // Example placeholder response to signal "live avatar mode" to the front-end.
-  // If/when you wire a real stream URL, return it here as `streamUrl`.
-  const ticket = {
-    enabled: true,
-    ok: true,
-    // streamUrl: "wss://example-heygen-session-url", // <- fill when you finalize streaming
-    // For now we just return ok:true so the UI shows a subtle "syncing" indicator.
-  };
+    switch (action) {
+      case 'create_avatar':
+        return await createAvatar(params);
+      case 'generate_video':
+        return await generateVideo(params);
+      case 'check_video':
+        return await checkVideoStatus(params);
+      default:
+        return {
+          statusCode: 400,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+          body: JSON.stringify({ error: 'Invalid action. Use: create_avatar, generate_video, check_video' })
+        };
+    }
+  } catch (error) {
+    console.error('[heygen-proxy] Error:', error);
+    return {
+      statusCode: 500,
+      headers: { "Content-Type": "application/json", ...corsHeaders },
+      body: JSON.stringify({ 
+        error: 'HeyGen integration error',
+        details: error.message 
+      })
+    };
+  }
+};
+
+// Create avatar from uploaded photo
+async function createAvatar({ imageUrl, name }) {
+  if (!imageUrl) {
+    throw new Error('imageUrl is required for avatar creation');
+  }
+
+  const response = await fetch(`${HEYGEN_API_BASE}/avatars`, {
+    method: 'POST',
+    headers: {
+      'X-API-Key': HEYGEN_API_KEY,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      avatar_name: name || 'User Avatar',
+      avatar_image_url: imageUrl,
+      // Use instant avatar for faster processing
+      avatar_type: 'instant_avatar'
+    })
+  });
+
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(`HeyGen avatar creation failed: ${data.message || response.statusText}`);
+  }
 
   return {
     statusCode: 200,
-    headers: { "Content-Type": "application/json", ...cors },
-    body: JSON.stringify(ticket),
+    headers: { "Content-Type": "application/json", ...corsHeaders },
+    body: JSON.stringify({
+      success: true,
+      avatar_id: data.data?.avatar_id,
+      status: data.data?.status || 'processing',
+      message: 'Avatar creation started'
+    })
   };
-};
+}
+
+// Generate talking video
+async function generateVideo({ text, avatarId, voiceId }) {
+  if (!text || !avatarId) {
+    throw new Error('text and avatarId are required for video generation');
+  }
+
+  const requestBody = {
+    video_inputs: [{
+      character: {
+        type: 'avatar',
+        avatar_id: avatarId,
+        scale: 1.0
+      },
+      voice: {
+        type: 'text',
+        input_text: text,
+        voice_id: voiceId || 'default' // Use uploaded voice or default
+      }
+    }],
+    aspect_ratio: '16:9',
+    test: false // Set to true for testing
+  };
+
+  const response = await fetch(`${HEYGEN_API_BASE}/video/generate`, {
+    method: 'POST',
+    headers: {
+      'X-API-Key': HEYGEN_API_KEY,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(requestBody)
+  });
+
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(`HeyGen video generation failed: ${data.message || response.statusText}`);
+  }
+
+  return {
+    statusCode: 200,
+    headers: { "Content-Type": "application/json", ...corsHeaders },
+    body: JSON.stringify({
+      success: true,
+      video_id: data.data?.video_id,
+      status: 'processing',
+      message: 'Video generation started'
+    })
+  };
+}
+
+// Check video generation status
+async function checkVideoStatus({ videoId }) {
+  if (!videoId) {
+    throw new Error('videoId is required');
+  }
+
+  const response = await fetch(`${HEYGEN_API_BASE}/video/${videoId}`, {
+    method: 'GET',
+    headers: {
+      'X-API-Key': HEYGEN_API_KEY,
+      'Content-Type': 'application/json'
+    }
+  });
+
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(`HeyGen status check failed: ${data.message || response.statusText}`);
+  }
+
+  return {
+    statusCode: 200,
+    headers: { "Content-Type": "application/json", ...corsHeaders },
+    body: JSON.stringify({
+      success: true,
+      status: data.data?.status,
+      video_url: data.data?.video_url,
+      thumbnail_url: data.data?.thumbnail_url,
+      duration: data.data?.duration
+    })
+  };
+}
