@@ -22,7 +22,8 @@ exports.handler = async (event) => {
       headers: { "Content-Type": "application/json", ...corsHeaders },
       body: JSON.stringify({ 
         enabled: !!HEYGEN_API_KEY,
-        status: 'ready'
+        status: 'ready',
+        version: '2.0'
       }),
     };
   }
@@ -92,7 +93,6 @@ async function createAvatar({ imageUrl, name }) {
     body: JSON.stringify({
       avatar_name: name || 'User Avatar',
       avatar_image_url: imageUrl,
-      // Use instant avatar for faster processing
       avatar_type: 'instant_avatar'
     })
   });
@@ -131,11 +131,11 @@ async function generateVideo({ text, avatarId, voiceId }) {
       voice: {
         type: 'text',
         input_text: text,
-        voice_id: voiceId || 'default' // Use uploaded voice or default
+        voice_id: voiceId || 'default'
       }
     }],
     aspect_ratio: '16:9',
-    test: false // Set to true for testing
+    test: false
   };
 
   const response = await fetch(`${HEYGEN_API_BASE}/video/generate`, {
