@@ -94,6 +94,20 @@
       object-fit:cover; background:var(--panel);
     }
 
+    /* Status pill for speaking */
+    .status-rail{display:flex; justify-content:center; margin-top:16px}
+    .pill{
+      display:inline-flex; align-items:center; gap:8px;
+      background:#191a23; border:1px solid var(--stroke-strong);
+      color:#cfd0dc; border-radius:999px; padding:7px 12px;
+      font-size:12px; letter-spacing:.2px;
+      box-shadow:0 6px 16px rgba(0,0,0,.25);
+    }
+    .dot{width:8px; height:8px; border-radius:999px; background:#666}
+    .pill.thinking .dot{background:#8a8cff}
+    .pill.speaking .dot{background:#16db65}
+    .pill.ready .dot{background:#6f7284}
+
     @media (max-width:480px){
       .header{flex-direction:column; text-align:center}
       .dop-image{max-height:300px}
@@ -130,6 +144,14 @@
           <img class="dop-image" id="dopImage" alt="DOP" />
         </div>
 
+        <!-- Status pill -->
+        <div class="status-rail">
+          <div id="statusPill" class="pill ready">
+            <span class="dot"></span>
+            <span id="pillText">Ready</span>
+          </div>
+        </div>
+
         <!-- Prompt Buttons -->
         <div class="prompt-grid" id="promptGrid">
           <!-- Dynamically populated -->
@@ -154,6 +176,8 @@
     const dopAvatar = document.getElementById('dopAvatar');
     const dopImage = document.getElementById('dopImage');
     const promptGrid = document.getElementById('promptGrid');
+    const statusPill = document.getElementById('statusPill');
+    const pillText = document.getElementById('pillText');
 
     // Session state
     let persona = null;
@@ -161,6 +185,13 @@
 
     function generateSessionId() {
       return 'chat_' + Math.random().toString(36).substr(2, 9);
+    }
+
+    // Status pill
+    function setPill(mode, text) {
+      statusPill.classList.remove('thinking', 'speaking', 'ready');
+      statusPill.classList.add(mode);
+      pillText.textContent = text;
     }
 
     // Load DOP persona
@@ -190,6 +221,10 @@
           const imageUrl = `/.netlify/functions/dop-file?key=${encodeURIComponent(persona.image)}`;
           dopAvatar.src = imageUrl;
           dopImage.src = imageUrl;
+          
+          // Handle image load errors gracefully
+          dopAvatar.onerror = () => dopAvatar.style.display = 'none';
+          dopImage.onerror = () => dopImage.style.display = 'none';
         }
 
         // Create prompt buttons
@@ -218,9 +253,10 @@
       errorDetails.textContent = message;
     }
 
-    // Chat functions
+    // Chat functions with TTS
     function askPrompt(promptText) {
       console.log('Asking:', promptText);
+      setPill('thinking', 'Thinking...');
       
       // Call session-chat with this persona
       fetch('/.netlify/functions/session-chat', {
@@ -229,7 +265,7 @@
         body: JSON.stringify({
           sessionId: sessionId,
           message: promptText,
-          personaId: dopId, // Use dopId as personaId
+          personaId: dopId,
           context: []
         })
       })
@@ -237,15 +273,57 @@
       .then(data => {
         if (data.reply) {
           console.log('DOP replied:', data.reply);
+          
+          // Show alert AND speak the response
           alert(`${persona.name} says: ${data.reply}`);
+          
+          // Add TTS
+          speakText(data.reply);
         } else {
-          console.log('No reply received');
+          setPill('ready', 'Ready');
         }
       })
       .catch(error => {
         console.error('Chat error:', error);
         alert('Sorry, there was an error with the conversation.');
+        setPill('ready', 'Ready');
       });
+    }
+
+    async function speakText(text) {
+      setPill('speaking', 'Speaking...');
+      
+      try {
+        const voiceId = persona?.voiceId || null;
+        
+        const response = await fetch('/.netlify/functions/tts-eleven', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: text,
+            voiceId: voiceId
+          })
+        });
+
+        if (response.ok) {
+          const audioBuffer = await response.arrayBuffer();
+          const audioBlob = new Blob([audioBuffer], { type: 'audio/mpeg' });
+          const audioUrl = URL.createObjectURL(audioBlob);
+          
+          const audio = new Audio(audioUrl);
+          await audio.play();
+          
+          audio.addEventListener('ended', () => {
+            setPill('ready', 'Ready');
+            URL.revokeObjectURL(audioUrl);
+          });
+        } else {
+          throw new Error('TTS failed');
+        }
+      } catch (error) {
+        console.error('TTS error:', error);
+        setPill('ready', 'Ready');
+      }
     }
 
     // Initialize
