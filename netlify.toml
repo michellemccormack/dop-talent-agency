@@ -1,4 +1,4 @@
-# netlify.toml — viewer-first routing
+# netlify.toml — routing for both DOP viewer and chat
 [build]
   publish = "."
 
@@ -7,7 +7,14 @@
   node_bundler = "esbuild"
   included_files = ["personas/**", "assets/**"]
 
+# DOP viewer route (existing)
 [[redirects]]
   from = "/dop/:id"
   to   = "/dop.html?id=:id"
+  status = 200
+
+# NEW: DOP chat route
+[[redirects]]
+  from = "/chat/:id"
+  to   = "/chat.html?id=:id"
   status = 200
