@@ -1,5 +1,5 @@
 // functions/dop-uploads.js
-// Updated to store images as base64 and create HeyGen avatars
+// Fixed: Store image separately to avoid size limits
 
 const { uploadsStore } = require('./_lib/blobs');
 
@@ -44,7 +44,7 @@ function generateSystemPrompt(bio, name) {
   return systemPrompt;
 }
 
-// Create HeyGen avatar from image
+// Create HeyGen avatar from image (with error handling)
 async function createHeyGenAvatar(imageBase64, name) {
   try {
     // Convert base64 to data URL for HeyGen
@@ -74,8 +74,8 @@ async function createHeyGenAvatar(imageBase64, name) {
   }
 }
 
-// Create persona.json for the DOP
-function createPersonaConfig(dopId, name, bio, imageBase64, voiceKey, avatarId) {
+// Create persona.json for the DOP (without large base64 image)
+function createPersonaConfig(dopId, name, bio, imageKey, voiceKey, avatarId) {
   const dopName = name || `DOP_${dopId.slice(0, 8)}`;
   const systemPrompt = generateSystemPrompt(bio, dopName);
   const prompts = generatePersonaPrompts(bio, dopName);
@@ -90,10 +90,9 @@ function createPersonaConfig(dopId, name, bio, imageBase64, voiceKey, avatarId) 
     instructions: systemPrompt,
     description: bio || `I'm ${dopName}, your AI doppelganger. Ask me anything!`,
     
-    // Media assets - store image as base64 for immediate display
-    imageBase64: imageBase64,
-    image: `data:image/jpeg;base64,${imageBase64}`, // Direct data URL
-    avatar: `data:image/jpeg;base64,${imageBase64}`,
+    // Media assets - reference keys instead of embedding data
+    image: imageKey,
+    avatar: imageKey,
     voice: voiceKey,
     voiceId: voiceId,
     
@@ -107,7 +106,7 @@ function createPersonaConfig(dopId, name, bio, imageBase64, voiceKey, avatarId) 
     // Metadata
     createdAt: new Date().toISOString(),
     type: 'user-generated',
-    version: '2.0'
+    version: '2.1'
   };
 }
 
@@ -176,24 +175,34 @@ exports.handler = async (event) => {
       audName = safe(stripExt(body.voiceName) || 'voice');
     }
 
-    // Store voice file (still needed for potential voice cloning)
+    // Store image and voice files
+    const imgKey = `images/${dopId}/${imgName}.${extFromMime(imgMime)}`;
     const voiceKey = `voices/${dopId}/${audName}.${extFromMime(audMime)}`;
+    
+    await store.set(imgKey, imgBuf, { contentType: imgMime });
     await store.set(voiceKey, audBuf, { contentType: audMime });
 
-    // Create HeyGen avatar
+    // Store base64 image separately for instant display
+    const imgBase64Key = `images/${dopId}/base64.txt`;
+    await store.set(imgBase64Key, imgBase64, { contentType: 'text/plain' });
+
+    // Create HeyGen avatar (with error tolerance)
     const dopName = body.dopName || body.name || null;
     console.log('[dop-uploads] Creating HeyGen avatar...');
-    const avatarId = await createHeyGenAvatar(imgBase64, dopName);
     
-    if (avatarId) {
-      console.log('[dop-uploads] HeyGen avatar created:', avatarId);
-    } else {
-      console.warn('[dop-uploads] HeyGen avatar creation failed, proceeding without avatar');
+    let avatarId = null;
+    try {
+      avatarId = await createHeyGenAvatar(imgBase64, dopName);
+      if (avatarId) {
+        console.log('[dop-uploads] HeyGen avatar created:', avatarId);
+      }
+    } catch (error) {
+      console.warn('[dop-uploads] HeyGen avatar creation failed, continuing without avatar:', error);
     }
 
-    // Generate persona.json with base64 image and avatar ID
+    // Generate persona.json (small, without embedded image)
     const bio = body.bio || body.description || '';
-    const personaConfig = createPersonaConfig(dopId, dopName, bio, imgBase64, voiceKey, avatarId);
+    const personaConfig = createPersonaConfig(dopId, dopName, bio, imgBase64Key, voiceKey, avatarId);
     const personaKey = `personas/${dopId}.json`;
     
     await store.set(personaKey, JSON.stringify(personaConfig, null, 2), { 
@@ -207,6 +216,8 @@ exports.handler = async (event) => {
       bio: bio,
       createdAt: new Date().toISOString(),
       
+      image: { key: imgKey, contentType: imgMime, bytes: imgBuf.length },
+      imageBase64: { key: imgBase64Key, contentType: 'text/plain' },
       voice: { key: voiceKey, contentType: audMime, bytes: audBuf.length },
       persona: { key: personaKey, contentType: 'application/json' },
       
@@ -215,7 +226,7 @@ exports.handler = async (event) => {
       heygenEnabled: !!avatarId,
       
       status: 'ready',
-      version: '2.0'
+      version: '2.1'
     };
     
     const metaKey = `metas/${dopId}.json`;
@@ -234,6 +245,8 @@ exports.handler = async (event) => {
         name: dopName,
         heygenEnabled: !!avatarId,
         files: { 
+          image: imgKey,
+          imageBase64: imgBase64Key,
           voice: voiceKey, 
           persona: personaKey 
         },
