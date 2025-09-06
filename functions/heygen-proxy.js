@@ -1,8 +1,8 @@
 // functions/heygen-proxy.js
-// Complete HeyGen integration for avatar creation and video generation
+// Fixed HeyGen integration with correct API endpoints and error handling
 
 const HEYGEN_API_KEY = process.env.HEYGEN_API_KEY;
-const HEYGEN_API_BASE = 'https://api.heygen.com/v2';
+const HEYGEN_API_BASE = 'https://api.heygen.com/v1'; // Changed from v2 to v1
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -23,7 +23,8 @@ exports.handler = async (event) => {
       body: JSON.stringify({ 
         enabled: !!HEYGEN_API_KEY,
         status: 'ready',
-        version: '2.0'
+        version: '3.0',
+        apiBase: HEYGEN_API_BASE
       }),
     };
   }
@@ -84,24 +85,44 @@ async function createAvatar({ imageUrl, name }) {
     throw new Error('imageUrl is required for avatar creation');
   }
 
-  const response = await fetch(`${HEYGEN_API_BASE}/avatars`, {
+  console.log('[heygen-proxy] Creating avatar with URL:', imageUrl.substring(0, 50) + '...');
+
+  const requestBody = {
+    avatar_name: name || 'User Avatar',
+    avatar_image_url: imageUrl
+  };
+
+  console.log('[heygen-proxy] Request body:', JSON.stringify(requestBody, null, 2));
+
+  const response = await fetch(`${HEYGEN_API_BASE}/avatar/create_avatar`, {
     method: 'POST',
     headers: {
       'X-API-Key': HEYGEN_API_KEY,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({
-      avatar_name: name || 'User Avatar',
-      avatar_image_url: imageUrl,
-      avatar_type: 'instant_avatar'
-    })
+    body: JSON.stringify(requestBody)
   });
 
-  const data = await response.json();
+  console.log('[heygen-proxy] Response status:', response.status);
+  console.log('[heygen-proxy] Response headers:', Object.fromEntries(response.headers.entries()));
+
+  const responseText = await response.text();
+  console.log('[heygen-proxy] Raw response:', responseText.substring(0, 500));
+
+  let data;
+  try {
+    data = JSON.parse(responseText);
+  } catch (parseError) {
+    console.error('[heygen-proxy] Failed to parse response as JSON:', parseError);
+    throw new Error(`HeyGen API returned non-JSON response: ${responseText.substring(0, 200)}`);
+  }
   
   if (!response.ok) {
+    console.error('[heygen-proxy] API error:', data);
     throw new Error(`HeyGen avatar creation failed: ${data.message || response.statusText}`);
   }
+
+  console.log('[heygen-proxy] Avatar creation response:', data);
 
   return {
     statusCode: 200,
@@ -147,7 +168,13 @@ async function generateVideo({ text, avatarId, voiceId }) {
     body: JSON.stringify(requestBody)
   });
 
-  const data = await response.json();
+  const responseText = await response.text();
+  let data;
+  try {
+    data = JSON.parse(responseText);
+  } catch (parseError) {
+    throw new Error(`HeyGen API returned non-JSON response: ${responseText.substring(0, 200)}`);
+  }
   
   if (!response.ok) {
     throw new Error(`HeyGen video generation failed: ${data.message || response.statusText}`);
@@ -179,7 +206,13 @@ async function checkVideoStatus({ videoId }) {
     }
   });
 
-  const data = await response.json();
+  const responseText = await response.text();
+  let data;
+  try {
+    data = JSON.parse(responseText);
+  } catch (parseError) {
+    throw new Error(`HeyGen API returned non-JSON response: ${responseText.substring(0, 200)}`);
+  }
   
   if (!response.ok) {
     throw new Error(`HeyGen status check failed: ${data.message || response.statusText}`);
