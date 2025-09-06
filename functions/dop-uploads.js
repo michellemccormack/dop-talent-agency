@@ -1,5 +1,5 @@
 // functions/dop-uploads.js
-// Updated to auto-generate persona.json for uploaded DOPs (Task 29)
+// Updated to store images as base64 and create HeyGen avatars
 
 const { uploadsStore } = require('./_lib/blobs');
 
@@ -11,16 +11,12 @@ const CORS_HEADERS = {
 
 // Generate persona prompts based on bio
 function generatePersonaPrompts(bio, name) {
-  const baseName = name || 'Your DOP';
-  
-  // Default prompts that work for any personality
   const defaultPrompts = [
     "What do you like to do for fun?",
     "Tell me about yourself",
     "What's your personality like?"
   ];
   
-  // If bio is provided, create more personalized prompts
   if (bio && bio.trim().length > 10) {
     return [
       "What do you like to do for fun?",
@@ -48,19 +44,42 @@ function generateSystemPrompt(bio, name) {
   return systemPrompt;
 }
 
-// Map uploaded voice to ElevenLabs voice ID
-function getVoiceIdForDOP(dopId, audioType) {
-  // For now, we'll use the fallback voice since we need to clone the uploaded voice
-  // In a full implementation, this would trigger voice cloning with the uploaded sample
-  return process.env.DEFAULT_VOICE_ID || 'kDIJK53VQMjfQj3fCrML';
+// Create HeyGen avatar from image
+async function createHeyGenAvatar(imageBase64, name) {
+  try {
+    // Convert base64 to data URL for HeyGen
+    const imageDataUrl = `data:image/jpeg;base64,${imageBase64}`;
+    
+    const response = await fetch(`${process.env.URL || 'https://dopple-talent-demo.netlify.app'}/.netlify/functions/heygen-proxy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'create_avatar',
+        imageUrl: imageDataUrl,
+        name: name || 'User Avatar'
+      })
+    });
+
+    const result = await response.json();
+    
+    if (result.success) {
+      return result.avatar_id;
+    } else {
+      console.warn('[dop-uploads] HeyGen avatar creation failed:', result);
+      return null;
+    }
+  } catch (error) {
+    console.warn('[dop-uploads] HeyGen avatar creation error:', error);
+    return null;
+  }
 }
 
 // Create persona.json for the DOP
-function createPersonaConfig(dopId, name, bio, imageKey, voiceKey) {
+function createPersonaConfig(dopId, name, bio, imageBase64, voiceKey, avatarId) {
   const dopName = name || `DOP_${dopId.slice(0, 8)}`;
   const systemPrompt = generateSystemPrompt(bio, dopName);
   const prompts = generatePersonaPrompts(bio, dopName);
-  const voiceId = getVoiceIdForDOP(dopId, 'audio/mpeg');
+  const voiceId = process.env.DEFAULT_VOICE_ID || 'kDIJK53VQMjfQj3fCrML';
   
   return {
     id: dopId,
@@ -71,11 +90,16 @@ function createPersonaConfig(dopId, name, bio, imageKey, voiceKey) {
     instructions: systemPrompt,
     description: bio || `I'm ${dopName}, your AI doppelganger. Ask me anything!`,
     
-    // Media assets
-    image: imageKey,
-    avatar: imageKey, // Use same image for avatar
+    // Media assets - store image as base64 for immediate display
+    imageBase64: imageBase64,
+    image: `data:image/jpeg;base64,${imageBase64}`, // Direct data URL
+    avatar: `data:image/jpeg;base64,${imageBase64}`,
     voice: voiceKey,
     voiceId: voiceId,
+    
+    // HeyGen integration
+    heygenAvatarId: avatarId,
+    heygenEnabled: !!avatarId,
     
     // Conversation prompts
     prompts: prompts,
@@ -83,12 +107,11 @@ function createPersonaConfig(dopId, name, bio, imageKey, voiceKey) {
     // Metadata
     createdAt: new Date().toISOString(),
     type: 'user-generated',
-    version: '1.0'
+    version: '2.0'
   };
 }
 
 exports.handler = async (event) => {
-  // CORS preflight
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: CORS_HEADERS };
   }
@@ -99,7 +122,6 @@ exports.handler = async (event) => {
   try {
     const body = JSON.parse(event.body || '{}');
 
-    // Accept either base64 pairs OR data URLs (backward compatible)
     const hasBase64Pair = body.imageBase64 && body.audioBase64;
     const hasDataUrls = body.image && body.voice;
 
@@ -114,8 +136,6 @@ exports.handler = async (event) => {
     }
 
     const store = uploadsStore();
-
-    // Generate unique DOP ID
     const dopId = (globalThis.crypto && globalThis.crypto.randomUUID)
       ? globalThis.crypto.randomUUID()
       : String(Date.now());
@@ -130,13 +150,14 @@ exports.handler = async (event) => {
       return { mime: m[1], buffer: Buffer.from(m[2], 'base64') };
     };
 
-    // Normalize inputs -> buffers + mimes + names
-    let imgBuf, imgMime, imgName;
+    // Normalize inputs
+    let imgBuf, imgMime, imgName, imgBase64;
     let audBuf, audMime, audName;
 
     if (hasBase64Pair) {
-      imgBuf = Buffer.from(body.imageBase64, 'base64');
-      imgMime = body.imageType || 'image/png';
+      imgBase64 = body.imageBase64;
+      imgBuf = Buffer.from(imgBase64, 'base64');
+      imgMime = body.imageType || 'image/jpeg';
       imgName = safe(stripExt(body.imageName) || 'photo');
 
       audBuf = Buffer.from(body.audioBase64, 'base64');
@@ -146,6 +167,7 @@ exports.handler = async (event) => {
       const i = parseDataUrl(body.image);
       const a = parseDataUrl(body.voice);
       imgBuf = i.buffer;
+      imgBase64 = imgBuf.toString('base64');
       imgMime = i.mime;
       imgName = safe(stripExt(body.imageName) || 'photo');
 
@@ -154,40 +176,46 @@ exports.handler = async (event) => {
       audName = safe(stripExt(body.voiceName) || 'voice');
     }
 
-    // Create storage keys
-    const imgKey = `images/${dopId}/${imgName}.${extFromMime(imgMime)}`;
+    // Store voice file (still needed for potential voice cloning)
     const voiceKey = `voices/${dopId}/${audName}.${extFromMime(audMime)}`;
-
-    // Write image and voice files
-    await store.set(imgKey, imgBuf, { contentType: imgMime });
     await store.set(voiceKey, audBuf, { contentType: audMime });
 
-    // NEW: Generate persona.json automatically
+    // Create HeyGen avatar
     const dopName = body.dopName || body.name || null;
-    const bio = body.bio || body.description || '';
+    console.log('[dop-uploads] Creating HeyGen avatar...');
+    const avatarId = await createHeyGenAvatar(imgBase64, dopName);
     
-    const personaConfig = createPersonaConfig(dopId, dopName, bio, imgKey, voiceKey);
+    if (avatarId) {
+      console.log('[dop-uploads] HeyGen avatar created:', avatarId);
+    } else {
+      console.warn('[dop-uploads] HeyGen avatar creation failed, proceeding without avatar');
+    }
+
+    // Generate persona.json with base64 image and avatar ID
+    const bio = body.bio || body.description || '';
+    const personaConfig = createPersonaConfig(dopId, dopName, bio, imgBase64, voiceKey, avatarId);
     const personaKey = `personas/${dopId}.json`;
     
     await store.set(personaKey, JSON.stringify(personaConfig, null, 2), { 
       contentType: 'application/json' 
     });
 
-    // Write comprehensive metadata
+    // Write metadata
     const meta = {
       dopId,
       name: dopName,
       bio: bio,
       createdAt: new Date().toISOString(),
       
-      // File info
-      image: { key: imgKey, contentType: imgMime, bytes: imgBuf.length },
       voice: { key: voiceKey, contentType: audMime, bytes: audBuf.length },
       persona: { key: personaKey, contentType: 'application/json' },
       
-      // Status
-      status: 'ready', // Mark as ready for conversation
-      version: '1.0'
+      // HeyGen info
+      heygenAvatarId: avatarId,
+      heygenEnabled: !!avatarId,
+      
+      status: 'ready',
+      version: '2.0'
     };
     
     const metaKey = `metas/${dopId}.json`;
@@ -195,7 +223,7 @@ exports.handler = async (event) => {
       contentType: 'application/json' 
     });
 
-    console.log(`[dop-uploads] Created DOP ${dopId} with persona auto-build`);
+    console.log(`[dop-uploads] Created DOP ${dopId} with HeyGen integration`);
 
     return {
       statusCode: 200,
@@ -204,13 +232,13 @@ exports.handler = async (event) => {
         ok: true, 
         dopId, 
         name: dopName,
+        heygenEnabled: !!avatarId,
         files: { 
-          image: imgKey, 
           voice: voiceKey, 
           persona: personaKey 
         },
         status: 'ready',
-        conversationUrl: `/chat/${dopId}` // Where people can talk to this DOP
+        conversationUrl: `/chat/${dopId}`
       }),
     };
   } catch (err) {
