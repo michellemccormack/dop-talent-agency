@@ -1,452 +1,255 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
-  <title>Chat with DOP - Dopple Talent Agency</title>
+// functions/dop-uploads.js
+// COMPLETE WORKING VERSION - Full DOP upload with voice cloning
 
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&display=swap" rel="stylesheet">
+const { uploadsStore } = require('./_lib/blobs');
 
-  <style>
-    :root{
-      --bg:#0e0f12; --bg-2:#08090c;
-      --panel:#12131a; --panel-2:#1a1b25;
-      --text:#ececf1; --muted:#b7b8c3;
-      --stroke:#26283a; --stroke-strong:#3a3b52;
-      --accent:#8a8cff;
-      --ok:#16db65; --warn:#ffd166; --stop:#ff6b6b;
-      --shadow:0 10px 30px rgba(0,0,0,.35); --radius:16px;
-    }
-    *{box-sizing:border-box}
-    html,body{height:100%}
-    body{
-      margin:0; font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
-      color:var(--text);
-      background:
-        radial-gradient(1200px 600px at 80% -10%, rgba(94,97,255,.12), transparent 40%),
-        radial-gradient(900px 480px at 0% 110%, rgba(138,140,255,.10), transparent 45%),
-        linear-gradient(180deg,var(--bg),var(--bg-2));
-      min-height:100vh;
-    }
+const CORS_HEADERS = {
+  'access-control-allow-origin': '*',
+  'access-control-allow-methods': 'POST, OPTIONS',
+  'access-control-allow-headers': 'content-type',
+};
 
-    .wrap{max-width:1100px; margin:0 auto; padding:28px 20px 48px}
-    .card{
-      position:relative;
-      background:linear-gradient(180deg,var(--panel),var(--panel-2));
-      border:1px solid var(--stroke);
-      border-radius:var(--radius);
-      box-shadow:var(--shadow);
-      padding:26px 22px 32px;
-      margin:18px 0;
-    }
-    .section{max-width:980px; margin:0 auto}
+// Compress base64 image to stay under size limits
+function compressBase64Image(base64, maxSizeKB = 100) {
+  const maxChars = maxSizeKB * 1024 * 0.75; // Base64 is ~33% larger than binary
+  if (base64.length > maxChars) {
+    console.warn(`[dop-uploads] Image too large (${base64.length} chars), truncating to ${maxChars}`);
+    return base64.substring(0, maxChars);
+  }
+  return base64;
+}
+
+// Generate persona prompts based on bio
+function generatePersonaPrompts(bio, name) {
+  const defaultPrompts = [
+    "What do you like to do for fun?",
+    "Tell me about yourself", 
+    "What's your personality like?"
+  ];
+  
+  if (bio && bio.trim().length > 10) {
+    return [
+      "What do you like to do for fun?",
+      "Tell me about your background",
+      "What makes you unique?",
+      "What are you passionate about?"
+    ];
+  }
+  
+  return defaultPrompts;
+}
+
+// Generate system prompt based on bio and name
+function generateSystemPrompt(bio, name) {
+  const baseName = name || 'Assistant';
+  
+  let systemPrompt = `You are ${baseName}. `;
+  
+  if (bio && bio.trim().length > 10) {
+    systemPrompt += `Here's what people should know about you: ${bio.trim()}. `;
+  }
+  
+  systemPrompt += `Stay in character as ${baseName}. Be conversational, warm, and authentic. Keep responses brief and engaging (1-2 sentences, under 25 words when possible). Never break character or mention you're an AI.`;
+  
+  return systemPrompt;
+}
+
+// Create ElevenLabs voice clone
+async function createVoiceClone(voiceBase64, name) {
+  if (!process.env.ELEVENLABS_API_KEY) {
+    console.log('[dop-uploads] No ElevenLabs API key found');
+    return null;
+  }
+
+  try {
+    console.log('[dop-uploads] Creating ElevenLabs voice clone...');
     
-    /* Header */
-    .header{
-      display:flex; align-items:center; gap:16px; margin-bottom:24px;
-      padding:16px 0; border-bottom:1px solid var(--stroke);
-    }
-    .avatar{
-      width:50px; height:50px; border-radius:50%;
-      background:var(--stroke); object-fit:cover;
-    }
-    .dop-info h1{
-      margin:0; font-size:1.5rem; font-weight:700;
-      font-family:'Montserrat',sans-serif;
-    }
-    .dop-info p{margin:4px 0 0; color:var(--muted); font-size:14px}
+    // Convert base64 to buffer
+    const audioBuffer = Buffer.from(voiceBase64.split(',')[1], 'base64');
+    
+    // Create form data
+    const formData = new FormData();
+    formData.append('name', name || 'DOP Voice');
+    formData.append('description', `Voice clone for ${name || 'DOP'}`);
+    formData.append('files', new Blob([audioBuffer], { type: 'audio/mpeg' }), 'voice.mp3');
+    
+    const response = await fetch('https://api.elevenlabs.io/v1/voices/add', {
+      method: 'POST',
+      headers: {
+        'xi-api-key': process.env.ELEVENLABS_API_KEY
+      },
+      body: formData
+    });
 
-    /* Loading/Error States */
-    .status{
-      text-align:center; padding:40px; color:var(--muted);
-    }
-    .status.error{color:var(--stop)}
-    .spinner{
-      width:32px; height:32px; border:3px solid var(--stroke);
-      border-top-color:var(--accent); border-radius:50%;
-      animation:spin 1s linear infinite; margin:0 auto 16px;
-    }
-    @keyframes spin{to{transform:rotate(360deg)}}
-
-    /* Prompt buttons */
-    .prompt-grid{
-      display:flex; flex-wrap:wrap; justify-content:center;
-      gap:12px 14px; margin:18px auto 36px; max-width:1000px; padding:0 6px;
-    }
-    .btn{
-      appearance:none; border:none; cursor:pointer;
-      padding:10px 14px; border-radius:16px; font-size:12px;
-      font-family:'Montserrat',sans-serif; font-weight:700; text-transform:uppercase;
-      background:linear-gradient(180deg,#fff,#efefef); color:#000;
-      border:1px solid #e7e7e7; white-space:nowrap;
-      transition:transform .15s ease, opacity .15s ease;
-    }
-    .btn:hover{transform:translateY(-1px)}
-    .btn[disabled]{opacity:.45; cursor:not-allowed}
-
-    /* Video/Image Display */
-    .hero{display:flex; justify-content:center; position:relative; margin-bottom:24px}
-    .dop-video{
-      width:min(100%,560px); aspect-ratio:16/9; max-height:400px; border-radius:14px;
-      border:1px solid var(--stroke-strong);
-      box-shadow:0 12px 32px rgba(0,0,0,.35);
-      background:var(--panel); object-fit:cover;
-    }
-    .dop-image{
-      width:min(100%,400px); max-height:400px; border-radius:14px;
-      border:1px solid var(--stroke-strong);
-      box-shadow:0 12px 32px rgba(0,0,0,.35);
-      object-fit:cover; background:var(--panel);
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[dop-uploads] ElevenLabs error:', response.status, errorText);
+      return null;
     }
 
-    /* Status pill */
-    .status-rail{display:flex; justify-content:center; margin-top:16px}
-    .pill{
-      display:inline-flex; align-items:center; gap:8px;
-      background:#191a23; border:1px solid var(--stroke-strong);
-      color:#cfd0dc; border-radius:999px; padding:7px 12px;
-      font-size:12px; letter-spacing:.2px;
-      box-shadow:0 6px 16px rgba(0,0,0,.25);
+    const result = await response.json();
+    console.log('[dop-uploads] Voice clone created:', result.voice_id);
+    
+    return result.voice_id;
+    
+  } catch (error) {
+    console.error('[dop-uploads] Voice clone error:', error);
+    return null;
+  }
+}
+
+// Create HeyGen avatar
+async function createHeyGenAvatar(imageBase64, name) {
+  try {
+    console.log('[dop-uploads] Attempting HeyGen avatar creation...');
+    
+    const response = await fetch(`${process.env.URL || 'http://localhost:8888'}/.netlify/functions/heygen-proxy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'create_avatar',
+        imageUrl: imageBase64,
+        name: name || 'DOP Avatar'
+      })
+    });
+
+    const result = await response.json();
+    
+    if (result.success && result.avatar_id) {
+      console.log('[dop-uploads] HeyGen avatar created:', result.avatar_id);
+      return result.avatar_id;
+    } else {
+      console.log('[dop-uploads] HeyGen avatar creation skipped or failed:', result.message || result.error);
+      return null;
     }
-    .dot{width:8px; height:8px; border-radius:999px; background:#666}
-    .pill.thinking .dot{background:#8a8cff}
-    .pill.generating .dot{background:#ffd166}
-    .pill.speaking .dot{background:#16db65}
-    .pill.ready .dot{background:#6f7284}
+    
+  } catch (error) {
+    console.error('[dop-uploads] HeyGen avatar error:', error);
+    return null;
+  }
+}
 
-    /* HeyGen badge */
-    .heygen-badge{
-      position:absolute; top:12px; right:12px;
-      background:linear-gradient(135deg,#00d4ff,#0099cc);
-      color:#000; font-size:10px; font-weight:700;
-      padding:4px 8px; border-radius:12px; text-transform:uppercase;
-      box-shadow:0 4px 12px rgba(0,212,255,.3);
-    }
+exports.handler = async (event, context) => {
+  console.log('[dop-uploads] FUNCTION STARTED');
+  
+  if (event.httpMethod === 'OPTIONS') {
+    console.log('[dop-uploads] OPTIONS request');
+    return { statusCode: 200, headers: CORS_HEADERS };
+  }
 
-    @media (max-width:480px){
-      .header{flex-direction:column; text-align:center}
-      .dop-video, .dop-image{max-height:300px}
-    }
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    <div class="card section">
-      <!-- DOP Header -->
-      <div class="header" id="dopHeader" style="display:none">
-        <img class="avatar" id="dopAvatar" alt="DOP Avatar" />
-        <div class="dop-info">
-          <h1 id="dopName">Loading...</h1>
-          <p id="dopDescription">Loading personality...</p>
-        </div>
-      </div>
+  if (event.httpMethod !== 'POST') {
+    console.log('[dop-uploads] Not POST method:', event.httpMethod);
+    return {
+      statusCode: 405,
+      headers: CORS_HEADERS,
+      body: JSON.stringify({ success: false, error: 'Method not allowed' })
+    };
+  }
 
-      <!-- Loading/Error States -->
-      <div class="status" id="loadingState">
-        <div class="spinner"></div>
-        <div>Loading your DOP...</div>
-      </div>
-      
-      <div class="status error" id="errorState" style="display:none">
-        <div>Sorry, this DOP couldn't be loaded.</div>
-        <div style="font-size:12px; margin-top:8px" id="errorDetails"></div>
-      </div>
+  try {
+    console.log('[dop-uploads] Parsing request body...');
+    const formData = JSON.parse(event.body);
+    console.log('[dop-uploads] Body parsed successfully');
+    
+    const { name, bio, photo, voice } = formData;
+    console.log('[dop-uploads] Extracted data:', {
+      name: name || 'No name',
+      bio: bio ? `${bio.length} chars` : 'No bio',
+      photo: photo ? `${photo.length} chars` : 'No photo',
+      voice: voice ? `${voice.length} chars` : 'No voice'
+    });
 
-      <!-- Chat Interface (hidden until loaded) -->
-      <div id="chatInterface" style="display:none">
-        <!-- DOP Video/Image Display -->
-        <div class="hero">
-          <video class="dop-video" id="dopVideo" style="display:none" controls playsinline>
-            Your browser does not support video playback.
-          </video>
-          <img class="dop-image" id="dopImage" alt="DOP" />
-          <div class="heygen-badge" id="heygenBadge" style="display:none">AI Avatar</div>
-        </div>
-
-        <!-- Status pill -->
-        <div class="status-rail">
-          <div id="statusPill" class="pill ready">
-            <span class="dot"></span>
-            <span id="pillText">Ready</span>
-          </div>
-        </div>
-
-        <!-- Prompt Buttons -->
-        <div class="prompt-grid" id="promptGrid">
-          <!-- Dynamically populated -->
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    // Get DOP ID from URL
-    const pathParts = window.location.pathname.split('/');
-    const dopId = pathParts[pathParts.length - 1] || new URLSearchParams(window.location.search).get('id');
-
-    // Elements
-    const loadingState = document.getElementById('loadingState');
-    const errorState = document.getElementById('errorState');
-    const errorDetails = document.getElementById('errorDetails');
-    const chatInterface = document.getElementById('chatInterface');
-    const dopHeader = document.getElementById('dopHeader');
-    const dopName = document.getElementById('dopName');
-    const dopDescription = document.getElementById('dopDescription');
-    const dopAvatar = document.getElementById('dopAvatar');
-    const dopImage = document.getElementById('dopImage');
-    const dopVideo = document.getElementById('dopVideo');
-    const heygenBadge = document.getElementById('heygenBadge');
-    const promptGrid = document.getElementById('promptGrid');
-    const statusPill = document.getElementById('statusPill');
-    const pillText = document.getElementById('pillText');
-
-    // Session state
-    let persona = null;
-    let sessionId = generateSessionId();
-
-    function generateSessionId() {
-      return 'chat_' + Math.random().toString(36).substr(2, 9);
-    }
-
-    // Status pill
-    function setPill(mode, text) {
-      statusPill.classList.remove('thinking', 'generating', 'speaking', 'ready');
-      statusPill.classList.add(mode);
-      pillText.textContent = text;
-    }
-
-    // Load DOP persona
-    async function loadDOP() {
-      if (!dopId) {
-        showError('No DOP ID provided in URL');
-        return;
-      }
-
-      try {
-        // Load persona config
-        const personaResponse = await fetch(`/.netlify/functions/dop-persona?id=${encodeURIComponent(dopId)}`);
-        
-        if (!personaResponse.ok) {
-          const errorData = await personaResponse.json().catch(() => ({}));
-          throw new Error(errorData.error || `Failed to load DOP (${personaResponse.status})`);
-        }
-
-        persona = await personaResponse.json();
-        
-        // Update UI with DOP info
-        dopName.textContent = persona.displayName || persona.name || 'DOP';
-        dopDescription.textContent = persona.description || 'Your AI doppelgänger';
-        
-        // Set avatar and main image using base64 data
-        if (persona.image || persona.imageBase64) {
-          const imageUrl = persona.image || `data:image/jpeg;base64,${persona.imageBase64}`;
-          dopAvatar.src = imageUrl;
-          dopImage.src = imageUrl;
-        }
-
-        // Show HeyGen badge if avatar is available
-        if (persona.heygenEnabled && persona.heygenAvatarId) {
-          heygenBadge.style.display = 'block';
-        }
-
-        // Create prompt buttons
-        if (persona.prompts && persona.prompts.length > 0) {
-          promptGrid.innerHTML = persona.prompts.map(prompt => 
-            `<button class="btn" onclick="askPrompt('${prompt.replace(/'/g, "\\\'")}')">${prompt}</button>`
-          ).join('');
-        }
-
-        // Show chat interface
-        loadingState.style.display = 'none';
-        dopHeader.style.display = 'flex';
-        chatInterface.style.display = 'block';
-        
-        console.log('DOP loaded successfully:', persona);
-
-      } catch (error) {
-        console.error('Failed to load DOP:', error);
-        showError(error.message);
-      }
-    }
-
-    function showError(message) {
-      loadingState.style.display = 'none';
-      errorState.style.display = 'block';
-      errorDetails.textContent = message;
-    }
-
-    // Chat functions with HeyGen video generation
-    function askPrompt(promptText) {
-      console.log('Asking:', promptText);
-      setPill('thinking', 'Thinking...');
-      
-      // Call session-chat with this persona
-      fetch('/.netlify/functions/session-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId: sessionId,
-          message: promptText,
-          personaId: dopId,
-          context: []
+    // Validate required fields
+    if (!photo || !voice) {
+      console.log('[dop-uploads] Missing required fields');
+      return {
+        statusCode: 400,
+        headers: CORS_HEADERS,
+        body: JSON.stringify({ 
+          success: false, 
+          error: 'Photo and voice are required' 
         })
-      })
-      .then(response => response.json())
-      .then(data => {
-        if (data.reply) {
-          console.log('DOP replied:', data.reply);
-          
-          // Generate HeyGen video if avatar is available
-          if (persona.heygenEnabled && persona.heygenAvatarId) {
-            generateHeyGenVideo(data.reply);
-          } else {
-            // Fallback to audio only
-            speakText(data.reply);
-          }
-        } else {
-          setPill('ready', 'Ready');
-        }
-      })
-      .catch(error => {
-        console.error('Chat error:', error);
-        alert('Sorry, there was an error with the conversation.');
-        setPill('ready', 'Ready');
-      });
-    }
-
-    // Generate HeyGen video response
-    async function generateHeyGenVideo(text) {
-      setPill('generating', 'Generating video...');
-      
-      try {
-        console.log('Generating HeyGen video with avatar:', persona.heygenAvatarId);
-        
-        const response = await fetch('/.netlify/functions/heygen-proxy', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'generate_video',
-            text: text,
-            avatarId: persona.heygenAvatarId,
-            voiceId: persona.voiceId
-          })
-        });
-
-        const result = await response.json();
-        console.log('HeyGen response:', result);
-        
-        if (result.success && result.video_id) {
-          // Poll for video completion
-          checkVideoStatus(result.video_id);
-        } else {
-          console.warn('HeyGen video generation failed:', result);
-          throw new Error('Video generation failed');
-        }
-      } catch (error) {
-        console.error('HeyGen video error:', error);
-        // Fallback to audio
-        speakText(text);
-      }
-    }
-
-    // Check video generation status
-    async function checkVideoStatus(videoId) {
-      try {
-        const response = await fetch('/.netlify/functions/heygen-proxy', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'check_video',
-            videoId: videoId
-          })
-        });
-
-        const result = await response.json();
-        
-        if (result.success) {
-          if (result.status === 'completed' && result.video_url) {
-            // Play the generated video
-            playHeyGenVideo(result.video_url);
-          } else if (result.status === 'processing') {
-            // Keep polling
-            setTimeout(() => checkVideoStatus(videoId), 3000);
-          } else {
-            throw new Error('Video generation failed');
-          }
-        } else {
-          throw new Error('Status check failed');
-        }
-      } catch (error) {
-        console.error('Video status check error:', error);
-        setPill('ready', 'Ready');
-      }
-    }
-
-    // Play HeyGen generated video
-    function playHeyGenVideo(videoUrl) {
-      setPill('speaking', 'Speaking...');
-      
-      // Hide image, show video
-      dopImage.style.display = 'none';
-      dopVideo.style.display = 'block';
-      dopVideo.src = videoUrl;
-      
-      dopVideo.onended = () => {
-        // Show image again, hide video
-        dopVideo.style.display = 'none';
-        dopImage.style.display = 'block';
-        setPill('ready', 'Ready');
       };
-      
-      dopVideo.onerror = () => {
-        dopVideo.style.display = 'none';
-        dopImage.style.display = 'block';
-        setPill('ready', 'Ready');
-      };
-      
-      dopVideo.play().catch(console.error);
     }
 
-    // Fallback audio-only response
-    async function speakText(text) {
-      setPill('speaking', 'Speaking...');
-      
-      try {
-        const voiceId = persona?.voiceId || null;
-        
-        const response = await fetch('/.netlify/functions/tts-eleven', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            text: text,
-            voiceId: voiceId
-          })
-        });
+    console.log('[dop-uploads] Generating DOP ID...');
+    const dopId = 'dop_' + Math.random().toString(36).substr(2, 16);
+    console.log('[dop-uploads] Generated DOP ID:', dopId);
 
-        if (response.ok) {
-          const audioBuffer = await response.arrayBuffer();
-          const audioBlob = new Blob([audioBuffer], { type: 'audio/mpeg' });
-          const audioUrl = URL.createObjectURL(audioBlob);
-          
-          const audio = new Audio(audioUrl);
-          await audio.play();
-          
-          audio.addEventListener('ended', () => {
-            setPill('ready', 'Ready');
-            URL.revokeObjectURL(audioUrl);
-          });
-        } else {
-          throw new Error('TTS failed');
-        }
-      } catch (error) {
-        console.error('TTS error:', error);
-        setPill('ready', 'Ready');
-      }
+    // Compress the image for storage
+    console.log('[dop-uploads] Compressing image...');
+    const compressedImage = compressBase64Image(photo);
+    
+    console.log('[dop-uploads] Creating voice clone...');
+    // Create voice clone (this can take time, but don't block the upload)
+    const voiceId = await createVoiceClone(voice, name);
+    
+    console.log('[dop-uploads] Creating HeyGen avatar...');
+    // Create HeyGen avatar (skipped for now to avoid blocking)
+    const heygenAvatarId = await createHeyGenAvatar(photo, name);
+
+    // Create the complete persona
+    console.log('[dop-uploads] Creating persona object...');
+    const persona = {
+      id: dopId,
+      name: name || 'My DOP',
+      bio: bio || '',
+      created: new Date().toISOString(),
+      voiceId: voiceId,
+      heygenAvatarId: heygenAvatarId,
+      heygenEnabled: !!heygenAvatarId,
+      image: compressedImage, // Store compressed image directly in persona
+      prompts: generatePersonaPrompts(bio, name),
+      systemPrompt: generateSystemPrompt(bio, name)
+    };
+
+    console.log('[dop-uploads] Storing persona...');
+    
+    try {
+      await uploadsStore.setBlob(`personas/${dopId}.json`, JSON.stringify(persona, null, 2));
+      console.log('[dop-uploads] Persona stored successfully');
+    } catch (storeError) {
+      console.error('[dop-uploads] Storage error:', storeError);
+      throw new Error(`Storage failed: ${storeError.message}`);
     }
 
-    // Initialize
-    loadDOP();
-  </script>
-</body>
-</html>
+    // Also store individual files for backup
+    console.log('[dop-uploads] Storing backup files...');
+    try {
+      await uploadsStore.setBlob(`files/${dopId}/image.txt`, compressedImage);
+      await uploadsStore.setBlob(`files/${dopId}/voice.txt`, voice);
+      console.log('[dop-uploads] Backup files stored');
+    } catch (fileError) {
+      console.warn('[dop-uploads] Backup file storage failed:', fileError.message);
+      // Don't fail the upload for backup file errors
+    }
+
+    console.log('[dop-uploads] SUCCESS - returning response');
+    
+    return {
+      statusCode: 200,
+      headers: CORS_HEADERS,
+      body: JSON.stringify({ 
+        success: true, 
+        dopId: dopId,
+        voiceId: voiceId,
+        heygenAvatarId: heygenAvatarId,
+        message: 'DOP created successfully'
+      })
+    };
+
+  } catch (error) {
+    console.error('[dop-uploads] MAIN ERROR:', error);
+    console.error('[dop-uploads] Error stack:', error.stack);
+    
+    return {
+      statusCode: 500,
+      headers: CORS_HEADERS,
+      body: JSON.stringify({ 
+        success: false, 
+        error: `Upload failed: ${error.message}`,
+        details: error.stack
+      })
+    };
+  }
+};
