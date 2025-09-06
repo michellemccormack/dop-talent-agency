@@ -94,6 +94,7 @@
     }
     .status.error{background:rgba(255,107,107,.1); border:1px solid #ff6b6b; color:#ff6b6b}
     .status.success{background:rgba(22,219,101,.1); border:1px solid var(--ok); color:var(--ok)}
+    .status.loading{background:rgba(138,140,255,.1); border:1px solid var(--accent); color:var(--accent)}
 
     @media (max-width:768px){
       .upload-grid{grid-template-columns:1fr}
@@ -105,7 +106,7 @@
   <div class="container">
     <div class="header">
       <h1>Create Your DOP</h1>
-      <p>Upload your photo and voice sample to create an AI doppelgänger</p>
+      <p>Upload your photo and voice sample to create an AI doppelganger</p>
     </div>
 
     <div class="card">
@@ -223,7 +224,7 @@
       }
     }
 
-    // Create DOP
+    // Create DOP - FIXED VERSION
     createBtn.addEventListener('click', async () => {
       if (!photoFile || !voiceFile) return;
 
@@ -237,39 +238,39 @@
           fileToBase64(voiceFile)
         ]);
 
-        // Create DOP with files
+        console.log('Files converted, uploading to dop-uploads function...');
+
+        // Create DOP with correct field names that match dop-uploads.js
         const uploadResponse = await fetch('/.netlify/functions/dop-uploads', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            imageBase64: photoBase64.split(',')[1], // Remove data:image/...;base64, prefix
-            imageType: photoFile.type,
-            imageName: photoFile.name,
-            audioBase64: voiceBase64.split(',')[1], // Remove data:audio/...;base64, prefix
-            audioType: voiceFile.type,
-            audioName: voiceFile.name,
-            dopName: dopNameInput.value.trim() || null,
-            bio: dopBioInput.value.trim() || ''
+            photo: photoBase64,        // Matches dop-uploads.js
+            voice: voiceBase64,        // Matches dop-uploads.js  
+            name: dopNameInput.value.trim() || 'My DOP',  // Matches dop-uploads.js
+            bio: dopBioInput.value.trim() || ''          // Matches dop-uploads.js
           })
         });
 
         const uploadData = await uploadResponse.json();
         
         if (!uploadResponse.ok) {
-          throw new Error(uploadData.error || 'Upload failed');
+          throw new Error(uploadData.error || `Upload failed (${uploadResponse.status})`);
         }
 
+        console.log('Upload successful:', uploadData);
         showStatus('success', `DOP created successfully! ID: ${uploadData.dopId}`);
         
         // Redirect to chat page after a moment
         setTimeout(() => {
-          window.location.href = `/chat/${uploadData.dopId}`;
+          window.location.href = `/chat.html?id=${uploadData.dopId}`;
         }, 2000);
 
       } catch (error) {
-        console.error('Error:', error);
+        console.error('Upload error:', error);
         showStatus('error', error.message || 'Failed to create DOP. Please try again.');
         createBtn.disabled = false;
+        updateCreateButton();
       }
     });
 
