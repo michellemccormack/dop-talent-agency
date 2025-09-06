@@ -1,21 +1,40 @@
-// functions/_blobs.js
+// functions/_lib/blobs.js
+// Complete blob storage implementation for Netlify
+
 const { getStore } = require('@netlify/blobs');
 
+// Create the uploads store
 function uploadsStore() {
-  const siteId =
-    process.env.NETLIFY_SITE_ID ||
-    process.env.BLOBS_SITE_ID;
-
-  const token =
-    process.env.NETLIFY_BLOBS_TOKEN ||
-    process.env.BLOBS_TOKEN;
-
-  if (!siteId || !token) {
-    throw new Error('Missing NETLIFY_SITE_ID / NETLIFY_BLOBS_TOKEN (or BLOBS_* fallbacks).');
-  }
-
-  // Pass both capitalizations to be safe across lib versions.
-  return getStore({ name: 'dop-uploads', siteId, siteID: siteId, token });
+  return getStore({
+    name: 'uploads',
+    consistency: 'strong'
+  });
 }
 
-module.exports = { uploadsStore };
+// Export wrapper with setBlob method
+const uploadsStoreWrapper = {
+  async setBlob(key, data) {
+    const store = uploadsStore();
+    await store.set(key, data);
+    console.log(`[blobs] Stored: ${key}`);
+  },
+  
+  async getBlob(key) {
+    const store = uploadsStore();
+    return await store.get(key);
+  },
+  
+  async deleteBlob(key) {
+    const store = uploadsStore();
+    await store.delete(key);
+  },
+  
+  async list(options = {}) {
+    const store = uploadsStore();
+    return await store.list(options);
+  }
+};
+
+module.exports = {
+  uploadsStore: uploadsStoreWrapper
+};
