@@ -23,7 +23,9 @@ const uploadsStoreWrapper = {
   
   async getBlob(key) {
     const store = uploadsStore();
-    return await store.get(key);
+    const data = await store.get(key, { type: 'text' });
+    console.log(`[blobs] Retrieved ${key}: ${data ? 'found' : 'not found'}`);
+    return data;
   },
   
   async deleteBlob(key) {
