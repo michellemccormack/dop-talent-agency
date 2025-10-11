@@ -18,3 +18,7 @@
   from = "/chat/:id"
   to   = "/chat.html?id=:id"
   status = 200
+
+  [[scheduled]]
+path = "/.netlify/functions/heygen-video-processor"
+schedule = "*/2 * * * *"
