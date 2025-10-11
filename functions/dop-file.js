@@ -14,17 +14,6 @@ const guessType = (key = '') => {
   return 'application/octet-stream';
 };
 
-const guessType = (key = '') => {
-  const k = key.toLowerCase();
-  if (k.endsWith('.png')) return 'image/png';
-  if (k.endsWith('.jpg') || k.endsWith('.jpeg')) return 'image/jpeg';
-  if (k.endsWith('.webp')) return 'image/webp';
-  if (k.endsWith('.mp3') || k.endsWith('.mpeg')) return 'audio/mpeg';
-  if (k.endsWith('.wav')) return 'audio/wav';
-  if (k.endsWith('.webm')) return 'audio/webm';
-  return 'application/octet-stream';
-};
-
 exports.handler = async (event) => {
   try {
     const key = event.queryStringParameters?.key;
