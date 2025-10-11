@@ -1,10 +1,10 @@
 // functions/_lib/blobs.js
-// Robust Netlify Blobs helper — supports NETLIFY_* or BLOBS_* env vars.
-// Exports both the FUNCTION `uploadsStore()` and a small helper wrapper.
+// Netlify Blobs helper: supports NETLIFY_* or BLOBS_* env vars.
+// Exports a callable uploadsStore() AND attaches helper methods to it
+// for backwards compatibility with code that uses uploadsStore.setBlob(...).
 
 const { getStore } = require('@netlify/blobs');
 
-// Resolve env with sensible fallbacks + clear diagnostics
 function resolveEnv() {
   const siteID =
     process.env.NETLIFY_SITE_ID ||
@@ -17,15 +17,15 @@ function resolveEnv() {
     '';
 
   if (!siteID || !token) {
-    const msgs = [];
-    if (!siteID) msgs.push('NETLIFY_SITE_ID or BLOBS_SITE_ID');
-    if (!token)  msgs.push('NETLIFY_BLOBS_TOKEN or BLOBS_TOKEN');
-    console.error('[blobs] Missing env:', msgs.join(', '));
+    const missing = [];
+    if (!siteID) missing.push('NETLIFY_SITE_ID or BLOBS_SITE_ID');
+    if (!token)  missing.push('NETLIFY_BLOBS_TOKEN or BLOBS_TOKEN');
+    console.error('[blobs] Missing env:', missing.join(', '));
   }
   return { siteID, token };
 }
 
-// Create the uploads store (callable function)
+// Primary callable that returns a real store
 function uploadsStore() {
   const { siteID, token } = resolveEnv();
   return getStore({
@@ -36,34 +36,37 @@ function uploadsStore() {
   });
 }
 
-// Convenience helpers (optional)
-const uploadsStoreWrapper = {
-  async setBlob(key, data) {
-    const store = uploadsStore();
-    await store.set(key, data);
-    console.log(`[blobs] Stored: ${key}`);
-  },
-
-  async getBlob(key) {
-    const store = uploadsStore();
-    const data = await store.get(key, { type: 'text' });
-    console.log(`[blobs] Retrieved ${key}: ${data ? 'found' : 'not found'}`);
-    return data;
-  },
-
-  async deleteBlob(key) {
-    const store = uploadsStore();
-    await store.delete(key);
-    console.log(`[blobs] Deleted: ${key}`);
-  },
-
-  async list(options = {}) {
-    const store = uploadsStore();
-    return store.list(options);
-  },
+// Attach convenience methods directly to uploadsStore (back-compat)
+uploadsStore.setBlob = async (key, data) => {
+  const store = uploadsStore();
+  await store.set(key, data);
+  console.log(`[blobs] Stored: ${key}`);
 };
 
-module.exports = {
-  uploadsStore,          // function — callers use uploadsStore()
-  uploads: uploadsStoreWrapper,
+uploadsStore.getBlob = async (key, opts = { type: 'text' }) => {
+  const store = uploadsStore();
+  const data = await store.get(key, opts);
+  console.log(`[blobs] Retrieved ${key}: ${data ? 'found' : 'not found'}`);
+  return data;
 };
+
+uploadsStore.deleteBlob = async (key) => {
+  const store = uploadsStore();
+  await store.delete(key);
+  console.log(`[blobs] Deleted: ${key}`);
+};
+
+uploadsStore.list = async (options = {}) => {
+  const store = uploadsStore();
+  return store.list(options);
+};
+
+// Optional separate wrapper export (if other files import { uploads }):
+const uploads = {
+  setBlob: uploadsStore.setBlob,
+  getBlob: uploadsStore.getBlob,
+  deleteBlob: uploadsStore.deleteBlob,
+  list: uploadsStore.list,
+};
+
+module.exports = { uploadsStore, uploads };
