@@ -40,5 +40,9 @@ const uploadsStoreWrapper = {
 };
 
 module.exports = {
-  uploadsStore: uploadsStoreWrapper
+  // export the FUNCTION so callers can do uploadsStore()
+  uploadsStore,                 
+
+  // keep the convenience helpers too (optional)
+  uploads: uploadsStoreWrapper  
 };
