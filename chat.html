@@ -30,6 +30,7 @@
       min-height:100vh;
     }
 
+    /* Layout */
     .wrap{max-width:1100px; margin:0 auto; padding:28px 20px 48px}
     .card{
       position:relative;
@@ -41,67 +42,40 @@
       margin:18px 0;
     }
     .section{max-width:980px; margin:0 auto}
-    
-    /* Header */
-    .header{
-      display:flex; align-items:center; gap:16px; margin-bottom:24px;
-      padding:16px 0; border-bottom:1px solid var(--stroke);
-    }
-    .avatar{
-      width:50px; height:50px; border-radius:50%;
-      background:var(--stroke); object-fit:cover;
-    }
-    .dop-info h1{
-      margin:0; font-size:1.5rem; font-weight:700;
-      font-family:'Montserrat',sans-serif;
-    }
-    .dop-info p{margin:4px 0 0; color:var(--muted); font-size:14px}
+    .stack-s{margin-top:8px}
+    .stack-m{margin-top:16px}
+    .stack-l{margin-top:24px}
+    .stack-xl{margin-top:32px}
 
-    /* Loading/Error States */
-    .status{
-      text-align:center; padding:40px; color:var(--muted);
+    /* Reset Session button */
+    .reset{
+      position:absolute; right:18px; top:18px;
+      appearance:none; border:1px solid var(--stroke-strong);
+      background:#191a23; color:#cfd0dc; font-size:12px;
+      border-radius:12px; padding:8px 10px; cursor:pointer;
     }
-    .status.error{color:var(--stop)}
-    .spinner{
-      width:32px; height:32px; border:3px solid var(--stroke);
-      border-top-color:var(--accent); border-radius:50%;
-      animation:spin 1s linear infinite; margin:0 auto 16px;
-    }
-    @keyframes spin{to{transform:rotate(360deg)}}
+    .reset:hover{filter:brightness(1.05)}
 
-    /* Prompt buttons */
-    .prompt-grid{
-      display:flex; flex-wrap:wrap; justify-content:center;
-      gap:12px 14px; margin:18px auto 36px; max-width:1000px; padding:0 6px;
-    }
-    .btn{
+    /* BIG mic button */
+    .mic-rail{display:flex; justify-content:center}
+    .mic{
       appearance:none; border:none; cursor:pointer;
-      padding:10px 14px; border-radius:16px; font-size:12px;
-      font-family:'Montserrat',sans-serif; font-weight:700; text-transform:uppercase;
-      background:linear-gradient(180deg,#fff,#efefef); color:#000;
-      border:1px solid #e7e7e7; white-space:nowrap;
-      transition:transform .15s ease, opacity .15s ease;
+      padding:18px 26px; border-radius:18px;
+      font-size:18px; line-height:1; letter-spacing:.4px;
+      font-family:'Montserrat',sans-serif; font-weight:800; text-transform:uppercase;
+      background:linear-gradient(180deg,#fff,#eee); color:#000;
+      box-shadow:0 8px 20px rgba(0,0,0,.25);
+      min-width:240px;
+      transition:transform .15s ease, opacity .15s ease, background .15s ease;
     }
-    .btn:hover{transform:translateY(-1px)}
-    .btn[disabled]{opacity:.45; cursor:not-allowed}
-
-    /* Video/Image Display */
-    .hero{display:flex; justify-content:center; position:relative; margin-bottom:24px}
-    .dop-video{
-      width:min(100%,560px); aspect-ratio:16/9; max-height:400px; border-radius:14px;
-      border:1px solid var(--stroke-strong);
-      box-shadow:0 12px 32px rgba(0,0,0,.35);
-      background:var(--panel); object-fit:cover;
-    }
-    .dop-image{
-      width:min(100%,400px); max-height:400px; border-radius:14px;
-      border:1px solid var(--stroke-strong);
-      box-shadow:0 12px 32px rgba(0,0,0,.35);
-      object-fit:cover; background:var(--panel);
-    }
+    .mic:hover{transform:translateY(-1px)}
+    .mic:active{transform:translateY(0)}
+    .mic.listening{background:linear-gradient(180deg,var(--warn),#ffdf8a)}
+    .mic.stopping{background:linear-gradient(180deg,var(--stop),#ff8a8a); color:#000}
+    .mic[disabled]{opacity:.45; cursor:not-allowed}
 
     /* Status pill */
-    .status-rail{display:flex; justify-content:center; margin-top:16px}
+    .status-rail{display:flex; justify-content:center}
     .pill{
       display:inline-flex; align-items:center; gap:8px;
       background:#191a23; border:1px solid var(--stroke-strong);
@@ -110,350 +84,594 @@
       box-shadow:0 6px 16px rgba(0,0,0,.25);
     }
     .dot{width:8px; height:8px; border-radius:999px; background:#666}
-    .pill.thinking .dot{background:#8a8cff}
-    .pill.generating .dot{background:#ffd166}
-    .pill.speaking .dot{background:#16db65}
-    .pill.ready .dot{background:#6f7284}
+    .pill.listening .dot{background:#f7c948}
+    .pill.thinking  .dot{background:#8a8cff}
+    .pill.speaking  .dot{background:#16db65}
+    .pill.ready     .dot{background:#6f7284}
 
-    /* HeyGen badge */
-    .heygen-badge{
-      position:absolute; top:12px; right:12px;
-      background:linear-gradient(135deg,#00d4ff,#0099cc);
-      color:#000; font-size:10px; font-weight:700;
-      padding:4px 8px; border-radius:12px; text-transform:uppercase;
-      box-shadow:0 4px 12px rgba(0,212,255,.3);
+    /* Instructions */
+    .instructions{
+      text-align:center;
+      font-family:'Montserrat',sans-serif; font-weight:800; text-transform:uppercase;
+      color:#d8d9e3; letter-spacing:.4px; font-size:14px;
+    }
+    .instructions small{display:block; color:#bfc1cd; margin-top:6px; font-size:9px}
+
+    /* Prompt buttons */
+    .prompt-grid{
+      display:flex; flex-wrap:wrap; justify-content:center;
+      gap:12px 14px;
+      margin:18px auto 36px;
+      max-width:1000px;
+      padding:0 6px;
+    }
+    .btn{
+      appearance:none; border:none; cursor:pointer;
+      padding:10px 14px;
+      border-radius:16px; font-size:12px;
+      font-family:'Montserrat',sans-serif; font-weight:700; text-transform:uppercase;
+      background:linear-gradient(180deg,#fff,#efefef); color:#000;
+      border:1px solid #e7e7e7;
+      white-space:nowrap;
+      transition:transform .15s ease, opacity .15s ease;
+    }
+    .btn:hover{transform:translateY(-1px)}
+    .btn[disabled]{opacity:.45; cursor:not-allowed}
+    .btn.active{background:linear-gradient(180deg,#e9ebff,#dfe1ff); border-color:#cfd1ff}
+
+    /* Video */
+    .hero{display:flex; justify-content:center; position:relative}
+    #resp{
+      width:min(100%,560px); aspect-ratio:9/16; max-height:70vh;
+      border-radius:14px; background:#000;
+      border:1px solid var(--stroke-strong);
+      box-shadow:0 12px 32px rgba(0,0,0,.35);
+      opacity:1; transition:opacity 320ms ease;
+      cursor:pointer; outline:none;
+    }
+    #resp:focus-visible{box-shadow:0 0 0 3px var(--accent)}
+    .fade-start{opacity:0}
+
+    /* Buffering overlay */
+    .overlay {
+      position:absolute; inset:0; display:none;
+      align-items:center; justify-content:center;
+      background:rgba(0,0,0,.18); border-radius:14px;
+      pointer-events:none;
+    }
+    .overlay.show{display:flex}
+    .spinner{
+      width:38px; height:38px; border-radius:999px;
+      border:3px solid rgba(255,255,255,.35);
+      border-top-color:#fff; animation:spin 900ms linear infinite;
+      box-shadow:0 0 18px rgba(255,255,255,.25);
+    }
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    .footer{font-size:12px; color:#b7b8c3; text-align:center; margin-top:26px; margin-bottom:60px}
+
+    /* Toast */
+    .toast{
+      position:absolute; left:50%; bottom:20px; transform:translateX(-50%);
+      background:#1b1c25; color:#eaeaf1; border:1px solid var(--stroke-strong);
+      padding:10px 14px; border-radius:12px; box-shadow:var(--shadow);
+      font-size:12px; letter-spacing:.2px;
+      opacity:0; pointer-events:none; transition:opacity .20s ease;
+    }
+    .toast.show{opacity:1}
+
+    /* SR-only */
+    .sr-only{
+      position:absolute !important; width:1px; height:1px; padding:0; margin:-1px;
+      overflow:hidden; clip:rect(0,0,0,0); border:0;
     }
 
+    /* Loading state */
+    .loading-state{
+      text-align:center; padding:60px 20px; color:var(--muted);
+    }
+    .loading-state .spinner{margin:0 auto 20px}
+
     @media (max-width:480px){
-      .header{flex-direction:column; text-align:center}
-      .dop-video, .dop-image{max-height:300px}
+      .mic{min-width:195px; font-size:16px; padding:16px 22px}
+      .btn{width:100%}
+      #resp{max-height:68vh}
+      .prompt-grid{gap:10px 12px; margin:14px auto 26px}
     }
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="card section">
-      <!-- DOP Header -->
-      <div class="header" id="dopHeader" style="display:none">
-        <img class="avatar" id="dopAvatar" alt="DOP Avatar" />
-        <div class="dop-info">
-          <h1 id="dopName">Loading...</h1>
-          <p id="dopDescription">Loading personality...</p>
-        </div>
-      </div>
-
-      <!-- Loading/Error States -->
-      <div class="status" id="loadingState">
+      <!-- Loading state -->
+      <div class="loading-state" id="loadingState">
         <div class="spinner"></div>
         <div>Loading your DOP...</div>
       </div>
-      
-      <div class="status error" id="errorState" style="display:none">
-        <div>Sorry, this DOP couldn't be loaded.</div>
-        <div style="font-size:12px; margin-top:8px" id="errorDetails"></div>
-      </div>
 
-      <!-- Chat Interface (hidden until loaded) -->
-      <div id="chatInterface" style="display:none">
-        <!-- DOP Video/Image Display -->
-        <div class="hero">
-          <video class="dop-video" id="dopVideo" style="display:none" controls playsinline>
-            Your browser does not support video playback.
-          </video>
-          <img class="dop-image" id="dopImage" alt="DOP" />
-          <div class="heygen-badge" id="heygenBadge" style="display:none">AI Avatar</div>
+      <!-- Main interface (hidden until loaded) -->
+      <div id="mainInterface" style="display:none">
+        <!-- Reset Session (Tier 1 memory) -->
+        <button class="reset" id="resetBtn" type="button" title="Reset session (clears local memory)">Reset Session</button>
+
+        <!-- BIG mic button -->
+        <div class="mic-rail">
+          <button class="mic" id="micBtn" aria-pressed="false">🎤 Tap to Talk</button>
         </div>
 
-        <!-- Status pill -->
-        <div class="status-rail">
-          <div id="statusPill" class="pill ready">
-            <span class="dot"></span>
-            <span id="pillText">Ready</span>
+        <!-- status pill -->
+        <div class="status-rail stack-s">
+          <div id="statusPill" class="pill ready" aria-live="polite">
+            <span class="dot"></span><span id="pillText">Ready</span>
           </div>
         </div>
 
-        <!-- Prompt Buttons -->
-        <div class="prompt-grid" id="promptGrid">
+        <!-- instructions -->
+        <div class="instructions stack-l">
+          <span id="dopNameDisplay">Ask one of these questions.</span>
+          <small>If your microphone doesn't work, tap the question.</small>
+        </div>
+
+        <!-- prompt buttons -->
+        <div class="prompt-grid stack-m" id="promptGrid">
           <!-- Dynamically populated -->
+        </div>
+
+        <!-- response video + overlay -->
+        <div class="hero">
+          <video id="resp" playsinline preload="auto" tabindex="0" aria-label="Response video (tap to play or pause)"></video>
+          <div class="overlay" id="respOverlay"><div class="spinner"></div></div>
         </div>
       </div>
     </div>
   </div>
 
+  <!-- SR-only status for screen readers -->
+  <div id="srStatus" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+
   <script>
-    // Get DOP ID from URL query parameter - FIXED
+    // ===== DYNAMIC PERSONA LOADING =====
     const urlParams = new URLSearchParams(window.location.search);
     const dopId = urlParams.get('id');
+    
+    let PERSONA_DATA = null;
+    let PROMPTS_CONFIG = [];
 
-    console.log('[chat] DOP ID from URL:', dopId);
-
-    // Elements
-    const loadingState = document.getElementById('loadingState');
-    const errorState = document.getElementById('errorState');
-    const errorDetails = document.getElementById('errorDetails');
-    const chatInterface = document.getElementById('chatInterface');
-    const dopHeader = document.getElementById('dopHeader');
-    const dopName = document.getElementById('dopName');
-    const dopDescription = document.getElementById('dopDescription');
-    const dopAvatar = document.getElementById('dopAvatar');
-    const dopImage = document.getElementById('dopImage');
-    const dopVideo = document.getElementById('dopVideo');
-    const heygenBadge = document.getElementById('heygenBadge');
-    const promptGrid = document.getElementById('promptGrid');
-    const statusPill = document.getElementById('statusPill');
-    const pillText = document.getElementById('pillText');
-
-    // Session state
-    let persona = null;
-    let sessionId = generateSessionId();
-
-    function generateSessionId() {
-      return 'chat_' + Math.random().toString(36).substr(2, 9);
-    }
-
-    // Status pill
-    function setPill(mode, text) {
-      statusPill.classList.remove('thinking', 'generating', 'speaking', 'ready');
-      statusPill.classList.add(mode);
-      pillText.textContent = text;
-    }
-
-    // Load DOP persona
-    async function loadDOP() {
-      if (!dopId) {
-        showError('No DOP ID provided in URL');
-        return;
-      }
-
-      console.log('[chat] Loading DOP:', dopId);
+    // Load persona on startup
+    async function loadPersona() {
+      const loadingState = document.getElementById('loadingState');
+      const mainInterface = document.getElementById('mainInterface');
 
       try {
-        // Load persona config
-        const personaResponse = await fetch(`/.netlify/functions/dop-persona?id=${encodeURIComponent(dopId)}`);
-        
-        console.log('[chat] Persona response status:', personaResponse.status);
-        
-        if (!personaResponse.ok) {
-          const errorData = await personaResponse.json().catch(() => ({}));
-          throw new Error(errorData.error || `Failed to load DOP (${personaResponse.status})`);
+        if (!dopId) {
+          // No ID - use default Sasha persona
+          console.log('[chat] No DOP ID, using default persona');
+          PERSONA_DATA = {
+            name: 'Sasha',
+            prompts: [
+              'What do you like to do for fun?',
+              'Where are you from?',
+              "What's your favorite way to relax?"
+            ]
+          };
+          PROMPTS_CONFIG = [
+            { question: 'What do you like to do for fun?', file: 'assets/p_fun.mp4' },
+            { question: 'Where are you from?', file: 'assets/p_from.mp4' },
+            { question: "What's your favorite way to relax?", file: 'assets/p_relax.mp4' }
+          ];
+        } else {
+          // Load persona from backend
+          console.log('[chat] Loading DOP:', dopId);
+          const response = await fetch(`/.netlify/functions/dop-persona?id=${encodeURIComponent(dopId)}`);
+          
+          if (!response.ok) {
+            throw new Error(`Failed to load DOP: ${response.status}`);
+          }
+
+          PERSONA_DATA = await response.json();
+          console.log('[chat] Persona loaded:', PERSONA_DATA);
+
+          // Build prompts config (for user-generated DOPs, we don't have video files yet)
+          PROMPTS_CONFIG = (PERSONA_DATA.prompts || []).map(prompt => ({
+            question: prompt,
+            file: null // No pre-recorded videos for user DOPs yet
+          }));
         }
 
-        persona = await personaResponse.json();
-        console.log('[chat] Persona loaded:', persona);
-        
-        // Update UI with DOP info
-        dopName.textContent = persona.displayName || persona.name || 'DOP';
-        dopDescription.textContent = persona.description || persona.bio || 'Your AI doppelgänger';
-        
-        // Set avatar and main image using base64 data
-        if (persona.image || persona.imageBase64) {
-          const imageUrl = persona.image || `data:image/jpeg;base64,${persona.imageBase64}`;
-          dopAvatar.src = imageUrl;
-          dopImage.src = imageUrl;
-        }
-
-        // Show HeyGen badge if avatar is available
-        if (persona.heygenEnabled && persona.heygenAvatarId) {
-          heygenBadge.style.display = 'block';
-        }
+        // Update UI
+        document.getElementById('dopNameDisplay').textContent = 
+          `Ask ${PERSONA_DATA.name || 'DOP'} one of these questions.`;
 
         // Create prompt buttons
-        if (persona.prompts && persona.prompts.length > 0) {
-          promptGrid.innerHTML = persona.prompts.map(prompt => 
-            `<button class="btn" onclick="askPrompt('${prompt.replace(/'/g, "\\'")}')">${prompt}</button>`
-          ).join('');
-        }
+        const grid = document.getElementById('promptGrid');
+        grid.innerHTML = PROMPTS_CONFIG.map((p, i) => 
+          `<button class="btn" data-index="${i}">${p.question}</button>`
+        ).join('');
 
-        // Show chat interface
+        // Show interface
         loadingState.style.display = 'none';
-        dopHeader.style.display = 'flex';
-        chatInterface.style.display = 'block';
-        
-        console.log('[chat] DOP loaded successfully');
+        mainInterface.style.display = 'block';
+
+        // Initialize the rest of the app
+        initializeApp();
 
       } catch (error) {
-        console.error('[chat] Failed to load DOP:', error);
-        showError(error.message);
+        console.error('[chat] Failed to load persona:', error);
+        loadingState.innerHTML = `
+          <div style="color:var(--stop)">Failed to load DOP</div>
+          <div style="font-size:12px; margin-top:8px">${error.message}</div>
+        `;
       }
     }
 
-    function showError(message) {
-      loadingState.style.display = 'none';
-      errorState.style.display = 'block';
-      errorDetails.textContent = message;
-    }
+    // Start loading
+    loadPersona();
 
-    // Chat functions with HeyGen video generation
-    function askPrompt(promptText) {
-      console.log('Asking:', promptText);
-      setPill('thinking', 'Thinking...');
-      
-      // Call session-chat with this persona
-      fetch('/.netlify/functions/session-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId: sessionId,
-          message: promptText,
-          personaId: dopId,
-          context: []
-        })
-      })
-      .then(response => response.json())
-      .then(data => {
-        if (data.reply) {
-          console.log('DOP replied:', data.reply);
-          
-          // Generate HeyGen video if avatar is available
-          if (persona.heygenEnabled && persona.heygenAvatarId) {
-            generateHeyGenVideo(data.reply);
-          } else {
-            // Fallback to audio only
-            speakText(data.reply);
-          }
-        } else {
-          setPill('ready', 'Ready');
+    // ===== REST OF THE WORKING CODE FROM INDEX.HTML =====
+    function initializeApp() {
+      const resp = document.getElementById('resp');
+      const respOverlay = document.getElementById('respOverlay');
+      const micBtn = document.getElementById('micBtn');
+      const resetBtn = document.getElementById('resetBtn');
+      const statusPill = document.getElementById('statusPill');
+      const pillText = document.getElementById('pillText');
+      const srStatus = document.getElementById('srStatus');
+      const grid = document.getElementById('promptGrid');
+
+      // Session
+      let sessionId = 'sess_' + Date.now() + '_' + Math.random().toString(36).slice(2,9);
+      let conversationHistory = [];
+      const MAX_CONTEXT = 8;
+
+      function pushTurn(role, content, meta={}){
+        conversationHistory.push({ role, content, ...meta });
+        if (conversationHistory.length > MAX_CONTEXT*2) {
+          conversationHistory.splice(0, conversationHistory.length - MAX_CONTEXT*2);
         }
-      })
-      .catch(error => {
-        console.error('Chat error:', error);
-        alert('Sorry, there was an error with the conversation.');
-        setPill('ready', 'Ready');
-      });
-    }
-
-    // Generate HeyGen video response
-    async function generateHeyGenVideo(text) {
-      setPill('generating', 'Generating video...');
-      
-      try {
-        console.log('Generating HeyGen video with avatar:', persona.heygenAvatarId);
-        
-        const response = await fetch('/.netlify/functions/heygen-proxy', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'generate_video',
-            text: text,
-            avatarId: persona.heygenAvatarId,
-            voiceId: persona.voiceId
-          })
-        });
-
-        const result = await response.json();
-        console.log('HeyGen response:', result);
-        
-        if (result.success && result.video_id) {
-          // Poll for video completion
-          checkVideoStatus(result.video_id);
-        } else {
-          console.warn('HeyGen video generation failed:', result);
-          throw new Error('Video generation failed');
-        }
-      } catch (error) {
-        console.error('HeyGen video error:', error);
-        // Fallback to audio
-        speakText(text);
       }
-    }
-
-    // Check video generation status
-    async function checkVideoStatus(videoId) {
-      try {
-        const response = await fetch('/.netlify/functions/heygen-proxy', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'check_video',
-            videoId: videoId
-          })
-        });
-
-        const result = await response.json();
-        
-        if (result.success) {
-          if (result.status === 'completed' && result.video_url) {
-            // Play the generated video
-            playHeyGenVideo(result.video_url);
-          } else if (result.status === 'processing') {
-            // Keep polling
-            setTimeout(() => checkVideoStatus(videoId), 3000);
-          } else {
-            throw new Error('Video generation failed');
-          }
-        } else {
-          throw new Error('Status check failed');
-        }
-      } catch (error) {
-        console.error('Video status check error:', error);
-        setPill('ready', 'Ready');
+      function getBoundedContext(){
+        return conversationHistory.slice(-MAX_CONTEXT*2).map(t => ({ role:t.role, content:t.content }));
       }
-    }
+      function resetSession(){
+        if (confirm('Reset conversation memory?')) {
+          conversationHistory = [];
+          sessionId = 'sess_' + Date.now() + '_' + Math.random().toString(36).slice(2,9);
+          stopAll();
+          setIdleUI();
+          showToast('Session reset');
+        }
+      }
+      window.DTA_reset = resetSession;
 
-    // Play HeyGen generated video
-    function playHeyGenVideo(videoUrl) {
-      setPill('speaking', 'Speaking...');
-      
-      // Hide image, show video
-      dopImage.style.display = 'none';
-      dopVideo.style.display = 'block';
-      dopVideo.src = videoUrl;
-      
-      dopVideo.onended = () => {
-        // Show image again, hide video
-        dopVideo.style.display = 'none';
-        dopImage.style.display = 'block';
-        setPill('ready', 'Ready');
-      };
-      
-      dopVideo.onerror = () => {
-        dopVideo.style.display = 'none';
-        dopImage.style.display = 'block';
-        setPill('ready', 'Ready');
-      };
-      
-      dopVideo.play().catch(console.error);
-    }
+      // State
+      let currentFile = null, lastFile = null, lastMode = null, lastText = '';
+      let isStopped = false, micLocked = false;
+      let currentAudio = null, currentAudioURL = null;
 
-    // Fallback audio-only response
-    async function speakText(text) {
-      setPill('speaking', 'Speaking...');
-      
-      try {
-        const voiceId = persona?.voiceId || null;
-        
-        const response = await fetch('/.netlify/functions/tts-eleven', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            text: text,
-            voiceId: voiceId
-          })
-        });
+      function haptic(){ if ('vibrate' in navigator) navigator.vibrate(60); }
+      function lockMic(){ micLocked = true; setTimeout(() => micLocked = false, 350); }
+      function showOverlay(){ respOverlay.classList.add('show'); }
+      function hideOverlay(){ respOverlay.classList.remove('show'); }
+      function showToast(msg){ const t = document.createElement('div'); t.className='toast show'; t.textContent=msg; document.body.append(t); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 250); }, 2000); }
 
-        if (response.ok) {
-          const audioBuffer = await response.arrayBuffer();
-          const audioBlob = new Blob([audioBuffer], { type: 'audio/mpeg' });
-          const audioUrl = URL.createObjectURL(audioBlob);
-          
-          const audio = new Audio(audioUrl);
-          await audio.play();
-          
-          audio.addEventListener('ended', () => {
-            setPill('ready', 'Ready');
-            URL.revokeObjectURL(audioUrl);
+      function setPill(mode, text){
+        statusPill.classList.remove('listening','thinking','speaking','ready');
+        statusPill.classList.add(mode);
+        pillText.textContent = text;
+        srStatus.textContent = text;
+      }
+      function setListeningUI(){ micBtn.classList.add('listening'); micBtn.textContent = '⏹ Stop'; setPill('listening','Listening…'); }
+      function setThinkingUI(){ micBtn.classList.remove('listening','stopping'); micBtn.textContent = '🎤 Tap to Talk'; setPill('thinking','Thinking…'); }
+      function setPlayingUI(){ micBtn.classList.remove('listening','stopping'); micBtn.textContent = '🎤 Tap to Talk'; setPill('speaking','Speaking…'); }
+      function setIdleUI(){ micBtn.classList.remove('listening','stopping'); micBtn.textContent = '🎤 Tap to Talk'; setPill('ready','Ready'); }
+
+      function stopAll(){
+        stopVideo();
+        stopASR();
+        stopAudio();
+        setIdleUI();
+        hideOverlay();
+      }
+      function stopVideo(){ if (resp && !resp.paused) resp.pause(); isStopped = true; }
+      function stopAudio(){ if (currentAudio) { currentAudio.pause(); currentAudio.src=''; } if (currentAudioURL) URL.revokeObjectURL(currentAudioURL); currentAudio=null; currentAudioURL=null; }
+
+      function safePlay(){ try { resp.play().catch(e => { console.warn('Autoplay blocked:',e); showToast('Tap video to play'); }); } catch{} }
+
+      // Voice mapping logic
+      window.DOP_LAST_PROMPT = null;
+      function getVoiceIdForNextTTS(){
+        if (!PERSONA_DATA.voiceId) return null;
+        return PERSONA_DATA.voiceId;
+      }
+      function setVoiceForNextTTSByFile(file){ 
+        if (!file) return;
+        const key = file.replace(/^assets\//,'').replace(/\.mp4$/i,'');
+        window.DOP_LAST_PROMPT = key;
+      }
+      function forceFallbackVoiceForMic(){ if (!window.DOP_LAST_PROMPT) window.DOP_LAST_PROMPT = 'fallback'; }
+
+      // Video player
+      function preloadSources(firstFile){
+        if (!firstFile) return;
+        // Preload video files if they exist
+        setTimeout(() => {
+          PROMPTS_CONFIG.forEach(p => {
+            if (p.file) {
+              const v = document.createElement('video');
+              v.src = p.file; v.preload = 'auto'; v.load();
+            }
           });
-        } else {
-          throw new Error('TTS failed');
-        }
-      } catch (error) {
-        console.error('TTS error:', error);
-        setPill('ready', 'Ready');
+        }, 100);
       }
-    }
+      function primeFirstFrame(file){
+        if (!file || !resp) return;
+        resp.src = file;
+        resp.classList.add('fade-start');
+        resp.load();
+        setTimeout(() => { resp.currentTime = 0.1; resp.classList.remove('fade-start'); }, 80);
+      }
 
-    // Initialize
-    loadDOP();
+      function playFile(file){
+        if (!file) return;
+        console.log('Playing file:', file);
+        currentFile = file;
+        lastFile = file;
+        lastMode = 'clip';
+        lastText = '';
+        isStopped = false;
+
+        stopAll();
+        setPlayingUI();
+        showOverlay();
+
+        pushTurn('user', findQuestionForFile(file), { inputType:'button' });
+
+        resp.src = file;
+        resp.load();
+        resp.onloadeddata = () => {
+          hideOverlay();
+          safePlay();
+          const transcript = findTranscriptForFile(file);
+          if (transcript) pushTurn('assistant', transcript, { audio:false, video:file });
+        };
+        resp.onerror = () => { hideOverlay(); setIdleUI(); };
+      }
+
+      function findQuestionForFile(file){
+        const match = PROMPTS_CONFIG.find(p => p.file === file);
+        return match ? match.question : '';
+      }
+      function findTranscriptForFile(file){
+        const match = PROMPTS_CONFIG.find(p => p.file === file);
+        return match ? match.response || '' : '';
+      }
+
+      // Events
+      resp.addEventListener('click', () => {
+        if (resp.paused) { safePlay(); isStopped = false; setPlayingUI(); }
+        else { stopVideo(); setIdleUI(); hideOverlay(); }
+      });
+
+      grid.addEventListener('click', (e) => {
+        const btn = e.target.closest('.btn');
+        if (!btn) return;
+        
+        const index = parseInt(btn.dataset.index);
+        const promptConfig = PROMPTS_CONFIG[index];
+        
+        if (promptConfig.file) {
+          // Pre-recorded video exists
+          setVoiceForNextTTSByFile(promptConfig.file);
+          playFile(promptConfig.file);
+        } else {
+          // No video - use LLM + TTS
+          const question = promptConfig.question;
+          pushTurn('user', question, { inputType:'button' });
+          setPill('thinking','Thinking…');
+          routeToBackend(question, { forceLLM: true });
+        }
+      });
+
+      resp.addEventListener('ended', () => { stopVideo(); setIdleUI(); });
+      resp.addEventListener('error', () => { stopVideo(); setIdleUI(); hideOverlay(); });
+
+      // ASR + backend routing + ElevenLabs TTS
+      const supportsASR = ('SpeechRecognition' in window) || ('webkitSpeechRecognition' in window);
+      let recognizer = null, recognizing = false, finalTranscript = '';
+      let asrFinalSent = false;
+
+      if (!supportsASR) { micBtn.disabled = true; srStatus.textContent = 'Speech input not available.'; }
+
+      function initRecognizer(){
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        recognizer = new SR();
+        recognizer.lang = 'en-US';
+        recognizer.interimResults = true;
+        recognizer.continuous = false;
+
+        recognizer.onstart = () => {
+          recognizing = true; finalTranscript = ''; asrFinalSent = false;
+          stopAll();
+          setListeningUI();
+          srStatus.textContent = 'Listening…';
+          lockMic();
+          haptic();
+          forceFallbackVoiceForMic();
+        };
+        recognizer.onerror = (e) => { srStatus.textContent = 'Mic error: ' + (e.error || 'unknown'); stopASR(); setIdleUI(); hideOverlay(); };
+        recognizer.onend = () => {
+          recognizing = false;
+          if (!asrFinalSent) setIdleUI();
+        };
+        recognizer.onresult = (event) => {
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const res = event.results[i];
+            if (res.isFinal) {
+              finalTranscript += res[0].transcript.trim() + ' ';
+              if (!asrFinalSent) {
+                asrFinalSent = true;
+                const text = finalTranscript.trim();
+                if (text) {
+                  try { stopASR(); } catch {}
+                  pushTurn('user', text, { inputType:'mic' });
+                  srStatus.textContent = 'Processing…';
+                  setPill('thinking','Thinking…');
+                  routeToBackend(text, { forceLLM: true });
+                }
+              }
+            }
+          }
+        };
+      }
+      function startASR(){ if (!recognizer) initRecognizer(); try { recognizer.start(); } catch { try { recognizer.stop(); recognizer.start(); } catch(_){} } }
+      function stopASR(){ if (recognizer && recognizing) recognizer.stop(); recognizing = false; }
+
+      micBtn.addEventListener('click', () => {
+        if (micLocked) return;
+        if (micBtn.textContent.includes('Stop')) { stopAll(); lockMic(); return; }
+        if (!supportsASR) return;
+        startASR();
+      });
+      window.addEventListener('keydown', (e) => { if (e.key === 'Escape') stopAll(); });
+
+      // Helpers for JSON fetch
+      async function safeJSON(res){
+        const txt = await res.text();
+        try { return JSON.parse(txt); }
+        catch { throw new Error('Non-JSON response: ' + txt.slice(0,120)); }
+      }
+      async function callFunction(url, payload){
+        const res = await fetch(url, {
+          method:'POST',
+          headers:{ 'Content-Type':'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error(`${url} ${res.status}`);
+        return await safeJSON(res);
+      }
+
+      // NON-STREAM route only
+      async function routeToBackend(text, opts = {}){
+        const payload = { 
+          text, 
+          message: text, 
+          sessionId, 
+          context: getBoundedContext(),
+          personaId: dopId,
+          ...opts 
+        };
+        try{
+          const data = await callFunction('/.netlify/functions/session-chat', payload);
+          await handleBackendResponse(data);
+        } catch (e1){
+          console.warn('[DTA] session-chat failed, falling back → dop-chat', e1);
+          try{
+            const data = await callFunction('/.netlify/functions/dop-chat', { text });
+            await handleBackendResponse(data);
+            showToast('Using fallback chat');
+          } catch (e2){
+            console.error('[DTA] dop-chat also failed', e2);
+            srStatus.textContent = 'Backend error';
+            setIdleUI();
+            showToast('Backend error');
+          }
+        }
+      }
+
+      async function handleBackendResponse(data){
+        if (data.matchedClip) {
+          setPlayingUI();
+          playFile(data.matchedClip);
+        } else if (data.fallbackResponse || data.reply) {
+          setPlayingUI();
+          const speech = data.fallbackResponse || data.reply;
+          lastMode = 'tts';
+          lastText = speech;
+
+          pushTurn('assistant', speech, { audio:true });
+          await speakWithElevenLabs(speech);
+          setIdleUI();
+        } else {
+          setIdleUI();
+        }
+      }
+
+      // TTS — pass voice AND clip hint so server picks the right voice deterministically
+      async function speakWithElevenLabs(text){
+        try{
+          stopVideo();
+          showOverlay();
+
+          // clip hint from lastFile (e.g., "assets/p_fun.mp4" -> "p_fun")
+          let clipHint = null;
+          if (lastFile && typeof lastFile === 'string') {
+            clipHint = lastFile.replace(/^assets\//,'').replace(/\.mp4$/i,'');
+          }
+          // ADD-ONLY: if mic-only (no lastFile), reuse last prompt key
+          if (!clipHint && window.DOP_LAST_PROMPT) {
+            clipHint = window.DOP_LAST_PROMPT; // e.g., "p_fun"
+          }
+
+          const res = await fetch('/.netlify/functions/tts-eleven', {
+            method:'POST',
+            headers:{ 'Content-Type':'application/json' },
+            body: JSON.stringify({
+              text,
+              clip: clipHint,
+              voiceId: getVoiceIdForNextTTS()
+            })
+          });
+          if (!res.ok) throw new Error('TTS failed');
+
+          const buf = await res.arrayBuffer();
+          const blob = new Blob([buf], { type: 'audio/mpeg' });
+          const url = URL.createObjectURL(blob);
+          currentAudioURL = url;
+          currentAudio = new Audio(url);
+
+          setPill('speaking','Speaking…');
+          await currentAudio.play().catch(()=>{});
+          await new Promise((resolve) => {
+            const cleanup = () => { currentAudio && currentAudio.removeEventListener('ended', cleanup); resolve(); };
+            currentAudio.addEventListener('ended', cleanup, { once:true });
+          });
+        } catch(e){
+          console.warn('ElevenLabs TTS error, falling back to device TTS', e);
+          if ('speechSynthesis' in window) {
+            const u = new SpeechSynthesisUtterance(text);
+            u.lang = 'en-US';
+            setPill('speaking','Speaking…');
+            try { speechSynthesis.cancel(); speechSynthesis.speak(u); } catch {}
+            await new Promise((resolve) => { u.onend = resolve; setTimeout(resolve, 12000); });
+          }
+        } finally {
+          hideOverlay();
+          try{
+            if (currentAudio) { currentAudio.pause(); currentAudio.src=''; }
+            if (currentAudioURL) URL.revokeObjectURL(currentAudioURL);
+          }catch{}
+          currentAudio=null; currentAudioURL=null;
+        }
+      }
+
+      // Reset button
+      resetBtn.addEventListener('click', resetSession);
+
+      // Boot
+      const firstPrompt = PROMPTS_CONFIG[0];
+      if (firstPrompt && firstPrompt.file) {
+        primeFirstFrame(firstPrompt.file);
+        setTimeout(() => preloadSources(firstPrompt.file), 300);
+      }
+
+      // Pre-warm TTS function to cut first-utterance latency
+      window.addEventListener('load', () => {
+        fetch('/.netlify/functions/tts-eleven', { method:'OPTIONS' }).catch(()=>{});
+      });
+
+      // Debug tips in console:
+      console.log('Debug: conversationHistory, getBoundedContext(), DTA_reset()');
+    }
   </script>
 </body>
 </html>
