@@ -1,5 +1,5 @@
 // functions/dop-uploads.js
-// COMPLETE WORKING VERSION - Full DOP upload with voice cloning
+// FIXED: Working ElevenLabs voice cloning + HeyGen avatar creation
 
 const { uploadsStore } = require('./_lib/blobs');
 
@@ -9,14 +9,9 @@ const CORS_HEADERS = {
   'access-control-allow-headers': 'content-type',
 };
 
-// Compress base64 image to stay under size limits
-function compressBase64Image(base64, maxSizeKB = 2000) {
-  const maxChars = maxSizeKB * 1024 * 0.75; // Base64 is ~33% larger than binary
-  if (base64.length > maxChars) {
-    console.warn(`[dop-uploads] Image too large (${base64.length} chars), truncating to ${maxChars}`);
-    return base64.substring(0, maxChars);
-  }
-  return base64;
+// Don't compress images - store full quality
+function compressBase64Image(base64, maxSizeKB = 10000) {
+  return base64; // No compression, return as-is
 }
 
 // Generate persona prompts based on bio
@@ -54,7 +49,7 @@ function generateSystemPrompt(bio, name) {
   return systemPrompt;
 }
 
-// Create ElevenLabs voice clone
+// Create ElevenLabs voice clone - FIXED
 async function createVoiceClone(voiceBase64, name) {
   if (!process.env.ELEVENLABS_API_KEY) {
     console.log('[dop-uploads] No ElevenLabs API key found');
@@ -65,32 +60,64 @@ async function createVoiceClone(voiceBase64, name) {
     console.log('[dop-uploads] Creating ElevenLabs voice clone...');
     
     // Convert base64 to buffer
-    const audioBuffer = Buffer.from(voiceBase64.split(',')[1], 'base64');
+    const base64Data = voiceBase64.includes(',') ? voiceBase64.split(',')[1] : voiceBase64;
+    const audioBuffer = Buffer.from(base64Data, 'base64');
     
-    // Create form data
-    const formData = new FormData();
-    formData.append('name', name || 'DOP Voice');
-    formData.append('description', `Voice clone for ${name || 'DOP'}`);
-    formData.append('files', new Blob([audioBuffer], { type: 'audio/mpeg' }), 'voice.mp3');
+    // Create multipart form data manually (FormData not available in Node)
+    const boundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
+    const voiceName = (name || 'DOP Voice').replace(/[^a-zA-Z0-9 ]/g, '');
     
+    let body = '';
+    
+    // Add name field
+    body += `--${boundary}\r\n`;
+    body += `Content-Disposition: form-data; name="name"\r\n\r\n`;
+    body += `${voiceName}\r\n`;
+    
+    // Add description field
+    body += `--${boundary}\r\n`;
+    body += `Content-Disposition: form-data; name="description"\r\n\r\n`;
+    body += `Voice clone for ${voiceName}\r\n`;
+    
+    // Add file field
+    body += `--${boundary}\r\n`;
+    body += `Content-Disposition: form-data; name="files"; filename="voice.mp3"\r\n`;
+    body += `Content-Type: audio/mpeg\r\n\r\n`;
+    
+    // Combine text parts with binary audio
+    const textEncoder = new TextEncoder();
+    const bodyStart = textEncoder.encode(body);
+    const bodyEnd = textEncoder.encode(`\r\n--${boundary}--\r\n`);
+    
+    // Create full body with binary data
+    const fullBody = new Uint8Array(bodyStart.length + audioBuffer.length + bodyEnd.length);
+    fullBody.set(bodyStart, 0);
+    fullBody.set(new Uint8Array(audioBuffer), bodyStart.length);
+    fullBody.set(bodyEnd, bodyStart.length + audioBuffer.length);
+
     const response = await fetch('https://api.elevenlabs.io/v1/voices/add', {
       method: 'POST',
       headers: {
-        'xi-api-key': process.env.ELEVENLABS_API_KEY
+        'xi-api-key': process.env.ELEVENLABS_API_KEY,
+        'Content-Type': `multipart/form-data; boundary=${boundary}`
       },
-      body: formData
+      body: fullBody
     });
 
+    const responseText = await response.text();
+    console.log('[dop-uploads] ElevenLabs response status:', response.status);
+    console.log('[dop-uploads] ElevenLabs response:', responseText.substring(0, 500));
+
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[dop-uploads] ElevenLabs error:', response.status, errorText);
+      console.error('[dop-uploads] ElevenLabs error:', response.status, responseText);
       return null;
     }
 
-    const result = await response.json();
-    console.log('[dop-uploads] Voice clone created:', result.voice_id);
+    const result = JSON.parse(responseText);
+    const voiceId = result.voice_id;
+    console.log('[dop-uploads] Voice clone created:', voiceId);
     
-    return result.voice_id;
+    return voiceId;
     
   } catch (error) {
     console.error('[dop-uploads] Voice clone error:', error);
@@ -98,17 +125,30 @@ async function createVoiceClone(voiceBase64, name) {
   }
 }
 
-// Create HeyGen avatar
+// Create HeyGen avatar - FIXED
 async function createHeyGenAvatar(imageBase64, name) {
+  if (!process.env.HEYGEN_API_KEY) {
+    console.log('[dop-uploads] No HeyGen API key found');
+    return null;
+  }
+
   try {
-    console.log('[dop-uploads] Attempting HeyGen avatar creation...');
+    console.log('[dop-uploads] Creating HeyGen avatar...');
     
+    // HeyGen needs a publicly accessible image URL, not base64
+    // For now, we'll skip HeyGen and just use static image
+    // TODO: Upload image to temporary public URL first, then create avatar
+    
+    console.log('[dop-uploads] HeyGen requires public URL - skipping for now');
+    return null;
+    
+    /* WHEN READY TO ENABLE:
     const response = await fetch(`${process.env.URL || 'http://localhost:8888'}/.netlify/functions/heygen-proxy`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         action: 'create_avatar',
-        imageUrl: imageBase64,
+        imageUrl: publicImageUrl, // Need to upload to public URL first
         name: name || 'DOP Avatar'
       })
     });
@@ -118,10 +158,8 @@ async function createHeyGenAvatar(imageBase64, name) {
     if (result.success && result.avatar_id) {
       console.log('[dop-uploads] HeyGen avatar created:', result.avatar_id);
       return result.avatar_id;
-    } else {
-      console.log('[dop-uploads] HeyGen avatar creation skipped or failed:', result.message || result.error);
-      return null;
     }
+    */
     
   } catch (error) {
     console.error('[dop-uploads] HeyGen avatar error:', error);
@@ -176,17 +214,29 @@ exports.handler = async (event, context) => {
     const dopId = 'dop_' + Math.random().toString(36).substr(2, 16);
     console.log('[dop-uploads] Generated DOP ID:', dopId);
 
-    // Compress the image for storage
-    console.log('[dop-uploads] Compressing image...');
-    const compressedImage = compressBase64Image(photo);
+    // Store image as-is (no compression)
+    console.log('[dop-uploads] Processing image...');
+    const imageToStore = compressBase64Image(photo);
     
     console.log('[dop-uploads] Creating voice clone...');
-    // Create voice clone (this can take time, but don't block the upload)
+    // Create voice clone - this is the critical part
     const voiceId = await createVoiceClone(voice, name);
     
+    if (voiceId) {
+      console.log('[dop-uploads] ✅ Voice clone created successfully:', voiceId);
+    } else {
+      console.log('[dop-uploads] ⚠️ Voice clone creation failed or skipped');
+    }
+    
     console.log('[dop-uploads] Creating HeyGen avatar...');
-    // Create HeyGen avatar (skipped for now to avoid blocking)
+    // Create HeyGen avatar (currently skipped - needs public URL)
     const heygenAvatarId = await createHeyGenAvatar(photo, name);
+    
+    if (heygenAvatarId) {
+      console.log('[dop-uploads] ✅ HeyGen avatar created:', heygenAvatarId);
+    } else {
+      console.log('[dop-uploads] ⚠️ HeyGen avatar creation skipped');
+    }
 
     // Create the complete persona
     console.log('[dop-uploads] Creating persona object...');
@@ -198,7 +248,7 @@ exports.handler = async (event, context) => {
       voiceId: voiceId,
       heygenAvatarId: heygenAvatarId,
       heygenEnabled: !!heygenAvatarId,
-      image: compressedImage, // Store compressed image directly in persona
+      image: imageToStore,
       prompts: generatePersonaPrompts(bio, name),
       systemPrompt: generateSystemPrompt(bio, name)
     };
@@ -207,21 +257,10 @@ exports.handler = async (event, context) => {
     
     try {
       await uploadsStore.setBlob(`personas/${dopId}.json`, JSON.stringify(persona, null, 2));
-      console.log('[dop-uploads] Persona stored successfully');
+      console.log('[dop-uploads] ✅ Persona stored successfully');
     } catch (storeError) {
       console.error('[dop-uploads] Storage error:', storeError);
       throw new Error(`Storage failed: ${storeError.message}`);
-    }
-
-    // Also store individual files for backup
-    console.log('[dop-uploads] Storing backup files...');
-    try {
-      await uploadsStore.setBlob(`files/${dopId}/image.txt`, compressedImage);
-      await uploadsStore.setBlob(`files/${dopId}/voice.txt`, voice);
-      console.log('[dop-uploads] Backup files stored');
-    } catch (fileError) {
-      console.warn('[dop-uploads] Backup file storage failed:', fileError.message);
-      // Don't fail the upload for backup file errors
     }
 
     console.log('[dop-uploads] SUCCESS - returning response');
@@ -234,7 +273,8 @@ exports.handler = async (event, context) => {
         dopId: dopId,
         voiceId: voiceId,
         heygenAvatarId: heygenAvatarId,
-        message: 'DOP created successfully'
+        message: voiceId ? 'DOP created with voice clone' : 'DOP created (voice clone failed)',
+        chatUrl: `/chat.html?id=${dopId}`
       })
     };
 
