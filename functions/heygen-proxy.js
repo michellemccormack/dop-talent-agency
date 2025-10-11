@@ -1,8 +1,9 @@
 // functions/heygen-proxy.js
-// Fixed HeyGen integration with correct API endpoints and error handling
+// UPDATED: HeyGen Photo Avatar API v2 Integration
 
 const HEYGEN_API_KEY = process.env.HEYGEN_API_KEY;
-const HEYGEN_API_BASE = 'https://api.heygen.com/v1'; // Changed from v2 to v1
+const HEYGEN_API_BASE = 'https://api.heygen.com';
+const HEYGEN_UPLOAD_BASE = 'https://upload.heygen.com';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -23,7 +24,7 @@ exports.handler = async (event) => {
       body: JSON.stringify({ 
         enabled: !!HEYGEN_API_KEY,
         status: 'ready',
-        version: '3.0',
+        version: 'v2-photo-avatars',
         apiBase: HEYGEN_API_BASE
       }),
     };
@@ -53,17 +54,25 @@ exports.handler = async (event) => {
     const { action, ...params } = body;
 
     switch (action) {
-      case 'create_avatar':
-        return await createAvatar(params);
+      case 'upload_photo':
+        return await uploadPhoto(params);
+      case 'create_avatar_group':
+        return await createAvatarGroup(params);
+      case 'add_motion':
+        return await addMotion(params);
+      case 'add_sound_effect':
+        return await addSoundEffect(params);
       case 'generate_video':
         return await generateVideo(params);
       case 'check_video':
         return await checkVideoStatus(params);
+      case 'get_avatar_id':
+        return await getAvatarId(params);
       default:
         return {
           statusCode: 400,
           headers: { "Content-Type": "application/json", ...corsHeaders },
-          body: JSON.stringify({ error: 'Invalid action. Use: create_avatar, generate_video, check_video' })
+          body: JSON.stringify({ error: 'Invalid action' })
         };
     }
   } catch (error) {
@@ -79,74 +88,274 @@ exports.handler = async (event) => {
   }
 };
 
-// Create avatar from uploaded photo
-async function createAvatar({ imageUrl, name }) {
+// Upload photo to HeyGen
+async function uploadPhoto({ imageUrl, name }) {
   if (!imageUrl) {
-    throw new Error('imageUrl is required for avatar creation');
+    throw new Error('imageUrl is required');
   }
 
-  console.log('[heygen-proxy] Creating avatar with URL:', imageUrl.substring(0, 50) + '...');
+  console.log('[heygen-proxy] Uploading photo from URL:', imageUrl.substring(0, 50) + '...');
 
-  const requestBody = {
-    avatar_name: name || 'User Avatar',
-    avatar_image_url: imageUrl
-  };
+  // Fetch the image from the URL
+  const imageResponse = await fetch(imageUrl);
+  if (!imageResponse.ok) {
+    throw new Error(`Failed to fetch image: ${imageResponse.status}`);
+  }
 
-  console.log('[heygen-proxy] Request body:', JSON.stringify(requestBody, null, 2));
+  const imageBuffer = await imageResponse.arrayBuffer();
+  const imageBlob = Buffer.from(imageBuffer);
 
-  const response = await fetch(`${HEYGEN_API_BASE}/avatar/create_avatar`, {
+  // Create multipart form data
+  const boundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
+  
+  let formData = '';
+  
+  // Add file field
+  formData += `--${boundary}\r\n`;
+  formData += `Content-Disposition: form-data; name="file"; filename="${name || 'avatar'}.jpg"\r\n`;
+  formData += `Content-Type: image/jpeg\r\n\r\n`;
+  
+  // Convert to proper format
+  const textEncoder = new TextEncoder();
+  const formDataStart = textEncoder.encode(formData);
+  const formDataEnd = textEncoder.encode(`\r\n--${boundary}--\r\n`);
+  
+  // Combine parts
+  const fullBody = new Uint8Array(formDataStart.length + imageBlob.length + formDataEnd.length);
+  fullBody.set(formDataStart, 0);
+  fullBody.set(new Uint8Array(imageBlob), formDataStart.length);
+  fullBody.set(formDataEnd, formDataStart.length + imageBlob.length);
+
+  const response = await fetch(`${HEYGEN_UPLOAD_BASE}/v1/asset`, {
     method: 'POST',
     headers: {
-      'X-API-Key': HEYGEN_API_KEY,
-      'Content-Type': 'application/json'
+      'X-Api-Key': HEYGEN_API_KEY,
+      'Content-Type': `multipart/form-data; boundary=${boundary}`
     },
-    body: JSON.stringify(requestBody)
+    body: fullBody
   });
 
-  console.log('[heygen-proxy] Response status:', response.status);
-  console.log('[heygen-proxy] Response headers:', Object.fromEntries(response.headers.entries()));
-
   const responseText = await response.text();
-  console.log('[heygen-proxy] Raw response:', responseText.substring(0, 500));
-
+  console.log('[heygen-proxy] Upload response status:', response.status);
+  
   let data;
   try {
     data = JSON.parse(responseText);
   } catch (parseError) {
-    console.error('[heygen-proxy] Failed to parse response as JSON:', parseError);
-    throw new Error(`HeyGen API returned non-JSON response: ${responseText.substring(0, 200)}`);
+    console.error('[heygen-proxy] Failed to parse response:', responseText.substring(0, 500));
+    throw new Error(`HeyGen upload returned non-JSON response: ${responseText.substring(0, 200)}`);
   }
   
   if (!response.ok) {
-    console.error('[heygen-proxy] API error:', data);
-    throw new Error(`HeyGen avatar creation failed: ${data.message || response.statusText}`);
+    console.error('[heygen-proxy] Upload error:', data);
+    throw new Error(`Photo upload failed: ${data.message || response.statusText}`);
   }
 
-  console.log('[heygen-proxy] Avatar creation response:', data);
+  console.log('[heygen-proxy] Photo uploaded successfully:', data.data?.id);
 
   return {
     statusCode: 200,
     headers: { "Content-Type": "application/json", ...corsHeaders },
     body: JSON.stringify({
       success: true,
-      avatar_id: data.data?.avatar_id,
-      status: data.data?.status || 'processing',
-      message: 'Avatar creation started'
+      image_key: data.data?.id,
+      message: 'Photo uploaded successfully'
     })
   };
 }
 
-// Generate talking video
+// Create photo avatar group
+async function createAvatarGroup({ imageKey, name }) {
+  if (!imageKey) {
+    throw new Error('imageKey is required');
+  }
+
+  console.log('[heygen-proxy] Creating avatar group with image_key:', imageKey);
+
+  const requestBody = {
+    name: name || 'User Avatar',
+    image_key: imageKey
+  };
+
+  const response = await fetch(`${HEYGEN_API_BASE}/v2/photo_avatar/avatar_group/create`, {
+    method: 'POST',
+    headers: {
+      'X-Api-Key': HEYGEN_API_KEY,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify(requestBody)
+  });
+
+  const responseText = await response.text();
+  console.log('[heygen-proxy] Avatar group response status:', response.status);
+
+  let data;
+  try {
+    data = JSON.parse(responseText);
+  } catch (parseError) {
+    throw new Error(`HeyGen API returned non-JSON response: ${responseText.substring(0, 200)}`);
+  }
+  
+  if (!response.ok) {
+    console.error('[heygen-proxy] Avatar group error:', data);
+    throw new Error(`Avatar group creation failed: ${data.message || response.statusText}`);
+  }
+
+  console.log('[heygen-proxy] Avatar group created:', data.data?.avatar_group_id);
+
+  return {
+    statusCode: 200,
+    headers: { "Content-Type": "application/json", ...corsHeaders },
+    body: JSON.stringify({
+      success: true,
+      avatar_group_id: data.data?.avatar_group_id,
+      message: 'Avatar group created'
+    })
+  };
+}
+
+// Add motion to photo avatar
+async function addMotion({ avatarId }) {
+  if (!avatarId) {
+    throw new Error('avatarId is required');
+  }
+
+  console.log('[heygen-proxy] Adding motion to avatar:', avatarId);
+
+  const response = await fetch(`${HEYGEN_API_BASE}/v2/photo_avatar/add_motion`, {
+    method: 'POST',
+    headers: {
+      'X-Api-Key': HEYGEN_API_KEY,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify({ id: avatarId })
+  });
+
+  const responseText = await response.text();
+  let data;
+  try {
+    data = JSON.parse(responseText);
+  } catch (parseError) {
+    throw new Error(`HeyGen API returned non-JSON response: ${responseText.substring(0, 200)}`);
+  }
+  
+  if (!response.ok) {
+    throw new Error(`Add motion failed: ${data.message || response.statusText}`);
+  }
+
+  return {
+    statusCode: 200,
+    headers: { "Content-Type": "application/json", ...corsHeaders },
+    body: JSON.stringify({
+      success: true,
+      message: 'Motion added'
+    })
+  };
+}
+
+// Add sound effect to photo avatar
+async function addSoundEffect({ avatarId }) {
+  if (!avatarId) {
+    throw new Error('avatarId is required');
+  }
+
+  console.log('[heygen-proxy] Adding sound effect to avatar:', avatarId);
+
+  const response = await fetch(`${HEYGEN_API_BASE}/v2/photo_avatar/add_sound_effect`, {
+    method: 'POST',
+    headers: {
+      'X-Api-Key': HEYGEN_API_KEY,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify({ id: avatarId })
+  });
+
+  const responseText = await response.text();
+  let data;
+  try {
+    data = JSON.parse(responseText);
+  } catch (parseError) {
+    throw new Error(`HeyGen API returned non-JSON response: ${responseText.substring(0, 200)}`);
+  }
+  
+  if (!response.ok) {
+    throw new Error(`Add sound effect failed: ${data.message || response.statusText}`);
+  }
+
+  return {
+    statusCode: 200,
+    headers: { "Content-Type": "application/json", ...corsHeaders },
+    body: JSON.stringify({
+      success: true,
+      message: 'Sound effect added'
+    })
+  };
+}
+
+// Get avatar ID from group (needed for video generation)
+async function getAvatarId({ avatarGroupId }) {
+  if (!avatarGroupId) {
+    throw new Error('avatarGroupId is required');
+  }
+
+  console.log('[heygen-proxy] Getting avatar ID for group:', avatarGroupId);
+
+  const response = await fetch(`${HEYGEN_API_BASE}/v2/avatar_group.list`, {
+    method: 'GET',
+    headers: {
+      'X-Api-Key': HEYGEN_API_KEY,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    }
+  });
+
+  const responseText = await response.text();
+  let data;
+  try {
+    data = JSON.parse(responseText);
+  } catch (parseError) {
+    throw new Error(`HeyGen API returned non-JSON response: ${responseText.substring(0, 200)}`);
+  }
+  
+  if (!response.ok) {
+    throw new Error(`Failed to get avatar groups: ${data.message || response.statusText}`);
+  }
+
+  // Find the avatar in the specified group
+  const avatarGroup = data.data?.avatar_groups?.find(g => g.avatar_group_id === avatarGroupId);
+  if (!avatarGroup || !avatarGroup.avatars || avatarGroup.avatars.length === 0) {
+    throw new Error('Avatar not found in group');
+  }
+
+  const avatarId = avatarGroup.avatars[0].avatar_id;
+  console.log('[heygen-proxy] Found avatar ID:', avatarId);
+
+  return {
+    statusCode: 200,
+    headers: { "Content-Type": "application/json", ...corsHeaders },
+    body: JSON.stringify({
+      success: true,
+      avatar_id: avatarId
+    })
+  };
+}
+
+// Generate video with photo avatar
 async function generateVideo({ text, avatarId, voiceId }) {
   if (!text || !avatarId) {
-    throw new Error('text and avatarId are required for video generation');
+    throw new Error('text and avatarId are required');
   }
+
+  console.log('[heygen-proxy] Generating video with avatar:', avatarId);
 
   const requestBody = {
     video_inputs: [{
       character: {
-        type: 'avatar',
-        avatar_id: avatarId,
+        type: 'talking_photo',
+        talking_photo_id: avatarId,
         scale: 1.0
       },
       voice: {
@@ -155,14 +364,18 @@ async function generateVideo({ text, avatarId, voiceId }) {
         voice_id: voiceId || 'default'
       }
     }],
-    aspect_ratio: '16:9',
+    dimension: {
+      width: 1080,
+      height: 1920
+    },
+    aspect_ratio: '9:16',
     test: false
   };
 
-  const response = await fetch(`${HEYGEN_API_BASE}/video/generate`, {
+  const response = await fetch(`${HEYGEN_API_BASE}/v2/video/generate`, {
     method: 'POST',
     headers: {
-      'X-API-Key': HEYGEN_API_KEY,
+      'X-Api-Key': HEYGEN_API_KEY,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify(requestBody)
@@ -177,7 +390,7 @@ async function generateVideo({ text, avatarId, voiceId }) {
   }
   
   if (!response.ok) {
-    throw new Error(`HeyGen video generation failed: ${data.message || response.statusText}`);
+    throw new Error(`Video generation failed: ${data.message || response.statusText}`);
   }
 
   return {
@@ -198,10 +411,10 @@ async function checkVideoStatus({ videoId }) {
     throw new Error('videoId is required');
   }
 
-  const response = await fetch(`${HEYGEN_API_BASE}/video/${videoId}`, {
+  const response = await fetch(`${HEYGEN_API_BASE}/v1/video_status.get?video_id=${videoId}`, {
     method: 'GET',
     headers: {
-      'X-API-Key': HEYGEN_API_KEY,
+      'X-Api-Key': HEYGEN_API_KEY,
       'Content-Type': 'application/json'
     }
   });
@@ -215,7 +428,7 @@ async function checkVideoStatus({ videoId }) {
   }
   
   if (!response.ok) {
-    throw new Error(`HeyGen status check failed: ${data.message || response.statusText}`);
+    throw new Error(`Status check failed: ${data.message || response.statusText}`);
   }
 
   return {

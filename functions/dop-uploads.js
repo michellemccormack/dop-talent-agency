@@ -124,29 +124,87 @@ async function createHeyGenAvatar(imageUrl, name) {
   }
 
   try {
-    console.log('[dop-uploads] Creating HeyGen avatar from:', imageUrl.substring(0, 50) + '...');
-    
+    console.log('[dop-uploads] Starting HeyGen Photo Avatar creation...');
     const baseUrl = process.env.URL || 'https://dopple-talent-demo.netlify.app';
-    const response = await fetch(`${baseUrl}/.netlify/functions/heygen-proxy`, {
+    
+    // Step 1: Upload photo
+    console.log('[dop-uploads] Step 1: Uploading photo...');
+    const uploadResponse = await fetch(`${baseUrl}/.netlify/functions/heygen-proxy`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        action: 'create_avatar',
+        action: 'upload_photo',
         imageUrl: imageUrl,
         name: name || 'DOP Avatar'
       })
     });
 
-    const result = await response.json();
-    console.log('[dop-uploads] HeyGen avatar response:', result);
-    
-    if (result.success && result.avatar_id) {
-      console.log('[dop-uploads] ✅ HeyGen avatar created:', result.avatar_id);
-      return result.avatar_id;
-    } else {
-      console.log('[dop-uploads] ⚠️ HeyGen avatar creation failed:', result);
-      return null;
+    const uploadResult = await uploadResponse.json();
+    if (!uploadResult.success || !uploadResult.image_key) {
+      throw new Error('Photo upload failed');
     }
+    console.log('[dop-uploads] ✅ Photo uploaded, image_key:', uploadResult.image_key);
+
+    // Step 2: Create avatar group
+    console.log('[dop-uploads] Step 2: Creating avatar group...');
+    const groupResponse = await fetch(`${baseUrl}/.netlify/functions/heygen-proxy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'create_avatar_group',
+        imageKey: uploadResult.image_key,
+        name: name || 'DOP Avatar'
+      })
+    });
+
+    const groupResult = await groupResponse.json();
+    if (!groupResult.success || !groupResult.avatar_group_id) {
+      throw new Error('Avatar group creation failed');
+    }
+    console.log('[dop-uploads] ✅ Avatar group created:', groupResult.avatar_group_id);
+
+    // Step 3: Get avatar ID from group
+    console.log('[dop-uploads] Step 3: Getting avatar ID...');
+    const avatarIdResponse = await fetch(`${baseUrl}/.netlify/functions/heygen-proxy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'get_avatar_id',
+        avatarGroupId: groupResult.avatar_group_id
+      })
+    });
+
+    const avatarIdResult = await avatarIdResponse.json();
+    if (!avatarIdResult.success || !avatarIdResult.avatar_id) {
+      throw new Error('Failed to get avatar ID');
+    }
+    console.log('[dop-uploads] ✅ Avatar ID retrieved:', avatarIdResult.avatar_id);
+
+    // Step 4: Add motion
+    console.log('[dop-uploads] Step 4: Adding motion...');
+    await fetch(`${baseUrl}/.netlify/functions/heygen-proxy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'add_motion',
+        avatarId: avatarIdResult.avatar_id
+      })
+    });
+    console.log('[dop-uploads] ✅ Motion added');
+
+    // Step 5: Add sound effect
+    console.log('[dop-uploads] Step 5: Adding sound effect...');
+    await fetch(`${baseUrl}/.netlify/functions/heygen-proxy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'add_sound_effect',
+        avatarId: avatarIdResult.avatar_id
+      })
+    });
+    console.log('[dop-uploads] ✅ Sound effect added');
+
+    return avatarIdResult.avatar_id;
     
   } catch (error) {
     console.error('[dop-uploads] HeyGen avatar error:', error);
