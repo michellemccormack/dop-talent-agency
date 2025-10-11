@@ -10,7 +10,7 @@ const CORS_HEADERS = {
 };
 
 // Compress base64 image to stay under size limits
-function compressBase64Image(base64, maxSizeKB = 100) {
+function compressBase64Image(base64, maxSizeKB = 500) {
   const maxChars = maxSizeKB * 1024 * 0.75; // Base64 is ~33% larger than binary
   if (base64.length > maxChars) {
     console.warn(`[dop-uploads] Image too large (${base64.length} chars), truncating to ${maxChars}`);
