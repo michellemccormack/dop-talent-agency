@@ -73,6 +73,17 @@
     .mic.listening{background:linear-gradient(180deg,var(--warn),#ffdf8a)}
     .mic.stopping{background:linear-gradient(180deg,var(--stop),#ff8a8a); color:#000}
     .mic[disabled]{opacity:.45; cursor:not-allowed}
+    .mic[disabled]:hover::after{
+      content: 'Upgrade to have a conversation';
+      position:absolute; bottom:calc(100% + 12px); left:50%;
+      transform:translateX(-50%);
+      background:#1b1c25; color:#eaeaf1;
+      border:1px solid var(--stroke-strong);
+      padding:8px 12px; border-radius:8px;
+      font-size:12px; white-space:nowrap;
+      box-shadow:0 4px 12px rgba(0,0,0,.3);
+      pointer-events:none;
+    }
 
     /* Status pill */
     .status-rail{display:flex; justify-content:center}
@@ -321,10 +332,11 @@
           PERSONA_DATA = await response.json();
           console.log('[chat] Persona loaded:', PERSONA_DATA);
 
-          // Build prompts config (for user-generated DOPs, we don't have video files yet)
-          PROMPTS_CONFIG = (PERSONA_DATA.prompts || []).map(prompt => ({
+          // Build prompts config - now with video URLs!
+          PROMPTS_CONFIG = (PERSONA_DATA.prompts || []).map((prompt, index) => ({
             question: prompt,
-            file: null // No pre-recorded videos for user DOPs yet
+            file: null, // No pre-recorded local files
+            videoUrl: PERSONA_DATA.videoUrls?.[`prompt${index}`] || null // HeyGen video URL
           }));
 
           // Show DOP header for user-generated DOPs
@@ -357,6 +369,7 @@
           } else {
             console.log('[chat] No image data found in persona');
           }
+        }
         }
 
         // Update UI
@@ -397,6 +410,15 @@
       const pillText = document.getElementById('pillText');
       const srStatus = document.getElementById('srStatus');
       const grid = document.getElementById('promptGrid');
+      const dopImage = document.getElementById('dopImage');
+
+      // Disable mic for user-generated DOPs (upgrade required)
+      const isUserDOP = dopId && dopId.startsWith('dop_');
+      if (isUserDOP) {
+        micBtn.disabled = true;
+        micBtn.title = 'Upgrade to have a conversation';
+        console.log('[chat] Mic disabled for user DOP (upgrade required)');
+      }
 
       // Session
       let sessionId = 'sess_' + Date.now() + '_' + Math.random().toString(36).slice(2,9);
@@ -517,6 +539,39 @@
         resp.onerror = () => { hideOverlay(); setIdleUI(); };
       }
 
+      function playHeyGenVideo(videoUrl){
+        if (!videoUrl) return;
+        console.log('Playing HeyGen video:', videoUrl.substring(0, 50) + '...');
+        
+        currentFile = videoUrl;
+        lastFile = videoUrl;
+        lastMode = 'heygen';
+        lastText = '';
+        isStopped = false;
+
+        stopAll();
+        setPlayingUI();
+        showOverlay();
+
+        resp.src = videoUrl;
+        resp.load();
+        resp.onloadeddata = () => {
+          hideOverlay();
+          safePlay();
+        };
+        resp.onerror = () => { 
+          console.error('[chat] HeyGen video failed to load');
+          hideOverlay(); 
+          setIdleUI(); 
+        };
+        resp.onended = () => {
+          // Return to image after video ends
+          resp.style.display = 'none';
+          dopImage.style.display = 'block';
+          setIdleUI();
+        };
+      }
+
       function findQuestionForFile(file){
         const match = PROMPTS_CONFIG.find(p => p.file === file);
         return match ? match.question : '';
@@ -539,8 +594,18 @@
         const index = parseInt(btn.dataset.index);
         const promptConfig = PROMPTS_CONFIG[index];
         
-        if (promptConfig.file) {
-          // Pre-recorded video exists
+        if (promptConfig.videoUrl) {
+          // HeyGen video available - play it!
+          console.log('[chat] Playing HeyGen video:', promptConfig.videoUrl.substring(0, 50) + '...');
+          
+          // Hide image, show video
+          dopImage.style.display = 'none';
+          resp.style.display = 'block';
+          
+          // Play HeyGen video
+          playHeyGenVideo(promptConfig.videoUrl);
+        } else if (promptConfig.file) {
+          // Pre-recorded local video exists (default Sasha)
           setVoiceForNextTTSByFile(promptConfig.file);
           playFile(promptConfig.file);
         } else {

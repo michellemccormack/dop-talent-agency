@@ -1,5 +1,5 @@
 // functions/dop-uploads.js
-// FIXED: Working ElevenLabs voice cloning + HeyGen avatar creation
+// UPDATED: Creates 3 HeyGen videos during upload (takes 2-3 minutes)
 
 const { uploadsStore } = require('./_lib/blobs');
 
@@ -9,29 +9,21 @@ const CORS_HEADERS = {
   'access-control-allow-headers': 'content-type',
 };
 
-// Don't compress images - store full quality
-function compressBase64Image(base64, maxSizeKB = 10000) {
-  return base64; // No compression, return as-is
-}
-
 // Generate persona prompts based on bio
 function generatePersonaPrompts(bio, name) {
-  const defaultPrompts = [
-    "What do you like to do for fun?",
-    "Tell me about yourself", 
-    "What's your personality like?"
-  ];
-  
   if (bio && bio.trim().length > 10) {
     return [
       "What do you like to do for fun?",
       "Tell me about your background",
-      "What makes you unique?",
-      "What are you passionate about?"
+      "What makes you unique?"
     ];
   }
   
-  return defaultPrompts;
+  return [
+    "What do you like to do for fun?",
+    "Tell me about yourself",
+    "What's your personality like?"
+  ];
 }
 
 // Generate system prompt based on bio and name
@@ -49,7 +41,7 @@ function generateSystemPrompt(bio, name) {
   return systemPrompt;
 }
 
-// Create ElevenLabs voice clone - FIXED
+// Create ElevenLabs voice clone
 async function createVoiceClone(voiceBase64, name) {
   if (!process.env.ELEVENLABS_API_KEY) {
     console.log('[dop-uploads] No ElevenLabs API key found');
@@ -63,7 +55,7 @@ async function createVoiceClone(voiceBase64, name) {
     const base64Data = voiceBase64.includes(',') ? voiceBase64.split(',')[1] : voiceBase64;
     const audioBuffer = Buffer.from(base64Data, 'base64');
     
-    // Create multipart form data manually (FormData not available in Node)
+    // Create multipart form data manually
     const boundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
     const voiceName = (name || 'DOP Voice').replace(/[^a-zA-Z0-9 ]/g, '');
     
@@ -106,7 +98,6 @@ async function createVoiceClone(voiceBase64, name) {
 
     const responseText = await response.text();
     console.log('[dop-uploads] ElevenLabs response status:', response.status);
-    console.log('[dop-uploads] ElevenLabs response:', responseText.substring(0, 500));
 
     if (!response.ok) {
       console.error('[dop-uploads] ElevenLabs error:', response.status, responseText);
@@ -115,7 +106,7 @@ async function createVoiceClone(voiceBase64, name) {
 
     const result = JSON.parse(responseText);
     const voiceId = result.voice_id;
-    console.log('[dop-uploads] Voice clone created:', voiceId);
+    console.log('[dop-uploads] ✅ Voice clone created:', voiceId);
     
     return voiceId;
     
@@ -125,46 +116,126 @@ async function createVoiceClone(voiceBase64, name) {
   }
 }
 
-// Create HeyGen avatar - FIXED
-async function createHeyGenAvatar(imageBase64, name) {
+// Create HeyGen avatar from public image URL
+async function createHeyGenAvatar(imageUrl, name) {
   if (!process.env.HEYGEN_API_KEY) {
     console.log('[dop-uploads] No HeyGen API key found');
     return null;
   }
 
   try {
-    console.log('[dop-uploads] Creating HeyGen avatar...');
+    console.log('[dop-uploads] Creating HeyGen avatar from:', imageUrl.substring(0, 50) + '...');
     
-    // HeyGen needs a publicly accessible image URL, not base64
-    // For now, we'll skip HeyGen and just use static image
-    // TODO: Upload image to temporary public URL first, then create avatar
-    
-    console.log('[dop-uploads] HeyGen requires public URL - skipping for now');
-    return null;
-    
-    /* WHEN READY TO ENABLE:
-    const response = await fetch(`${process.env.URL || 'http://localhost:8888'}/.netlify/functions/heygen-proxy`, {
+    const baseUrl = process.env.URL || 'https://dopple-talent-demo.netlify.app';
+    const response = await fetch(`${baseUrl}/.netlify/functions/heygen-proxy`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         action: 'create_avatar',
-        imageUrl: publicImageUrl, // Need to upload to public URL first
+        imageUrl: imageUrl,
         name: name || 'DOP Avatar'
       })
     });
 
     const result = await response.json();
+    console.log('[dop-uploads] HeyGen avatar response:', result);
     
     if (result.success && result.avatar_id) {
-      console.log('[dop-uploads] HeyGen avatar created:', result.avatar_id);
+      console.log('[dop-uploads] ✅ HeyGen avatar created:', result.avatar_id);
       return result.avatar_id;
+    } else {
+      console.log('[dop-uploads] ⚠️ HeyGen avatar creation failed:', result);
+      return null;
     }
-    */
     
   } catch (error) {
     console.error('[dop-uploads] HeyGen avatar error:', error);
     return null;
   }
+}
+
+// Generate a HeyGen video for a prompt
+async function generateHeyGenVideo(avatarId, voiceId, promptText, name) {
+  if (!process.env.HEYGEN_API_KEY) {
+    return null;
+  }
+
+  try {
+    console.log('[dop-uploads] Generating video for prompt:', promptText.substring(0, 50));
+    
+    // Generate response text using simple logic (could use GPT later)
+    const responseText = `Hi, I'm ${name || 'your DOP'}. ${promptText}`;
+    
+    const baseUrl = process.env.URL || 'https://dopple-talent-demo.netlify.app';
+    const response = await fetch(`${baseUrl}/.netlify/functions/heygen-proxy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'generate_video',
+        text: responseText,
+        avatarId: avatarId,
+        voiceId: voiceId || 'default'
+      })
+    });
+
+    const result = await response.json();
+    
+    if (result.success && result.video_id) {
+      console.log('[dop-uploads] ✅ Video generation started:', result.video_id);
+      return result.video_id;
+    } else {
+      console.log('[dop-uploads] ⚠️ Video generation failed:', result);
+      return null;
+    }
+    
+  } catch (error) {
+    console.error('[dop-uploads] Video generation error:', error);
+    return null;
+  }
+}
+
+// Poll for video completion
+async function waitForVideo(videoId, maxWaitSeconds = 180) {
+  if (!videoId) return null;
+  
+  console.log('[dop-uploads] Waiting for video:', videoId);
+  const baseUrl = process.env.URL || 'https://dopple-talent-demo.netlify.app';
+  
+  const startTime = Date.now();
+  
+  while ((Date.now() - startTime) < maxWaitSeconds * 1000) {
+    try {
+      const response = await fetch(`${baseUrl}/.netlify/functions/heygen-proxy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'check_video',
+          videoId: videoId
+        })
+      });
+
+      const result = await response.json();
+      
+      if (result.success && result.status === 'completed' && result.video_url) {
+        console.log('[dop-uploads] ✅ Video ready:', result.video_url.substring(0, 50) + '...');
+        return result.video_url;
+      } else if (result.status === 'failed') {
+        console.log('[dop-uploads] ⚠️ Video generation failed');
+        return null;
+      }
+      
+      // Still processing, wait and retry
+      console.log('[dop-uploads] Video still processing, waiting...');
+      await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
+      
+    } catch (error) {
+      console.error('[dop-uploads] Video check error:', error);
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+  }
+  
+  console.log('[dop-uploads] ⚠️ Video timed out after', maxWaitSeconds, 'seconds');
+  return null;
 }
 
 exports.handler = async (event, context) => {
@@ -214,28 +285,58 @@ exports.handler = async (event, context) => {
     const dopId = 'dop_' + Math.random().toString(36).substr(2, 16);
     console.log('[dop-uploads] Generated DOP ID:', dopId);
 
-    // Store image as-is (no compression)
-    console.log('[dop-uploads] Processing image...');
-    const imageToStore = compressBase64Image(photo);
+    // Store image as separate file in blobs
+    console.log('[dop-uploads] Storing image file...');
+    const imageKey = `images/${dopId}.jpg`;
+    const base64Data = photo.includes(',') ? photo.split(',')[1] : photo;
+    await uploadsStore.setBlob(imageKey, base64Data);
     
+    // Generate public URL for image
+    const baseUrl = process.env.URL || 'https://dopple-talent-demo.netlify.app';
+    const publicImageUrl = `${baseUrl}/.netlify/functions/dop-file?key=${imageKey}`;
+    console.log('[dop-uploads] Public image URL:', publicImageUrl);
+    
+    // Create voice clone
     console.log('[dop-uploads] Creating voice clone...');
-    // Create voice clone - this is the critical part
     const voiceId = await createVoiceClone(voice, name);
     
     if (voiceId) {
       console.log('[dop-uploads] ✅ Voice clone created successfully:', voiceId);
     } else {
-      console.log('[dop-uploads] ⚠️ Voice clone creation failed or skipped');
+      console.log('[dop-uploads] ⚠️ Voice clone creation failed');
     }
     
+    // Create HeyGen avatar
     console.log('[dop-uploads] Creating HeyGen avatar...');
-    // Create HeyGen avatar (currently skipped - needs public URL)
-    const heygenAvatarId = await createHeyGenAvatar(photo, name);
+    const heygenAvatarId = await createHeyGenAvatar(publicImageUrl, name);
+    
+    let videoUrls = {};
     
     if (heygenAvatarId) {
-      console.log('[dop-uploads] ✅ HeyGen avatar created:', heygenAvatarId);
+      console.log('[dop-uploads] ✅ HeyGen avatar created, generating videos...');
+      
+      // Generate prompts
+      const prompts = generatePersonaPrompts(bio, name);
+      
+      // Generate 3 videos (this will take 2-3 minutes total)
+      for (let i = 0; i < prompts.length; i++) {
+        const prompt = prompts[i];
+        console.log(`[dop-uploads] Generating video ${i + 1}/3 for:`, prompt);
+        
+        const videoId = await generateHeyGenVideo(heygenAvatarId, voiceId, prompt, name);
+        
+        if (videoId) {
+          const videoUrl = await waitForVideo(videoId);
+          if (videoUrl) {
+            videoUrls[`prompt${i}`] = videoUrl;
+            console.log(`[dop-uploads] ✅ Video ${i + 1}/3 ready`);
+          }
+        }
+      }
+      
+      console.log('[dop-uploads] Generated', Object.keys(videoUrls).length, 'videos');
     } else {
-      console.log('[dop-uploads] ⚠️ HeyGen avatar creation skipped');
+      console.log('[dop-uploads] ⚠️ HeyGen avatar creation skipped or failed');
     }
 
     // Create the complete persona
@@ -247,9 +348,12 @@ exports.handler = async (event, context) => {
       created: new Date().toISOString(),
       voiceId: voiceId,
       heygenAvatarId: heygenAvatarId,
-      heygenEnabled: !!heygenAvatarId,
-      image: imageToStore,
+      heygenEnabled: !!heygenAvatarId && Object.keys(videoUrls).length > 0,
+      imageKey: imageKey,
+      imageUrl: publicImageUrl,
+      image: photo, // Keep base64 for avatar display
       prompts: generatePersonaPrompts(bio, name),
+      videoUrls: videoUrls, // Store video URLs
       systemPrompt: generateSystemPrompt(bio, name)
     };
 
@@ -265,6 +369,8 @@ exports.handler = async (event, context) => {
 
     console.log('[dop-uploads] SUCCESS - returning response');
     
+    const videosCreated = Object.keys(videoUrls).length;
+    
     return {
       statusCode: 200,
       headers: CORS_HEADERS,
@@ -273,7 +379,10 @@ exports.handler = async (event, context) => {
         dopId: dopId,
         voiceId: voiceId,
         heygenAvatarId: heygenAvatarId,
-        message: voiceId ? 'DOP created with voice clone' : 'DOP created (voice clone failed)',
+        videosCreated: videosCreated,
+        message: videosCreated > 0 
+          ? `DOP created with ${videosCreated} HeyGen videos!` 
+          : 'DOP created (HeyGen videos failed)',
         chatUrl: `/chat.html?id=${dopId}`
       })
     };
