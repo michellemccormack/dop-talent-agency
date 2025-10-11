@@ -181,9 +181,11 @@
   </div>
 
   <script>
-    // Get DOP ID from URL
-    const pathParts = window.location.pathname.split('/');
-    const dopId = pathParts[pathParts.length - 1] || new URLSearchParams(window.location.search).get('id');
+    // Get DOP ID from URL query parameter - FIXED
+    const urlParams = new URLSearchParams(window.location.search);
+    const dopId = urlParams.get('id');
+
+    console.log('[chat] DOP ID from URL:', dopId);
 
     // Elements
     const loadingState = document.getElementById('loadingState');
@@ -223,9 +225,13 @@
         return;
       }
 
+      console.log('[chat] Loading DOP:', dopId);
+
       try {
         // Load persona config
         const personaResponse = await fetch(`/.netlify/functions/dop-persona?id=${encodeURIComponent(dopId)}`);
+        
+        console.log('[chat] Persona response status:', personaResponse.status);
         
         if (!personaResponse.ok) {
           const errorData = await personaResponse.json().catch(() => ({}));
@@ -233,10 +239,11 @@
         }
 
         persona = await personaResponse.json();
+        console.log('[chat] Persona loaded:', persona);
         
         // Update UI with DOP info
         dopName.textContent = persona.displayName || persona.name || 'DOP';
-        dopDescription.textContent = persona.description || 'Your AI doppelgänger';
+        dopDescription.textContent = persona.description || persona.bio || 'Your AI doppelgänger';
         
         // Set avatar and main image using base64 data
         if (persona.image || persona.imageBase64) {
@@ -253,7 +260,7 @@
         // Create prompt buttons
         if (persona.prompts && persona.prompts.length > 0) {
           promptGrid.innerHTML = persona.prompts.map(prompt => 
-            `<button class="btn" onclick="askPrompt('${prompt.replace(/'/g, "\\\'")}')">${prompt}</button>`
+            `<button class="btn" onclick="askPrompt('${prompt.replace(/'/g, "\\'")}')">${prompt}</button>`
           ).join('');
         }
 
@@ -262,10 +269,10 @@
         dopHeader.style.display = 'flex';
         chatInterface.style.display = 'block';
         
-        console.log('DOP loaded successfully:', persona);
+        console.log('[chat] DOP loaded successfully');
 
       } catch (error) {
-        console.error('Failed to load DOP:', error);
+        console.error('[chat] Failed to load DOP:', error);
         showError(error.message);
       }
     }
