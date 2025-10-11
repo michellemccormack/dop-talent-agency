@@ -121,14 +121,16 @@
 
     /* Video */
     .hero{display:flex; justify-content:center; position:relative}
-    #resp{
+    #resp, .dop-image{
       width:min(100%,560px); aspect-ratio:9/16; max-height:70vh;
       border-radius:14px; background:#000;
       border:1px solid var(--stroke-strong);
       box-shadow:0 12px 32px rgba(0,0,0,.35);
       opacity:1; transition:opacity 320ms ease;
       cursor:pointer; outline:none;
+      object-fit:cover;
     }
+    .dop-image{display:none} /* Hidden by default, shown for user DOPs */
     #resp:focus-visible{box-shadow:0 0 0 3px var(--accent)}
     .fade-start{opacity:0}
 
@@ -166,16 +168,37 @@
       overflow:hidden; clip:rect(0,0,0,0); border:0;
     }
 
+    /* DOP Header */
+    .dop-header{
+      display:flex; align-items:center; gap:16px; margin-bottom:24px;
+      padding:16px 0; border-bottom:1px solid var(--stroke);
+    }
+    .dop-avatar{
+      width:50px; height:50px; border-radius:50%;
+      background:var(--stroke); object-fit:cover;
+      border:2px solid var(--stroke-strong);
+    }
+    .dop-info h1{
+      margin:0; font-size:1.5rem; font-weight:700;
+      font-family:'Montserrat',sans-serif;
+    }
+    .dop-info p{margin:4px 0 0; color:var(--muted); font-size:14px}
+
     /* Loading state */
     .loading-state{
       text-align:center; padding:60px 20px; color:var(--muted);
     }
     .loading-state .spinner{margin:0 auto 20px}
+    .error-state{
+      text-align:center; padding:40px; color:var(--stop);
+    }
+    .error-state .details{font-size:12px; margin-top:8px; color:var(--muted)}
 
     @media (max-width:480px){
+      .dop-header{flex-direction:column; text-align:center}
       .mic{min-width:195px; font-size:16px; padding:16px 22px}
       .btn{width:100%}
-      #resp{max-height:68vh}
+      #resp, .dop-image{max-height:68vh}
       .prompt-grid{gap:10px 12px; margin:14px auto 26px}
     }
   </style>
@@ -189,8 +212,22 @@
         <div>Loading your DOP...</div>
       </div>
 
+      <!-- Error state -->
+      <div class="error-state" id="errorState" style="display:none">
+        <div>Sorry, this DOP couldn't be loaded.</div>
+        <div class="details" id="errorDetails"></div>
+      </div>
+
       <!-- Main interface (hidden until loaded) -->
       <div id="mainInterface" style="display:none">
+        <!-- DOP Header (only shown for user DOPs) -->
+        <div class="dop-header" id="dopHeader" style="display:none">
+          <img class="dop-avatar" id="dopAvatar" alt="DOP Avatar" />
+          <div class="dop-info">
+            <h1 id="dopName">Loading...</h1>
+            <p id="dopBio">Loading personality...</p>
+          </div>
+        </div>
         <!-- Reset Session (Tier 1 memory) -->
         <button class="reset" id="resetBtn" type="button" title="Reset session (clears local memory)">Reset Session</button>
 
@@ -220,6 +257,7 @@
         <!-- response video + overlay -->
         <div class="hero">
           <video id="resp" playsinline preload="auto" tabindex="0" aria-label="Response video (tap to play or pause)"></video>
+          <img class="dop-image" id="dopImage" alt="DOP" />
           <div class="overlay" id="respOverlay"><div class="spinner"></div></div>
         </div>
       </div>
@@ -240,7 +278,15 @@
     // Load persona on startup
     async function loadPersona() {
       const loadingState = document.getElementById('loadingState');
+      const errorState = document.getElementById('errorState');
+      const errorDetails = document.getElementById('errorDetails');
       const mainInterface = document.getElementById('mainInterface');
+      const dopHeader = document.getElementById('dopHeader');
+      const dopName = document.getElementById('dopName');
+      const dopBio = document.getElementById('dopBio');
+      const dopAvatar = document.getElementById('dopAvatar');
+      const dopImage = document.getElementById('dopImage');
+      const resp = document.getElementById('resp');
 
       try {
         if (!dopId) {
@@ -259,6 +305,10 @@
             { question: 'Where are you from?', file: 'assets/p_from.mp4' },
             { question: "What's your favorite way to relax?", file: 'assets/p_relax.mp4' }
           ];
+          
+          // Show video element for default persona
+          resp.style.display = 'block';
+          dopImage.style.display = 'none';
         } else {
           // Load persona from backend
           console.log('[chat] Loading DOP:', dopId);
@@ -276,6 +326,37 @@
             question: prompt,
             file: null // No pre-recorded videos for user DOPs yet
           }));
+
+          // Show DOP header for user-generated DOPs
+          dopHeader.style.display = 'flex';
+          dopName.textContent = PERSONA_DATA.name || 'DOP';
+          dopBio.textContent = PERSONA_DATA.bio || 'Your AI doppelgänger';
+
+          // Set avatar and main image using base64 data
+          if (PERSONA_DATA.image) {
+            const imageUrl = PERSONA_DATA.image.startsWith('data:') 
+              ? PERSONA_DATA.image 
+              : `data:image/jpeg;base64,${PERSONA_DATA.image}`;
+            
+            console.log('[chat] Setting image URL (first 100 chars):', imageUrl.substring(0, 100));
+            dopAvatar.src = imageUrl;
+            dopImage.src = imageUrl;
+            
+            // Add error handler
+            dopImage.onerror = () => {
+              console.error('[chat] Image failed to load');
+            };
+            dopImage.onload = () => {
+              console.log('[chat] Image loaded successfully');
+            };
+            
+            // Show image, hide video for user DOPs
+            resp.style.display = 'none';
+            dopImage.style.display = 'block';
+            console.log('[chat] Image display set to block, video hidden');
+          } else {
+            console.log('[chat] No image data found in persona');
+          }
         }
 
         // Update UI
@@ -297,10 +378,9 @@
 
       } catch (error) {
         console.error('[chat] Failed to load persona:', error);
-        loadingState.innerHTML = `
-          <div style="color:var(--stop)">Failed to load DOP</div>
-          <div style="font-size:12px; margin-top:8px">${error.message}</div>
-        `;
+        loadingState.style.display = 'none';
+        errorState.style.display = 'block';
+        errorDetails.textContent = error.message;
       }
     }
 
