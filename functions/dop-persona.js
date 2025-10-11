@@ -29,15 +29,17 @@ exports.handler = async (event) => {
       };
     }
 
-    const store = uploadsStore();
-    
-    // Try to load the persona config
+    // Try to load the persona config using our wrapper
     const personaKey = `personas/${dopId}.json`;
+    
+    console.log(`[dop-persona] Loading persona: ${personaKey}`);
     
     let personaData;
     try {
-      const rawData = await store.get(personaKey, { type: 'text' });
+      const rawData = await uploadsStore.getBlob(personaKey);
+      
       if (!rawData) {
+        console.log(`[dop-persona] Persona not found: ${personaKey}`);
         return {
           statusCode: 404,
           headers: { ...CORS_HEADERS, 'content-type': 'application/json' },
@@ -45,13 +47,19 @@ exports.handler = async (event) => {
         };
       }
       
-      personaData = JSON.parse(rawData);
+      // Parse the JSON
+      personaData = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+      console.log(`[dop-persona] Successfully loaded persona: ${dopId}`);
+      
     } catch (parseError) {
-      console.error(`Failed to load persona ${dopId}:`, parseError);
+      console.error(`[dop-persona] Failed to load persona ${dopId}:`, parseError);
       return {
         statusCode: 404,
         headers: { ...CORS_HEADERS, 'content-type': 'application/json' },
-        body: JSON.stringify({ error: 'Persona configuration not found or invalid' })
+        body: JSON.stringify({ 
+          error: 'Persona configuration not found or invalid',
+          details: parseError.message
+        })
       };
     }
 
@@ -67,7 +75,10 @@ exports.handler = async (event) => {
     return {
       statusCode: 500,
       headers: { ...CORS_HEADERS, 'content-type': 'application/json' },
-      body: JSON.stringify({ error: 'Internal server error' })
+      body: JSON.stringify({ 
+        error: 'Internal server error',
+        details: err.message
+      })
     };
   }
 };
