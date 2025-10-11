@@ -1,17 +1,19 @@
 // functions/_lib/blobs.js
-// Complete blob storage implementation for Netlify
+// Fixed to explicitly use environment variables
 
 const { getStore } = require('@netlify/blobs');
 
-// Create the uploads store
+// Create the uploads store with explicit credentials
 function uploadsStore() {
   return getStore({
     name: 'uploads',
+    siteID: process.env.NETLIFY_SITE_ID,
+    token: process.env.NETLIFY_BLOBS_TOKEN,
     consistency: 'strong'
   });
 }
 
-// Export wrapper with setBlob method
+// Export wrapper with helper methods
 const uploadsStoreWrapper = {
   async setBlob(key, data) {
     const store = uploadsStore();
