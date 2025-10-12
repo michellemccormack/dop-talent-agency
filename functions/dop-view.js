@@ -39,3 +39,47 @@ exports.handler = async (event) => {
     return { statusCode: 500, headers: H, body: JSON.stringify({ error: err.message || String(err) }) };
   }
 };
+// functions/dop-view.js
+// GET /.netlify/functions/dop-view?id=recXXXX
+// → { id, fields: {...} }
+
+const { airtable } = require("./_lib/airtable");
+
+function cors() {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET,OPTIONS",
+    "Access-Control-Allow-Headers": "content-type",
+    "Content-Type": "application/json",
+  };
+}
+
+exports.handler = async (event) => {
+  try {
+    if (event.httpMethod === "OPTIONS")
+      return { statusCode: 204, headers: cors(), body: "" };
+
+    const { id } = event.queryStringParameters || {};
+    if (!id) {
+      return {
+        statusCode: 400,
+        headers: cors(),
+        body: JSON.stringify({ error: "id is required" }),
+      };
+    }
+
+    const rec = await airtable.get(id);
+    return {
+      statusCode: 200,
+      headers: cors(),
+      body: JSON.stringify({ id: rec.id, fields: rec.fields || {} }),
+    };
+  } catch (e) {
+    return {
+      statusCode: 500,
+      headers: cors(),
+      body: JSON.stringify({ error: String(e?.message || e) }),
+    };
+  }
+};
+
