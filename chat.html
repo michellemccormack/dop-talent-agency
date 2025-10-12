@@ -482,6 +482,8 @@
     // ========================================
     // PERSONA LOADER
     // ========================================
+    let appInitialized = false;
+    
     async function loadPersona() {
       const loadingEl = qs('#loadingState');
       const errorEl = qs('#errorState');
@@ -533,6 +535,9 @@
               mediaController.setImageSource(imageUrl);
               mediaController.showImage();
               mediaController.showSpinner();
+              const img = document.querySelector('#dopImage');
+if (img) { img.addEventListener('load', () => mediaController.hideSpinner(), { once:true }); }
+
             }
           }
 
@@ -584,21 +589,26 @@
           });
         }
 
-        // Render prompt buttons
-        const grid = qs('#promptGrid');
-        grid.innerHTML = PROMPTS_CONFIG.map((prompt, index) =>
-          `<button class="btn" data-index="${index}">${(prompt.question || '').toUpperCase()}</button>`
-        ).join('');
+        // Render prompt buttons (only on first load)
+        if (!appInitialized) {
+          const grid = qs('#promptGrid');
+          grid.innerHTML = PROMPTS_CONFIG.map((prompt, index) =>
+            `<button class="btn" data-index="${index}">${(prompt.question || '').toUpperCase()}</button>`
+          ).join('');
 
-        // Show main UI
-        loadingEl.style.display = 'none';
-        mainUI.style.display = 'block';
+          // Show main UI
+          loadingEl.style.display = 'none';
+          mainUI.style.display = 'block';
 
-        // Initialize app
-        initializeApp();
+          // Initialize app ONCE
+          console.log('[App] Initializing app for the first time');
+          initializeApp();
+          appInitialized = true;
+        }
 
-        // Continue polling if still processing
+        // Continue polling if still processing (without re-initializing)
         if (dopId && PERSONA_DATA.status !== 'ready') {
+          console.log('[App] DOP not ready, polling again in', CONFIG.PERSONA_POLL_INTERVAL, 'ms');
           setTimeout(loadPersona, CONFIG.PERSONA_POLL_INTERVAL);
         }
 
@@ -614,6 +624,14 @@
     // MAIN APP INITIALIZATION
     // ========================================
     function initializeApp() {
+      // Prevent multiple initializations
+      if (initializeApp.initialized) {
+        console.warn('[App] initializeApp called multiple times - ignoring');
+        return;
+      }
+      initializeApp.initialized = true;
+      console.log('[App] Starting app initialization');
+      
       mediaController.init();
 
       // Cache DOM elements
@@ -677,6 +695,7 @@
       let currentAudio = null;
       let currentAudioURL = null;
       let buttonsLocked = false;
+      let lastButtonClick = 0;
 
       function lockMic() {
         micLocked = true;
@@ -686,18 +705,33 @@
       }
 
       function lockButtons() {
+        if (buttonsLocked) {
+          console.warn('[App] lockButtons called but already locked');
+          return;
+        }
         buttonsLocked = true;
-        qsa('.btn', grid).forEach(btn => {
+        console.log('[App] Locking all buttons');
+        const buttons = qsa('.btn', grid);
+        console.log('[App] Found', buttons.length, 'buttons to lock');
+        buttons.forEach(btn => {
           btn.disabled = true;
           btn.style.opacity = '0.5';
+          btn.style.pointerEvents = 'none';
         });
       }
 
       function unlockButtons() {
+        if (!buttonsLocked) {
+          console.warn('[App] unlockButtons called but already unlocked');
+          return;
+        }
         buttonsLocked = false;
-        qsa('.btn', grid).forEach(btn => {
+        console.log('[App] Unlocking all buttons');
+        const buttons = qsa('.btn', grid);
+        buttons.forEach(btn => {
           btn.disabled = false;
           btn.style.opacity = '';
+          btn.style.pointerEvents = '';
         });
       }
 
@@ -901,16 +935,32 @@
       });
 
       grid.addEventListener('click', (event) => {
+        // Prevent event bubbling and default behavior
+        event.preventDefault();
+        event.stopPropagation();
+        
         const btn = event.target.closest('.btn');
         if (!btn) return;
         
-        // Prevent multiple simultaneous clicks
+        // Debounce: prevent clicks within 500ms
+        const now = Date.now();
+        if (now - lastButtonClick < 500) {
+          console.log('[App] Click debounced (too soon)');
+          event.stopImmediatePropagation();
+          return;
+        }
+        lastButtonClick = now;
+        
+        // Prevent multiple simultaneous clicks - check IMMEDIATELY
         if (buttonsLocked) {
           console.log('[App] Buttons locked, ignoring click');
+          event.stopImmediatePropagation();
           return;
         }
         
+        // Lock buttons IMMEDIATELY before any async operations
         lockButtons();
+        console.log('[App] Button clicked and locked:', btn.textContent);
         
         // Failsafe: unlock buttons after 30 seconds no matter what
         const failsafeTimeout = setTimeout(() => {
@@ -956,7 +1006,7 @@
           setIdleUI();
           showToast('Error processing request');
         }
-      });
+      }, { capture: true });
 
       mediaController.videoEl.addEventListener('ended', () => {
         mediaController.stopVideo();
