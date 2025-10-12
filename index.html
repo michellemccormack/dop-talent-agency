@@ -195,14 +195,14 @@
       <!-- instructions -->
       <div class="instructions stack-l">
         Ask Sasha one of these 3 questions.
-        <small>If your microphone doesn’t work, tap the question.</small>
+        <small>If your microphone doesn't work, tap the question.</small>
       </div>
 
       <!-- prompt buttons -->
       <div class="prompt-grid stack-m" id="promptGrid">
         <button class="btn" data-file="assets/p_fun.mp4">What do you like to do for fun?</button>
         <button class="btn" data-file="assets/p_from.mp4">Where are you from?</button>
-        <button class="btn" data-file="assets/p_relax.mp4">What’s your favorite way to relax?</button>
+        <button class="btn" data-file="assets/p_relax.mp4">What's your favorite way to relax?</button>
       </div>
 
       <!-- response video + overlay -->
@@ -226,8 +226,14 @@
 
   <script>
     /* ============================================================
-       Voice-per-prompt (Step 1)  — ADD-ONLY: make selection persistent
+       Constants & Configuration
        ============================================================ */
+    const MAX_TURNS = 10;
+    const MIC_LOCK_DURATION_MS = 350;
+    const ASR_DEBOUNCE_MS = 500;
+    const TOAST_DISPLAY_MS = 1500;
+    const TTS_FALLBACK_TIMEOUT_MS = 12000;
+
     const VOICE_MAP = {
       fun:  "WEyBkfNR4P8pL1cFo2jV",
       from: "DqdcNywG9XLHBlbqaZYM",
@@ -235,247 +241,351 @@
     };
     const FALLBACK_VOICE = "kDIJK53VQMjfQj3fCrML";
 
-    // ADD-ONLY: persistent selected voice across prompts + mic
-    let SELECTED_VOICE_ID = FALLBACK_VOICE;
-
-    // (kept name for compatibility) — now sets persistent voice; does NOT just set "next only"
-    function setVoiceForNextTTSByFile(file) {
-      try {
-        const key = String(file || "")
-          .replace(/^assets\//, "")
-          .replace(/\.mp4$/i, "")
-          .replace(/^p_/, ""); // p_fun -> fun
-        SELECTED_VOICE_ID = VOICE_MAP[key] || FALLBACK_VOICE;
-      } catch { SELECTED_VOICE_ID = FALLBACK_VOICE; }
-    }
-
-    // (kept name for compatibility) — NO LONGER forces fallback if a prompt was chosen
-    function forceFallbackVoiceForMic() {
-      // ADD-ONLY: do nothing if a prompt voice has been chosen already
-      if (window.DOP_LAST_PROMPT) return;
-      SELECTED_VOICE_ID = FALLBACK_VOICE;
-    }
-
-    // Now just return the persistent selection (no reset)
-    function getVoiceIdForNextTTS() {
-      return SELECTED_VOICE_ID || FALLBACK_VOICE;
-    }
-
-    // ADD-ONLY: remember last pressed prompt clip key for mic clip hint (e.g., "p_fun")
-    window.DOP_LAST_PROMPT = null;
-
-    /* ============================================================
-       Tier 1 Session Memory (Local) — baseline preserved
-       ============================================================ */
-    const MAX_TURNS = 10;
-
     const CLIP_META = {
       "assets/p_fun.mp4": {
-        transcript: "I’m a go-out girl—coffee walks, thrifting, and a little dancing never hurt. 😉"
+        transcript: "I'm a go-out girl—coffee walks, thrifting, and a little dancing never hurt. 😉"
       },
       "assets/p_from.mp4": {
-        transcript: "I’m East-coast raised with a Boston edge—but I’ve bounced around enough to pick up good pizza opinions."
+        transcript: "I'm East-coast raised with a Boston edge—but I've bounced around enough to pick up good pizza opinions."
       },
       "assets/p_relax.mp4": {
         transcript: "Headphones on, hot shower, then a cozy movie night. Zero drama, maximum exhale."
       }
     };
 
-    let sessionId = randId();
-    /** @type {{role:'user'|'assistant'|'system', content:string, ts:number, meta?:any}[]} */
-    const conversationHistory = [];
+    /* ============================================================
+       Global State Namespace
+       ============================================================ */
+    window.DTA = {
+      selectedVoiceId: FALLBACK_VOICE,
+      lastPromptKey: null,
+      sessionId: generateSessionId(),
+      conversationHistory: []
+    };
 
-    function randId(len=12){
-      const chars='abcdefghijklmnopqrstuvwxyz0123456789';
-      let out=''; for(let i=0;i<len;i++) out+=chars[Math.floor(Math.random()*chars.length)];
-      return out;
+    /* ============================================================
+       Utility Functions
+       ============================================================ */
+    function generateSessionId() {
+      if (crypto && crypto.randomUUID) {
+        return crypto.randomUUID();
+      }
+      // Fallback for older browsers
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
     }
-    function pushTurn(role, content, meta){
-      conversationHistory.push({ role, content: String(content||''), ts:Date.now(), meta: meta||{} });
-      if (conversationHistory.length > MAX_TURNS) {
-        conversationHistory.splice(0, conversationHistory.length - MAX_TURNS);
+
+    function haptic(ms = 12) {
+      if (navigator.vibrate) {
+        try { 
+          navigator.vibrate(ms);
+        } catch (e) {
+          console.warn('Haptic feedback failed:', e);
+        }
       }
     }
 
-    // Toast helpers
-    const toastEl = document.getElementById('toast');
-    let toastTimer = null;
-    function showToast(msg){
-      if (!toastEl) return;
-      toastEl.textContent = msg;
-      toastEl.classList.add('show');
-      clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1500);
+    /* ============================================================
+       Session Memory Management
+       ============================================================ */
+    function pushTurn(role, content, meta = {}) {
+      window.DTA.conversationHistory.push({ 
+        role, 
+        content: String(content || ''), 
+        ts: Date.now(), 
+        meta 
+      });
+      
+      if (window.DTA.conversationHistory.length > MAX_TURNS) {
+        window.DTA.conversationHistory.splice(
+          0, 
+          window.DTA.conversationHistory.length - MAX_TURNS
+        );
+      }
     }
 
-    function resetSession(){
-      conversationHistory.length = 0;
-      sessionId = randId();
+    function getBoundedContext() {
+      const system = { 
+        role: 'system', 
+        content: 'You are Sasha — be brief, warm, playful. Respect boundaries.' 
+      };
+      return [system, ...window.DTA.conversationHistory.slice(-MAX_TURNS)];
+    }
+
+    function resetSession() {
+      window.DTA.conversationHistory.length = 0;
+      window.DTA.sessionId = generateSessionId();
+      window.DTA.lastPromptKey = null;
+      window.DTA.selectedVoiceId = FALLBACK_VOICE;
+      
       stopAll();
       setIdleUI();
-      console.log('[DTA] Session reset →', sessionId);
+      clearPreloadCache();
+      
+      console.log('[DTA] Session reset →', window.DTA.sessionId);
       showToast('Session reset');
-      // ADD-ONLY: clear remembered prompt + voice
-      window.DOP_LAST_PROMPT = null;
-      SELECTED_VOICE_ID = FALLBACK_VOICE;
     }
-    function getBoundedContext(){
-      const system = { role:'system', content:'You are Sasha — be brief, warm, playful. Respect boundaries.' };
-      return [system, ...conversationHistory.slice(-MAX_TURNS)];
-    }
-    window.DTA_reset = resetSession;
 
-    /* ---------- Elements & state (baseline) ---------- */
+    /* ============================================================
+       Voice Selection
+       ============================================================ */
+    function setVoiceByPromptFile(file) {
+      try {
+        const key = String(file || "")
+          .replace(/^assets\//, "")
+          .replace(/\.mp4$/i, "")
+          .replace(/^p_/, ""); // p_fun -> fun
+        
+        window.DTA.selectedVoiceId = VOICE_MAP[key] || FALLBACK_VOICE;
+        window.DTA.lastPromptKey = key;
+      } catch (e) {
+        console.error('Voice selection error:', e);
+        window.DTA.selectedVoiceId = FALLBACK_VOICE;
+      }
+    }
+
+    function getSelectedVoiceId() {
+      return window.DTA.selectedVoiceId || FALLBACK_VOICE;
+    }
+
+    /* ============================================================
+       Toast Notifications
+       ============================================================ */
+    const toastEl = document.getElementById('toast');
+    let toastTimer = null;
+
+    function showToast(msg) {
+      if (!toastEl) return;
+      
+      toastEl.textContent = msg;
+      toastEl.classList.add('show');
+      
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toastEl.classList.remove('show');
+      }, TOAST_DISPLAY_MS);
+    }
+
+    /* ============================================================
+       DOM Elements
+       ============================================================ */
     const resp = document.getElementById('resp');
-    const grid = document.getElementById('promptGrid'); // <-- single declaration (fixed)
+    const grid = document.getElementById('promptGrid');
     const promptButtons = Array.from(grid.querySelectorAll('.btn'));
-    const micBtn  = document.getElementById('micBtn');
+    const micBtn = document.getElementById('micBtn');
     const srStatus = document.getElementById('asrStatus');
     const pill = document.getElementById('statusPill');
     const pillText = document.getElementById('pillText');
     const overlay = document.getElementById('overlay');
     const resetBtn = document.getElementById('resetBtn');
 
+    /* ============================================================
+       State Management
+       ============================================================ */
     let currentFile = 'assets/p_fun.mp4';
-    let isStopped = true;
-
-    // audio state
     let currentAudio = null;
     let currentAudioURL = null;
-
-    // replay memory
     let lastMode = null;  // 'video' | 'tts'
     let lastFile = null;
     let lastText = null;
 
-    // mic debounce
+    // Mic locking state
     let micLocked = false;
-    function lockMic(ms=350){ micLocked = true; setTimeout(()=>micLocked=false, ms); }
+    let micLockTimer = null;
 
-    // simple in-memory video preload cache
-    const preloadCache = new Map(); // src => HTMLVideoElement
+    function lockMic(ms = MIC_LOCK_DURATION_MS) {
+      micLocked = true;
+      clearTimeout(micLockTimer);
+      micLockTimer = setTimeout(() => {
+        micLocked = false;
+      }, ms);
+    }
 
-    function haptic(ms=12){ if (navigator.vibrate) try{ navigator.vibrate(ms);}catch{} }
+    // Video preload cache
+    const preloadCache = new Map();
 
-    /* ---------- Helpers (baseline) ---------- */
-    function setPill(mode, text){
-      pill.classList.remove('listening','thinking','speaking','ready');
+    function clearPreloadCache() {
+      preloadCache.forEach(video => {
+        try {
+          video.pause();
+          video.src = '';
+          video.load();
+        } catch (e) {
+          console.warn('Video cleanup error:', e);
+        }
+      });
+      preloadCache.clear();
+    }
+
+    /* ============================================================
+       UI State Functions
+       ============================================================ */
+    function setPill(mode, text) {
+      pill.classList.remove('listening', 'thinking', 'speaking', 'ready');
       pill.classList.add(mode);
       pillText.textContent = text;
     }
-    function showOverlay(){ overlay.classList.add('show'); }
-    function hideOverlay(){ overlay.classList.remove('show'); }
 
-    function primeFirstFrame(src){
-      showOverlay();
-      resp.classList.add('fade-start');
-      resp.src = src;
-      resp.load();
-      resp.addEventListener('loadeddata', () => {
-        resp.pause();
-        resp.currentTime = 0;
-        requestAnimationFrame(() => resp.classList.remove('fade-start'));
-        isStopped = true;
-        hideOverlay();
-        setPill('ready','Ready');
-      }, { once:true });
+    function showOverlay() { 
+      overlay.classList.add('show'); 
     }
-    function safePlay(){
-      const p = resp.play();
-      if (p && typeof p.catch === 'function') p.catch(()=>{});
+
+    function hideOverlay() { 
+      overlay.classList.remove('show'); 
     }
-    function clearActive(){ promptButtons.forEach(b => b.classList.remove('active')); }
-    function setActiveByFile(file){
+
+    function setListeningUI() {
+      micBtn.textContent = '■ Stop';
+      micBtn.classList.add('listening');
+      micBtn.classList.remove('stopping');
+      micBtn.setAttribute('aria-pressed', 'true');
+      disablePrompts(true);
+      setPill('listening', 'Listening…');
+    }
+
+    function setPlayingUI() {
+      micBtn.textContent = '■ Stop';
+      micBtn.classList.add('stopping');
+      micBtn.classList.remove('listening');
+      micBtn.setAttribute('aria-pressed', 'true');
+      disablePrompts(true);
+      setPill('speaking', 'Speaking…');
+    }
+
+    function setIdleUI() {
+      micBtn.textContent = '🎤 Tap to Talk';
+      micBtn.classList.remove('listening', 'stopping');
+      micBtn.setAttribute('aria-pressed', 'false');
+      disablePrompts(false);
+      srStatus.textContent = 'Idle';
+      setPill('ready', 'Ready');
+    }
+
+    function clearActive() { 
+      promptButtons.forEach(b => b.classList.remove('active')); 
+    }
+
+    function setActiveByFile(file) {
       clearActive();
       const btn = promptButtons.find(b => b.dataset.file === file);
       if (btn) btn.classList.add('active');
     }
-    function disablePrompts(disabled){ promptButtons.forEach(b => b.disabled = !!disabled); }
 
-    function stopAudio(){
+    function disablePrompts(disabled) { 
+      promptButtons.forEach(b => b.disabled = !!disabled); 
+    }
+
+    /* ============================================================
+       Audio Cleanup (Single Source of Truth)
+       ============================================================ */
+    function cleanupAudio() {
       try {
-        if (currentAudio) { currentAudio.pause(); currentAudio.src = ''; }
-        if (currentAudioURL) { URL.revokeObjectURL(currentAudioURL); }
-      } catch {}
-      currentAudio = null;
-      currentAudioURL = null;
-      if ('speechSynthesis' in window) { try { speechSynthesis.cancel(); } catch{} }
+        if (currentAudio) {
+          currentAudio.pause();
+          currentAudio.src = '';
+          currentAudio = null;
+        }
+        if (currentAudioURL) {
+          URL.revokeObjectURL(currentAudioURL);
+          currentAudioURL = null;
+        }
+        if ('speechSynthesis' in window) {
+          speechSynthesis.cancel();
+        }
+      } catch (e) {
+        console.warn('Audio cleanup error:', e);
+      }
     }
 
-    function stopVideo(){
-      resp.pause();
-      resp.currentTime = 0;
-      isStopped = true;
-      clearActive();
+    function stopVideo() {
+      try {
+        resp.pause();
+        resp.currentTime = 0;
+        clearActive();
+      } catch (e) {
+        console.warn('Video stop error:', e);
+      }
     }
 
-    /* ---------- UI states (baseline) ---------- */
-    function setListeningUI(){
-      micBtn.textContent = '■ Stop';
-      micBtn.classList.add('listening');
-      micBtn.classList.remove('stopping');
-      micBtn.setAttribute('aria-pressed','true');
-      disablePrompts(true);
-      setPill('listening','Listening…');
-    }
-    function setPlayingUI(){
-      micBtn.textContent = '■ Stop';
-      micBtn.classList.add('stopping');
-      micBtn.classList.remove('listening');
-      micBtn.setAttribute('aria-pressed','true');
-      disablePrompts(true);
-      setPill('speaking','Speaking…');
-    }
-    function setIdleUI(){
-      micBtn.textContent = '🎤 Tap to Talk';
-      micBtn.classList.remove('listening','stopping');
-      micBtn.setAttribute('aria-pressed','false');
-      disablePrompts(false);
-      srStatus.textContent = 'Idle';
-      setPill('ready','Ready');
-    }
-
-    function stopAll(){
-      stopAudio();
+    function stopAll() {
+      cleanupAudio();
       stopVideo();
       setIdleUI();
       haptic();
     }
 
-    /* ---------- Video preload (baseline) ---------- */
-    function preloadSources(initialSrc){
+    /* ============================================================
+       Video Preloading
+       ============================================================ */
+    function primeFirstFrame(src) {
+      showOverlay();
+      resp.classList.add('fade-start');
+      resp.src = src;
+      
+      try {
+        resp.load();
+      } catch (e) {
+        console.error('Video load error:', e);
+      }
+
+      resp.addEventListener('loadeddata', () => {
+        resp.pause();
+        resp.currentTime = 0;
+        requestAnimationFrame(() => resp.classList.remove('fade-start'));
+        hideOverlay();
+        setPill('ready', 'Ready');
+      }, { once: true });
+    }
+
+    function preloadSources(initialSrc) {
       const uniqueSrcs = [...new Set(promptButtons.map(b => b.dataset.file))];
+      
       uniqueSrcs.forEach(src => {
         if (src === initialSrc) return;
         if (preloadCache.has(src)) return;
+        
         const v = document.createElement('video');
         v.preload = 'auto';
         v.src = src;
-        v.addEventListener('loadeddata', ()=>{/* cached */}, { once:true });
-        try { v.load(); } catch {}
+        v.addEventListener('loadeddata', () => {
+          console.log('[DTA] Preloaded:', src);
+        }, { once: true });
+        
+        try { 
+          v.load(); 
+        } catch (e) {
+          console.warn('Preload error for', src, e);
+        }
+        
         preloadCache.set(src, v);
       });
     }
 
-    /* ---------- Video playback (baseline + memory hooks) ---------- */
-    function playFile(file){
-      stopAudio();
+    /* ============================================================
+       Video Playback
+       ============================================================ */
+    function playFile(file) {
+      cleanupAudio();
 
       const labelBtn = promptButtons.find(b => b.dataset.file === file);
-      if (labelBtn){
-        pushTurn('user', labelBtn.textContent.trim(), { inputType:'prompt', file });
+      if (labelBtn) {
+        pushTurn('user', labelBtn.textContent.trim(), { inputType: 'prompt', file });
       } else {
-        pushTurn('user', 'Clicked prompt', { inputType:'prompt', file });
+        pushTurn('user', 'Clicked prompt', { inputType: 'prompt', file });
       }
 
-      if (!isStopped && currentFile === file && !resp.paused) {
+      if (currentFile === file && !resp.paused) {
         stopVideo();
         setIdleUI();
         hideOverlay();
         return;
       }
 
-      currentFile = file; isStopped = false; setActiveByFile(file);
+      currentFile = file;
+      setActiveByFile(file);
       setPlayingUI();
       showOverlay();
 
@@ -483,50 +593,100 @@
       lastFile = file;
       lastText = null;
 
-      // ADD-ONLY: remember last prompt clip key for mic path (e.g., "assets/p_fun.mp4" -> "p_fun")
-      window.DOP_LAST_PROMPT = String(file).replace(/^assets\//,'').replace(/\.mp4$/i,'');
-
       resp.classList.add('fade-start');
-      resp.src = file; resp.load();
+      resp.src = file;
+      
+      try {
+        resp.load();
+      } catch (e) {
+        console.error('Video load error:', e);
+        hideOverlay();
+        setIdleUI();
+        return;
+      }
+
       const onCanPlay = () => {
         const meta = CLIP_META[file] || {};
         const textForMemory = meta.transcript || `Playing clip: ${file.split('/').pop()}`;
         pushTurn('assistant', textForMemory, { videoUrl: file, clip: file });
 
-        safePlay();
+        const playPromise = resp.play();
+        if (playPromise && typeof playPromise.catch === 'function') {
+          playPromise.catch(e => {
+            console.warn('Video play error:', e);
+            setIdleUI();
+            hideOverlay();
+          });
+        }
+        
         requestAnimationFrame(() => resp.classList.remove('fade-start'));
         hideOverlay();
       };
-      resp.addEventListener('canplay', onCanPlay, { once:true });
+      
+      resp.addEventListener('canplay', onCanPlay, { once: true });
 
-      if (window.innerWidth < 900) resp.scrollIntoView({ behavior:'smooth', block:'center' });
+      if (window.innerWidth < 900) {
+        resp.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
     }
 
-    /* ---------- Events (baseline) ---------- */
+    /* ============================================================
+       Video Event Handlers
+       ============================================================ */
     resp.addEventListener('click', () => {
-      if (resp.paused) { safePlay(); isStopped = false; setPlayingUI(); }
-      else { stopVideo(); setIdleUI(); hideOverlay(); }
+      if (resp.paused) {
+        const playPromise = resp.play();
+        if (playPromise && typeof playPromise.catch === 'function') {
+          playPromise.catch(e => console.warn('Play error:', e));
+        }
+        setPlayingUI();
+      } else {
+        stopVideo();
+        setIdleUI();
+        hideOverlay();
+      }
     });
 
-    // Set voice by prompt BEFORE playing the clip
+    resp.addEventListener('ended', () => {
+      stopVideo();
+      setIdleUI();
+    });
+
+    resp.addEventListener('error', (e) => {
+      console.error('Video error:', e);
+      stopVideo();
+      setIdleUI();
+      hideOverlay();
+    });
+
+    /* ============================================================
+       Prompt Button Handlers
+       ============================================================ */
     grid.addEventListener('click', (e) => {
-      const btn = e.target.closest('.btn'); if (!btn) return;
+      const btn = e.target.closest('.btn');
+      if (!btn) return;
+      
       const file = btn.dataset.file;
-      setVoiceForNextTTSByFile(file); // fun/from/relax → maps to specific voice (persistent now)
+      setVoiceByPromptFile(file);
       playFile(file);
     });
 
-    resp.addEventListener('ended', () => { stopVideo(); setIdleUI(); });
-    resp.addEventListener('error', () => { stopVideo(); setIdleUI(); hideOverlay(); });
-
-    /* ---------- ASR + backend routing + ElevenLabs TTS ---------- */
+    /* ============================================================
+       Speech Recognition (ASR)
+       ============================================================ */
     const supportsASR = ('SpeechRecognition' in window) || ('webkitSpeechRecognition' in window);
-    let recognizer = null, recognizing = false, finalTranscript = '';
-    let asrFinalSent = false; // fire immediately on first final chunk
+    let recognizer = null;
+    let recognizing = false;
+    let finalTranscript = '';
+    let asrProcessed = false;
+    let asrDebounceTimer = null;
 
-    if (!supportsASR) { micBtn.disabled = true; srStatus.textContent = 'Speech input not available.'; }
+    if (!supportsASR) {
+      micBtn.disabled = true;
+      srStatus.textContent = 'Speech input not available.';
+    }
 
-    function initRecognizer(){
+    function initRecognizer() {
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
       recognizer = new SR();
       recognizer.lang = 'en-US';
@@ -534,81 +694,170 @@
       recognizer.continuous = false;
 
       recognizer.onstart = () => {
-        recognizing = true; finalTranscript = ''; asrFinalSent = false;
+        recognizing = true;
+        finalTranscript = '';
+        asrProcessed = false;
+        
         stopAll();
         setListeningUI();
         srStatus.textContent = 'Listening…';
         lockMic();
         haptic();
-        // NOTE: do NOT blow away the selected voice; we keep last prompt's voice for mic
-        forceFallbackVoiceForMic(); // harmless now if a prompt was chosen (no-op when DOP_LAST_PROMPT is set)
       };
-      recognizer.onerror = (e) => { srStatus.textContent = 'Mic error: ' + (e.error || 'unknown'); stopASR(); setIdleUI(); hideOverlay(); };
+
+      recognizer.onerror = (e) => {
+        console.error('ASR error:', e);
+        srStatus.textContent = 'Mic error: ' + (e.error || 'unknown');
+        stopASR();
+        setIdleUI();
+        hideOverlay();
+      };
+
       recognizer.onend = () => {
         recognizing = false;
-        if (!asrFinalSent) setIdleUI();
-      };
-      recognizer.onresult = (event) => {
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const res = event.results[i];
-          if (res.isFinal) {
-            finalTranscript += res[0].transcript.trim() + ' ';
-            if (!asrFinalSent) {
-              asrFinalSent = true;
-              const text = finalTranscript.trim();
-              if (text) {
-                try { stopASR(); } catch {}
-                pushTurn('user', text, { inputType:'mic' });
-                srStatus.textContent = 'Processing…';
-                setPill('thinking','Thinking…');
-                routeToBackend(text, { forceLLM: true });
-              }
-            }
-          }
+        if (!asrProcessed) {
+          setIdleUI();
         }
       };
-    }
-    function startASR(){ if (!recognizer) initRecognizer(); try { recognizer.start(); } catch { try { recognizer.stop(); recognizer.start(); } catch(_){} } }
-    function stopASR(){ if (recognizer && recognizing) recognizer.stop(); recognizing = false; }
 
+      recognizer.onresult = (event) => {
+        // Accumulate all final results
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const result = event.results[i];
+          if (result.isFinal) {
+            finalTranscript += result[0].transcript.trim() + ' ';
+          }
+        }
+
+        // Debounce processing to batch multiple final results
+        clearTimeout(asrDebounceTimer);
+        asrDebounceTimer = setTimeout(() => {
+          const text = finalTranscript.trim();
+          if (text && !asrProcessed) {
+            asrProcessed = true;
+            processTranscript(text);
+          }
+        }, ASR_DEBOUNCE_MS);
+      };
+    }
+
+    function processTranscript(text) {
+      try {
+        stopASR();
+      } catch (e) {
+        console.warn('ASR stop error:', e);
+      }
+      
+      pushTurn('user', text, { inputType: 'mic' });
+      srStatus.textContent = 'Processing…';
+      setPill('thinking', 'Thinking…');
+      routeToBackend(text, { forceLLM: true });
+    }
+
+    function startASR() {
+      if (!recognizer) {
+        initRecognizer();
+      }
+      
+      try {
+        recognizer.start();
+      } catch (e) {
+        console.warn('ASR start error, retrying:', e);
+        try {
+          recognizer.stop();
+          setTimeout(() => recognizer.start(), 100);
+        } catch (e2) {
+          console.error('ASR restart failed:', e2);
+        }
+      }
+    }
+
+    function stopASR() {
+      if (recognizer && recognizing) {
+        try {
+          recognizer.stop();
+        } catch (e) {
+          console.warn('ASR stop error:', e);
+        }
+      }
+      recognizing = false;
+      clearTimeout(asrDebounceTimer);
+    }
+
+    /* ============================================================
+       Mic Button Handler
+       ============================================================ */
     micBtn.addEventListener('click', () => {
       if (micLocked) return;
-      if (micBtn.textContent.includes('Stop')) { stopAll(); lockMic(); return; }
+      
+      if (micBtn.textContent.includes('Stop')) {
+        stopAll();
+        lockMic();
+        return;
+      }
+      
       if (!supportsASR) return;
+      
       startASR();
     });
-    window.addEventListener('keydown', (e) => { if (e.key === 'Escape') stopAll(); });
 
-    // ---- Helpers for JSON fetch ----
-    async function safeJSON(res){
+    /* ============================================================
+       Keyboard Shortcuts
+       ============================================================ */
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        stopAll();
+      }
+    });
+
+    /* ============================================================
+       Backend Communication
+       ============================================================ */
+    async function safeJSON(res) {
       const txt = await res.text();
-      try { return JSON.parse(txt); }
-      catch { throw new Error('Non-JSON response: ' + txt.slice(0,120)); }
+      try {
+        return JSON.parse(txt);
+      } catch (e) {
+        console.error('JSON parse error:', e);
+        throw new Error('Non-JSON response: ' + txt.slice(0, 120));
+      }
     }
-    async function callFunction(url, payload){
+
+    async function callFunction(url, payload) {
       const res = await fetch(url, {
-        method:'POST',
-        headers:{ 'Content-Type':'application/json' },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      if (!res.ok) throw new Error(`${url} ${res.status}`);
+      
+      if (!res.ok) {
+        throw new Error(`${url} returned ${res.status}`);
+      }
+      
       return await safeJSON(res);
     }
 
-    // NON-STREAM route only
-    async function routeToBackend(text, opts = {}){
-      const payload = { text, message: text, sessionId, context: getBoundedContext(), ...opts };
-      try{
+    async function routeToBackend(text, opts = {}) {
+      const payload = {
+        text,
+        message: text,
+        sessionId: window.DTA.sessionId,
+        context: getBoundedContext(),
+        ...opts
+      };
+
+      try {
         const data = await callFunction('/.netlify/functions/session-chat', payload);
         await handleBackendResponse(data);
-      } catch (e1){
-        console.warn('[DTA] session-chat failed, falling back → dop-chat', e1);
-        try{
+      } catch (e1) {
+        console.warn('[DTA] session-chat failed, falling back to dop-chat:', e1);
+        
+        try {
           const data = await callFunction('/.netlify/functions/dop-chat', { text });
           await handleBackendResponse(data);
           showToast('Using fallback chat');
-        } catch (e2){
-          console.error('[DTA] dop-chat also failed', e2);
+        } catch (e2) {
+          console.error('[DTA] Both backends failed:', e2);
           srStatus.textContent = 'Backend error';
           setIdleUI();
           showToast('Backend error');
@@ -616,97 +865,121 @@
       }
     }
 
-    async function handleBackendResponse(data){
+    async function handleBackendResponse(data) {
       if (data.matchedClip) {
         setPlayingUI();
-        playFile(data.matchedClip); // playFile logs assistant turn (with transcript)
+        playFile(data.matchedClip);
       } else if (data.fallbackResponse || data.reply) {
         setPlayingUI();
         const speech = data.fallbackResponse || data.reply;
+        
         lastMode = 'tts';
         lastText = speech;
-        // keep lastFile as-is; we want the prompt hint to persist
 
-        pushTurn('assistant', speech, { audio:true });
+        pushTurn('assistant', speech, { audio: true });
         await speakWithElevenLabs(speech);
         setIdleUI();
       } else {
+        console.warn('Unexpected backend response:', data);
         setIdleUI();
       }
     }
 
-    // TTS — pass voice AND clip hint so server picks the right voice deterministically
-    async function speakWithElevenLabs(text){
-      try{
+    /* ============================================================
+       Text-to-Speech (ElevenLabs)
+       ============================================================ */
+    async function speakWithElevenLabs(text) {
+      try {
         stopVideo();
         showOverlay();
 
-        // clip hint from lastFile (e.g., "assets/p_fun.mp4" -> "p_fun")
+        // Determine clip hint for voice selection
         let clipHint = null;
-        if (lastFile && typeof lastFile === 'string') {
-          clipHint = lastFile.replace(/^assets\//,'').replace(/\.mp4$/i,'');
-        }
-        // ADD-ONLY: if mic-only (no lastFile), reuse last prompt key
-        if (!clipHint && window.DOP_LAST_PROMPT) {
-          clipHint = window.DOP_LAST_PROMPT; // e.g., "p_fun"
+        if (window.DTA.lastPromptKey) {
+          clipHint = window.DTA.lastPromptKey;
+        } else if (lastFile && typeof lastFile === 'string') {
+          clipHint = lastFile.replace(/^assets\//, '').replace(/\.mp4$/i, '').replace(/^p_/, '');
         }
 
         const res = await fetch('/.netlify/functions/tts-eleven', {
-          method:'POST',
-          headers:{ 'Content-Type':'application/json' },
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             text,
             clip: clipHint,
-            voiceId: getVoiceIdForNextTTS() // persistent selection
+            voiceId: getSelectedVoiceId()
           })
         });
-        if (!res.ok) throw new Error('TTS failed');
+
+        if (!res.ok) {
+          throw new Error('TTS request failed with status ' + res.status);
+        }
 
         const buf = await res.arrayBuffer();
         const blob = new Blob([buf], { type: 'audio/mpeg' });
         const url = URL.createObjectURL(blob);
+        
         currentAudioURL = url;
         currentAudio = new Audio(url);
 
-        setPill('speaking','Speaking…');
-        await currentAudio.play().catch(()=>{});
+        setPill('speaking', 'Speaking…');
+
+        await currentAudio.play();
         await new Promise((resolve) => {
-          const cleanup = () => { currentAudio && currentAudio.removeEventListener('ended', cleanup); resolve(); };
-          currentAudio.addEventListener('ended', cleanup, { once:true });
+          currentAudio.addEventListener('ended', resolve, { once: true });
         });
-      } catch(e){
-        console.warn('ElevenLabs TTS error, falling back to device TTS', e);
+
+      } catch (e) {
+        console.warn('ElevenLabs TTS error, falling back to device TTS:', e);
+        
+        // Fallback to browser speech synthesis
         if ('speechSynthesis' in window) {
-          const u = new SpeechSynthesisUtterance(text);
-          u.lang = 'en-US';
-          setPill('speaking','Speaking…');
-          try { speechSynthesis.cancel(); speechSynthesis.speak(u); } catch {}
-          await new Promise((resolve) => { u.onend = resolve; setTimeout(resolve, 12000); });
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.lang = 'en-US';
+          setPill('speaking', 'Speaking…');
+          
+          try {
+            speechSynthesis.cancel();
+            speechSynthesis.speak(utterance);
+            
+            await new Promise((resolve) => {
+              utterance.onend = resolve;
+              setTimeout(resolve, TTS_FALLBACK_TIMEOUT_MS);
+            });
+          } catch (e2) {
+            console.error('Fallback TTS also failed:', e2);
+          }
         }
       } finally {
         hideOverlay();
-        try{
-          if (currentAudio) { currentAudio.pause(); currentAudio.src=''; }
-          if (currentAudioURL) URL.revokeObjectURL(currentAudioURL);
-        }catch{}
-        currentAudio=null; currentAudioURL=null;
+        cleanupAudio();
       }
     }
 
-    // Reset button
+    /* ============================================================
+       Reset Button
+       ============================================================ */
     resetBtn.addEventListener('click', resetSession);
 
-    // Boot
+    /* ============================================================
+       Initialization
+       ============================================================ */
     primeFirstFrame(currentFile);
     setTimeout(() => preloadSources(currentFile), 300);
 
-    // Pre-warm TTS function to cut first-utterance latency
+    // Pre-warm TTS function to reduce first-utterance latency
     window.addEventListener('load', () => {
-      fetch('/.netlify/functions/tts-eleven', { method:'OPTIONS' }).catch(()=>{});
+      fetch('/.netlify/functions/tts-eleven', { method: 'OPTIONS' })
+        .catch(() => {
+          // Silent fail - just a pre-warm attempt
+        });
     });
 
-    // Debug tips in console:
-    // conversationHistory, getBoundedContext(), DTA_reset()
+    // Expose debug utilities
+    window.DTA.reset = resetSession;
+    window.DTA.getContext = getBoundedContext;
+
+    console.log('[DTA] Initialized. Debug: window.DTA');
   </script>
 </body>
 </html>

@@ -5,11 +5,12 @@
 const { getStore } = require('@netlify/blobs');
 
 // IMPORTANT: STORE_NAME must match the name used in your existing blobs helper.
-// If your app uses a different store name, change it here.
 const STORE_NAME = 'dop-uploads';
 const PERSONA_PREFIX = 'personas/'; // personas/<dopId>.json
-const POLL_LIMIT_MS = 180000;       // max time per invocation ~3min
-const SLEEP_MS = 3500;
+const POLL_LIMIT_MS = 180000;       // max time per invocation ~3min (for scheduled runs)
+const NETLIFY_TIMEOUT_MS = 10000;   // Netlify function timeout (10s, leave 2s buffer)
+const SLEEP_MS = 3500;              // delay between HeyGen API calls
+const MAX_CONCURRENT = 3;           // max concurrent persona processing
 
 function cors(extra={}) {
   return {
@@ -21,12 +22,14 @@ function cors(extra={}) {
   };
 }
 
-const sleep = (ms)=> new Promise(r=>setTimeout(r,ms));
-const ok  = (b)=>({ statusCode:200, headers:cors(), body:JSON.stringify(b) });
-const err = (c,m,x={})=>({ statusCode:c, headers:cors(), body:JSON.stringify({ error:m, ...x }) });
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const ok = (b) => ({ statusCode: 200, headers: cors(), body: JSON.stringify(b) });
+const err = (c, m, x={}) => ({ statusCode: c, headers: cors(), body: JSON.stringify({ error: m, ...x }) });
 
-async function checkHeygenTask({ task_id, video_id }){
-  // Support either v2 (task_id) or v1 (video_id)
+/**
+ * Check HeyGen video status via API
+ */
+async function checkHeygenTask({ task_id, video_id }) {
   let url;
   if (task_id) {
     url = `https://api.heygen.com/v2/video/status?task_id=${encodeURIComponent(task_id)}`;
@@ -35,96 +38,245 @@ async function checkHeygenTask({ task_id, video_id }){
   } else {
     throw new Error('task_id or video_id required');
   }
-  const resp = await fetch(url, { headers: { 'Authorization': `Bearer ${process.env.HEYGEN_API_KEY}` } });
-  const j = await resp.json().catch(()=>({}));
-  if (!resp.ok) throw new Error(`heygen status ${resp.status}`);
+
+  const resp = await fetch(url, {
+    headers: { 'Authorization': `Bearer ${process.env.HEYGEN_API_KEY}` }
+  });
+
+  const j = await resp.json().catch(() => ({}));
+  
+  if (!resp.ok) {
+    throw new Error(`HeyGen API error: ${resp.status} - ${JSON.stringify(j)}`);
+  }
+
   const status = j.status || j?.data?.status || j?.code || null;
   const video_url = j.video_url || j?.data?.video_url || null;
   const thumbnail_url = j.thumbnail_url || j?.data?.thumbnail_url || null;
   const duration = j.duration || j?.data?.duration || null;
-  return { status, video_url, thumbnail_url, duration, raw:j };
+
+  return { status, video_url, thumbnail_url, duration, raw: j };
 }
 
-function hasAllVideos(persona){
-  const want = (persona.prompts || []).map(p => (p.key || '').toString().toLowerCase()).filter(Boolean);
+/**
+ * Check if persona has videos for all prompts
+ */
+function hasAllVideos(persona) {
+  const want = (persona.prompts || [])
+    .map(p => (p.key || '').toString().toLowerCase())
+    .filter(Boolean);
+  
   if (!want.length) return false;
-  const got = new Set((persona.videos || []).map(v => (v.key || v.prompt || '').toString().toLowerCase()));
+  
+  const got = new Set(
+    (persona.videos || []).map(v => (v.key || v.prompt || '').toString().toLowerCase())
+  );
+  
   return want.every(k => got.has(k));
 }
 
-async function processPersona(store, key){
-  const raw = await store.get(key, { type:'text' });
-  if (!raw) return { key, status:'skip', reason:'missing blob' };
-  let p;
-  try { p = JSON.parse(raw); } catch { return { key, status:'skip', reason:'bad json' }; }
-
-  p.videos  = Array.isArray(p.videos) ? p.videos : [];
-  p.prompts = Array.isArray(p.prompts) && p.prompts.length ? p.prompts : [
-    { key:'fun',  text:'What do you like to do for fun?' },
-    { key:'from', text:'Where are you from?' },
-    { key:'relax',text:'What’s your favorite way to relax?' }
-  ];
-  p.pending = p.pending || {}; // { fun:{task_id} } or { fun:{video_id} }
-
-  // If nothing is pending and we already have all videos → mark ready and exit
-  if (!Object.keys(p.pending).length && hasAllVideos(p)) {
-    if (p.status !== 'ready') {
-      p.status = 'ready';
-      await store.set(key, JSON.stringify(p), { contentType:'application/json' });
-    }
-    return { key, status:'ready' };
-  }
-
-  let changed = false;
-let remaining = 0;
-
-for (const [k, info] of Object.entries(p.pending || {})) {
-  if (!info) continue;
-
-  // already captured?
-  if ((p.videos || []).some(v => (v.key || v.prompt) === k)) continue;
-
+/**
+ * Process a single persona blob
+ */
+async function processPersona(store, key, timeLimit) {
+  const startTime = Date.now();
+  
   try {
-    const res = await checkHeygenTask({ task_id: info.task_id, video_id: info.video_id });
+    // Read persona data
+    const raw = await store.get(key, { type: 'text' });
+    if (!raw) {
+      console.log(`[${key}] Blob not found, skipping`);
+      return { key, status: 'skip', reason: 'missing blob' };
+    }
 
-    if ((res.status === 'completed' || res.status === 'succeed') && res.video_url) {
-      p.videos.push({
-        key: k,
-        url: res.video_url,
-        thumbnail_url: res.thumbnail_url,
-        duration: res.duration
-      });
-      delete p.pending[k];
-      changed = true;
+    let persona;
+    try {
+      persona = JSON.parse(raw);
+    } catch (parseError) {
+      console.error(`[${key}] Invalid JSON:`, parseError);
+      return { key, status: 'skip', reason: 'bad json' };
+    }
 
-    } else if (res.status === 'failed' || res.status === 'error') {
-      p.failures ||= {};
-      p.failures[k] = 'render failed';
-      delete p.pending[k];
-      changed = true;
+    // Initialize defaults
+    persona.videos = Array.isArray(persona.videos) ? persona.videos : [];
+    persona.prompts = Array.isArray(persona.prompts) && persona.prompts.length 
+      ? persona.prompts 
+      : [
+          { key: 'fun', text: 'What do you like to do for fun?' },
+          { key: 'from', text: 'Where are you from?' },
+          { key: 'relax', text: 'What's your favorite way to relax?' }
+        ];
+    persona.pending = persona.pending || {};
 
+    // Check if already complete
+    if (!Object.keys(persona.pending).length && hasAllVideos(persona)) {
+      if (persona.status !== 'ready') {
+        console.log(`[${key}] All videos present, marking ready`);
+        persona.status = 'ready';
+        await store.set(key, JSON.stringify(persona), { contentType: 'application/json' });
+        return { key, status: 'ready', changed: true };
+      }
+      console.log(`[${key}] Already ready`);
+      return { key, status: 'ready', changed: false };
+    }
+
+    // Process pending videos
+    let changed = false;
+    let completed = 0;
+    let failed = 0;
+    let stillPending = 0;
+
+    console.log(`[${key}] Processing ${Object.keys(persona.pending).length} pending videos`);
+
+    for (const [promptKey, info] of Object.entries(persona.pending || {})) {
+      // Check time limit
+      if (Date.now() - startTime > timeLimit) {
+        console.warn(`[${key}] Time limit reached for this persona, stopping`);
+        break;
+      }
+
+      if (!info) continue;
+
+      // Skip if video already exists
+      if ((persona.videos || []).some(v => (v.key || v.prompt) === promptKey)) {
+        console.log(`[${key}] Video for '${promptKey}' already exists, removing from pending`);
+        delete persona.pending[promptKey];
+        changed = true;
+        continue;
+      }
+
+      try {
+        console.log(`[${key}] Checking HeyGen status for '${promptKey}' (task_id: ${info.task_id || info.video_id})`);
+        
+        const res = await checkHeygenTask({
+          task_id: info.task_id,
+          video_id: info.video_id
+        });
+
+        console.log(`[${key}] '${promptKey}' status: ${res.status}`);
+
+        if ((res.status === 'completed' || res.status === 'succeed') && res.video_url) {
+          // Video is ready!
+          persona.videos.push({
+            key: promptKey,
+            url: res.video_url,
+            thumbnail_url: res.thumbnail_url,
+            duration: res.duration
+          });
+          delete persona.pending[promptKey];
+          changed = true;
+          completed++;
+          console.log(`[${key}] ✓ Video for '${promptKey}' completed: ${res.video_url}`);
+
+        } else if (res.status === 'failed' || res.status === 'error') {
+          // Failed permanently
+          persona.failures = persona.failures || {};
+          persona.failures[promptKey] = `HeyGen render failed: ${res.status}`;
+          delete persona.pending[promptKey];
+          changed = true;
+          failed++;
+          console.error(`[${key}] ✗ Video for '${promptKey}' failed: ${res.status}`);
+
+        } else {
+          // Still processing
+          stillPending++;
+          console.log(`[${key}] ⏳ Video for '${promptKey}' still processing (${res.status})`);
+        }
+
+        // Rate limiting between API calls
+        await sleep(SLEEP_MS);
+
+      } catch (apiError) {
+        // Transient error - try again next run
+        console.error(`[${key}] Error checking '${promptKey}':`, apiError.message);
+        stillPending++;
+        
+        // Still add a small delay to avoid hammering on errors
+        await sleep(SLEEP_MS / 2);
+      }
+    }
+
+    // Update status
+    persona.status = hasAllVideos(persona) ? 'ready' : 'processing';
+
+    // Save if changed
+    if (changed) {
+      console.log(`[${key}] Saving changes (completed: ${completed}, failed: ${failed}, pending: ${stillPending})`);
+      await store.set(key, JSON.stringify(persona), { contentType: 'application/json' });
     } else {
-      // still rendering – next cron run will re-check
-      remaining++;
+      console.log(`[${key}] No changes (pending: ${stillPending})`);
     }
 
-  } catch {
-    // transient – try again next run
-    remaining++;
+    return {
+      key,
+      status: persona.status,
+      changed,
+      completed,
+      failed,
+      stillPending
+    };
+
+  } catch (error) {
+    console.error(`[${key}] Fatal error processing persona:`, error);
+    return {
+      key,
+      status: 'error',
+      error: error.message
+    };
   }
 }
 
+/**
+ * Process personas with concurrency control
+ */
+async function processWithConcurrency(store, keys, timeLimit) {
+  const results = [];
+  const startTime = Date.now();
 
-  p.status = hasAllVideos(p) ? 'ready' : 'processing';
-  if (changed) {
-    await store.set(key, JSON.stringify(p), { contentType:'application/json' });
+  // Process in batches
+  for (let i = 0; i < keys.length; i += MAX_CONCURRENT) {
+    // Check global time limit
+    const elapsed = Date.now() - startTime;
+    if (elapsed > timeLimit - 5000) { // Leave 5s buffer
+      console.warn(`Approaching time limit (${elapsed}ms), stopping early. Processed ${i}/${keys.length} personas.`);
+      break;
+    }
+
+    const batch = keys.slice(i, i + MAX_CONCURRENT);
+    console.log(`\nProcessing batch ${Math.floor(i/MAX_CONCURRENT) + 1}: ${batch.length} personas`);
+
+    // Process batch concurrently
+    const batchResults = await Promise.all(
+      batch.map(key => processPersona(store, key, timeLimit - elapsed))
+    );
+
+    results.push(...batchResults);
   }
-  return { key, status: p.status };
+
+  return results;
 }
 
+/**
+ * Main handler
+ */
 exports.handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') return { statusCode:204, headers:cors(), body:'' };
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 204, headers: cors(), body: '' };
+  }
+
+  const startTime = Date.now();
+  const isScheduled = event.headers['x-nf-event'] === 'schedule';
+  
+  // Use longer timeout for scheduled runs, shorter for HTTP
+  const timeLimit = isScheduled ? POLL_LIMIT_MS : NETLIFY_TIMEOUT_MS;
+  
+  console.log(`\n${'='.repeat(60)}`);
+  console.log(`HeyGen Video Processor started`);
+  console.log(`Mode: ${isScheduled ? 'SCHEDULED' : 'HTTP'}`);
+  console.log(`Time limit: ${timeLimit}ms`);
+  console.log(`${'='.repeat(60)}\n`);
+
   try {
+    // Initialize blob store
     const store = getStore({
       name: STORE_NAME,
       siteID: process.env.NETLIFY_SITE_ID,
@@ -132,17 +284,55 @@ exports.handler = async (event) => {
       consistency: 'strong'
     });
 
+    // List all persona blobs
+    console.log('Fetching persona list...');
     const list = await store.list({ prefix: PERSONA_PREFIX });
-    const items = (list?.blobs || list || []).filter(x => String(x.key || x).endsWith('.json'));
+    const items = (list?.blobs || list || []).filter(x => 
+      String(x.key || x).endsWith('.json')
+    );
 
-    const results = [];
-    for (const item of items) {
-      const key = item.key || item;
-      const res = await processPersona(store, key);
-      results.push(res);
+    console.log(`Found ${items.length} persona(s)\n`);
+
+    if (items.length === 0) {
+      return ok({
+        processed: 0,
+        results: [],
+        message: 'No personas found'
+      });
     }
-    return ok({ processed: results.length, results });
-  } catch (e) {
-    return err(500, 'processor_failed', { message: String(e?.message||e) });
+
+    // Process all personas
+    const keys = items.map(item => item.key || item);
+    const results = await processWithConcurrency(store, keys, timeLimit);
+
+    // Calculate summary stats
+    const summary = results.reduce((acc, r) => {
+      acc[r.status] = (acc[r.status] || 0) + 1;
+      if (r.completed) acc.videosCompleted = (acc.videosCompleted || 0) + r.completed;
+      if (r.failed) acc.videosFailed = (acc.videosFailed || 0) + r.failed;
+      if (r.stillPending) acc.videosPending = (acc.videosPending || 0) + r.stillPending;
+      return acc;
+    }, {});
+
+    const elapsed = Date.now() - startTime;
+
+    console.log(`\n${'='.repeat(60)}`);
+    console.log(`Processing complete in ${elapsed}ms`);
+    console.log(`Summary:`, summary);
+    console.log(`${'='.repeat(60)}\n`);
+
+    return ok({
+      processed: results.length,
+      elapsed,
+      summary,
+      results
+    });
+
+  } catch (error) {
+    console.error('Fatal error:', error);
+    return err(500, 'processor_failed', {
+      message: String(error?.message || error),
+      stack: process.env.NODE_ENV === 'development' ? error?.stack : undefined
+    });
   }
 };

@@ -114,107 +114,150 @@
     .btn.active{background:linear-gradient(180deg,#e9ebff,#dfe1ff); border-color:#cfd1ff}
 
     .hero{display:flex; justify-content:center; position:relative}
-    #resp, .dop-image{
-      width:min(100%,560px); aspect-ratio:9/16; max-height:70vh;
-      border-radius:14px; background:#000;
-      border:1px solid var(--stroke-strong);
-      box-shadow:0 12px 32px rgba(0,0,0,.35);
-      opacity:1; transition:opacity 320ms ease;
-      cursor:pointer; outline:none;
-      object-fit:cover;
+
+    #dopHero{
+      position: relative;
+      width: 100%;
+      max-width: 620px;
+      margin: 16px auto 28px;
+      aspect-ratio: 9 / 16;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 12px 32px rgba(0,0,0,.35);
+      border: 1px solid var(--stroke-strong);
     }
-    .dop-image{display:none}
+    
+    #dopHero > video,
+    #dopHero > img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      cursor: pointer;
+      outline: none;
+      transition: opacity 320ms ease;
+    }
+
+    #resp{ display: none; }
+    #dopImage{ display: block; }
+    
     #resp:focus-visible{box-shadow:0 0 0 3px var(--accent)}
     .fade-start{opacity:0}
 
-    .overlay { position:absolute; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.18); border-radius:14px; pointer-events:none; }
+    .overlay { 
+      position:absolute; 
+      inset:0; 
+      display:none; 
+      align-items:center; 
+      justify-content:center; 
+      background:rgba(0,0,0,.18); 
+      border-radius:14px; 
+      pointer-events:none; 
+    }
     .overlay.show{display:flex}
-    .spinner{ width:38px; height:38px; border-radius:999px; border:3px solid rgba(255,255,255,.35); border-top-color:#fff; animation:spin 900ms linear infinite; box-shadow:0 0 18px rgba(255,255,255,.25); }
+    
+    .spinner{ 
+      width:38px; 
+      height:38px; 
+      border-radius:999px; 
+      border:3px solid rgba(255,255,255,.35); 
+      border-top-color:#fff; 
+      animation:spin 900ms linear infinite; 
+      box-shadow:0 0 18px rgba(255,255,255,.25); 
+    }
+    
     @keyframes spin{to{transform:rotate(360deg)}}
 
     .footer{font-size:12px; color:#b7b8c3; text-align:center; margin-top:26px; margin-bottom:60px}
 
-    .toast{ position:absolute; left:50%; bottom:20px; transform:translateX(-50%); background:#1b1c25; color:#eaeaf1; border:1px solid var(--stroke-strong); padding:10px 14px; border-radius:12px; box-shadow:var(--shadow); font-size:12px; letter-spacing:.2px; opacity:0; pointer-events:none; transition:opacity .20s ease; }
+    .toast{ 
+      position:fixed; 
+      left:50%; 
+      bottom:20px; 
+      transform:translateX(-50%); 
+      background:#1b1c25; 
+      color:#eaeaf1; 
+      border:1px solid var(--stroke-strong); 
+      padding:10px 14px; 
+      border-radius:12px; 
+      box-shadow:var(--shadow); 
+      font-size:12px; 
+      letter-spacing:.2px; 
+      opacity:0; 
+      pointer-events:none; 
+      transition:opacity .20s ease;
+      z-index:1000;
+    }
     .toast.show{opacity:1}
 
-    .sr-only{ position:absolute !important; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); border:0; }
+    .sr-only{ 
+      position:absolute !important; 
+      width:1px; 
+      height:1px; 
+      padding:0; 
+      margin:-1px; 
+      overflow:hidden; 
+      clip:rect(0,0,0,0); 
+      border:0; 
+    }
 
-    .dop-header{ display:flex; align-items:center; gap:16px; margin-bottom:24px; padding:16px 0; border-bottom:1px solid var(--stroke); }
-    .dop-avatar{ width:50px; height:50px; border-radius:50%; background:var(--stroke); object-fit:cover; border:2px solid var(--stroke-strong); }
-    .dop-info h1{ margin:0; font-size:1.5rem; font-weight:700; font-family:'Montserrat',sans-serif; }
-    .dop-info p{ margin:4px 0 0; color:#b7b8c3; font-size:14px }
+    .dop-header{ 
+      display:flex; 
+      align-items:center; 
+      gap:16px; 
+      margin-bottom:24px; 
+      padding:16px 0; 
+      border-bottom:1px solid var(--stroke); 
+    }
+    .dop-avatar{ 
+      width:50px; 
+      height:50px; 
+      border-radius:50%; 
+      background:var(--stroke); 
+      object-fit:cover; 
+      border:2px solid var(--stroke-strong); 
+    }
+    .dop-info h1{ 
+      margin:0; 
+      font-size:1.5rem; 
+      font-weight:700; 
+      font-family:'Montserrat',sans-serif; 
+    }
+    .dop-info p{ 
+      margin:4px 0 0; 
+      color:#b7b8c3; 
+      font-size:14px 
+    }
 
-    .loading-state{ text-align:center; padding:60px 20px; color:#b7b8c3; }
+    .loading-state{ 
+      text-align:center; 
+      padding:60px 20px; 
+      color:#b7b8c3; 
+    }
     .loading-state .spinner{margin:0 auto 20px}
-    .error-state{ text-align:center; padding:40px; color:#ff6b6b; }
-    .error-state .details{font-size:12px; margin-top:8px; color:#b7b8c3 }
+    
+    .error-state{ 
+      text-align:center; 
+      padding:40px; 
+      color:#ff6b6b; 
+    }
+    .error-state .details{
+      font-size:12px; 
+      margin-top:8px; 
+      color:#b7b8c3 
+    }
 
     @media (max-width:480px){
       .dop-header{flex-direction:column; text-align:center}
       .mic{min-width:195px; font-size:16px; padding:16px 22px}
       .btn{width:100%}
-      #resp, .dop-image{max-height:68vh}
+      #dopHero{max-height:68vh}
       .prompt-grid{gap:10px 12px; margin:14px auto 26px}
     }
-
-  .dop-spinner .spinner {
-  width: 36px;
-  height: 36px;
-  border: 3px solid rgba(255,255,255,0.25);
-  border-top-color: #fff;
-  border-radius: 50%;
-  animation: spin 0.9s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-  
-
-/* ---- DOP MEDIA AREA (authoritative override) ---- */
-#dopHero{
-  position: relative;
-  width: 100%;
-  max-width: 620px;
-  margin: 16px auto 28px;
-  aspect-ratio: 9 / 16;
-  background: #000;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 12px 32px rgba(0,0,0,.35);
-  border: 1px solid var(--stroke-strong, #26283a);
-}
-#dopHero > video,
-#dopHero > img,
-#dopHero > .overlay{
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-/* initial visibility */
-#resp{ display: none !important; outline: none; }
-#dopImage{ display: block !important; }
-#respOverlay{ display: none; align-items: center; justify-content: center; background: rgba(0,0,0,.18); }
-#respOverlay.show{ display: flex; }
-/* spinner */
-#respOverlay .spinner{
-  width: 38px; height: 38px;
-  border-radius: 999px;
-  border: 3px solid rgba(255,255,255,.35);
-  border-top-color: #fff;
-  animation: dopspin 900ms linear infinite;
-  box-shadow: 0 0 18px rgba(255,255,255,.25);
-}
-@keyframes dopspin{to{transform:rotate(360deg)}}
-@media (max-width: 480px){
-  #dopHero{ max-width: 100%; }
-}
-
-</style>
+  </style>
 </head>
 <body>
   <div class="wrap">
@@ -257,307 +300,506 @@
 
         <div class="prompt-grid stack-m" id="promptGrid"></div>
 
-   <!-- DOP media area (authoritative) -->
-<div class="hero" id="dopHero">
-  <video id="resp" playsinline preload="auto" tabindex="0" aria-label="Response video"></video>
-  <img id="dopImage" alt="DOP Avatar" />
-  <div class="overlay" id="respOverlay">
-    <div class="spinner" aria-hidden="true"></div>
+        <div class="hero" id="dopHero">
+          <video id="resp" playsinline preload="auto" tabindex="0" aria-label="Response video"></video>
+          <img id="dopImage" alt="DOP Avatar" />
+          <div class="overlay" id="respOverlay">
+            <div class="spinner" aria-hidden="true"></div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
-</div>
-</div>
-</div>
-
 
   <div id="srStatus" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
 
   <script>
-    // -----------------------------
-    // Helpers
-    // -----------------------------
-    const qs  = (s, r=document) => r.querySelector(s);
-    const qsa = (s, r=document) => Array.from(r.querySelectorAll(s));
+    // ========================================
+    // CONSTANTS
+    // ========================================
+    const CONFIG = {
+      MIC_LOCK_DURATION: 350,
+      TTS_TIMEOUT: 12000,
+      VIDEO_PRIME_TIME: 0.1,
+      PRIME_DELAY: 80,
+      PRELOAD_DELAY: 100,
+      PRELOAD_SOURCES_DELAY: 300,
+      TOAST_DURATION: 2000,
+      TOAST_FADE_OUT: 250,
+      MAX_CONTEXT_TURNS: 8,
+      HEYGEN_POLL_INTERVAL: 3000,
+      HEYGEN_POLL_MAX_ATTEMPTS: 80,
+      PERSONA_POLL_INTERVAL: 4000,
+      HAPTIC_DURATION: 60
+    };
+
+    // ========================================
+    // GLOBALS & STATE
+    // ========================================
     const urlParams = new URLSearchParams(window.location.search);
     const dopId = urlParams.get('id');
 
     let PERSONA_DATA = null;
     let PROMPTS_CONFIG = [];
 
-    function showOverlay(){ qs('#respOverlay').classList.add('show'); }
-    function hideOverlay(){ qs('#respOverlay').classList.remove('show'); }
-    function setPill(mode, text){
-      const pill = qs('#statusPill'), txt = qs('#pillText');
-      pill.classList.remove('listening','thinking','speaking','ready');
-      pill.classList.add(mode);
-      txt.textContent = text;
-      qs('#srStatus').textContent = text;
+    // ========================================
+    // UTILITY FUNCTIONS
+    // ========================================
+    const qs = (selector, root = document) => root.querySelector(selector);
+    const qsa = (selector, root = document) => Array.from(root.querySelectorAll(selector));
+
+    function showToast(message) {
+      const toast = document.createElement('div');
+      toast.className = 'toast show';
+      toast.textContent = message;
+      document.body.append(toast);
+      
+      setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), CONFIG.TOAST_FADE_OUT);
+      }, CONFIG.TOAST_DURATION);
     }
-    function showToast(msg){
-      const t = document.createElement('div'); t.className='toast show'; t.textContent=msg;
-      document.body.append(t); setTimeout(()=>{ t.classList.remove('show'); setTimeout(()=>t.remove(),250); }, 2000);
-    }
-    const guessKey = (t='')=>{
-      t = t.toLowerCase();
+
+    function guessKey(text = '') {
+      const t = text.toLowerCase();
       if (t.includes('fun')) return 'fun';
       if (t.includes('from')) return 'from';
       if (t.includes('relax')) return 'relax';
-      return t.replace(/[^a-z]/g,'').slice(0,12) || 'q1';
-    };
+      return t.replace(/[^a-z]/g, '').slice(0, 12) || 'q1';
+    }
 
-    // -----------------------------
-    // Persona loader (uses dop-view)
-    // -----------------------------
-    async function loadPersona(){
-      const loading  = qs('#loadingState');
-      const errorBox = qs('#errorState');
-      const details  = qs('#errorDetails');
-      const mainUI   = qs('#mainInterface');
+    function haptic() {
+      if ('vibrate' in navigator) {
+        navigator.vibrate(CONFIG.HAPTIC_DURATION);
+      }
+    }
 
-      const resp     = qs('#resp');
-      const dopImg   = qs('#dopImage');
-      const header   = qs('#dopHeader');
-      const nameEl   = qs('#dopName');
-      const bioEl    = qs('#dopBio');
+    async function safeJSON(response) {
+      const text = await response.text();
+      try {
+        return JSON.parse(text);
+      } catch (error) {
+        throw new Error('Non-JSON response: ' + text.slice(0, 120));
+      }
+    }
+
+    async function callFunction(url, payload) {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
       
-      // Guard: if any required element is missing, bail gracefully
-const overlay = qs('#respOverlay');
-if (!resp || !dopImg || !overlay) {
-  console.error('UI element missing', { resp, dopImg, overlay });
-  showError('Sorry, this DOP couldn’t be loaded. (ui-missing)');
-  return;
-}
+      if (!response.ok) {
+        throw new Error(`${url} returned ${response.status}`);
+      }
+      
+      return await safeJSON(response);
+    }
 
+    // ========================================
+    // MEDIA CONTROL
+    // ========================================
+    class MediaController {
+      constructor() {
+        this.videoEl = null;
+        this.imageEl = null;
+        this.overlayEl = null;
+      }
 
-      try{
-        if (!dopId){
-          // Default demo
+      init() {
+        this.videoEl = qs('#resp');
+        this.imageEl = qs('#dopImage');
+        this.overlayEl = qs('#respOverlay');
+      }
+
+      showVideo() {
+        if (this.videoEl) this.videoEl.style.display = 'block';
+        if (this.imageEl) this.imageEl.style.display = 'none';
+      }
+
+      showImage() {
+        if (this.videoEl) this.videoEl.style.display = 'none';
+        if (this.imageEl) this.imageEl.style.display = 'block';
+      }
+
+      showSpinner() {
+        if (this.overlayEl) this.overlayEl.classList.add('show');
+      }
+
+      hideSpinner() {
+        if (this.overlayEl) this.overlayEl.classList.remove('show');
+      }
+
+      async playVideo(url) {
+        if (!this.videoEl) return;
+        
+        console.log('[MediaController] Playing video:', url);
+        this.showVideo();
+        this.showSpinner();
+        
+        this.videoEl.src = url;
+        this.videoEl.load();
+
+        return new Promise((resolve, reject) => {
+          this.videoEl.onloadeddata = () => {
+            this.hideSpinner();
+            this.videoEl.play().catch(error => {
+              console.warn('[MediaController] Autoplay blocked:', error);
+              showToast('Tap video to play');
+            });
+            resolve();
+          };
+
+          this.videoEl.onerror = (error) => {
+            console.error('[MediaController] Video load error:', error);
+            this.hideSpinner();
+            reject(error);
+          };
+        });
+      }
+
+      stopVideo() {
+        if (this.videoEl && !this.videoEl.paused) {
+          this.videoEl.pause();
+        }
+      }
+
+      setVideoSource(src) {
+        if (!this.videoEl) return;
+        this.videoEl.src = src;
+        this.videoEl.load();
+      }
+
+      setImageSource(src) {
+        if (!this.imageEl) return;
+        this.imageEl.src = src;
+      }
+    }
+
+    const mediaController = new MediaController();
+
+    // ========================================
+    // PERSONA LOADER
+    // ========================================
+    async function loadPersona() {
+      const loadingEl = qs('#loadingState');
+      const errorEl = qs('#errorState');
+      const errorDetails = qs('#errorDetails');
+      const mainUI = qs('#mainInterface');
+      const header = qs('#dopHeader');
+      const nameEl = qs('#dopName');
+      const bioEl = qs('#dopBio');
+      const avatarEl = qs('#dopAvatar');
+
+      try {
+        if (!dopId) {
+          // Default demo persona
           PERSONA_DATA = {
             name: 'Sasha',
             bio: 'Demo persona',
             prompts: [
               'What do you like to do for fun?',
               'Where are you from?',
-              "What’s your favorite way to relax?"
+              "What's your favorite way to relax?"
             ]
           };
+          
           PROMPTS_CONFIG = [
-            { question:'What do you like to do for fun?', file:'assets/p_fun.mp4',   videoUrl:null },
-            { question:'Where are you from?',            file:'assets/p_from.mp4',  videoUrl:null },
-            { question:'What’s your favorite way to relax?', file:'assets/p_relax.mp4', videoUrl:null }
+            { question: 'What do you like to do for fun?', file: 'assets/p_fun.mp4', videoUrl: null },
+            { question: 'Where are you from?', file: 'assets/p_from.mp4', videoUrl: null },
+            { question: 'What's your favorite way to relax?', file: 'assets/p_relax.mp4', videoUrl: null }
           ];
-          resp.style.display = 'block';
-          dopImg.style.display = 'none';
+          
+          mediaController.showVideo();
         } else {
-          // Personalized DOP
-          // Personalized DOP (use dop-persona)
-const r = await fetch(`/.netlify/functions/dop-persona?id=${encodeURIComponent(dopId)}`);
-if (!r.ok) throw new Error(`dop-persona ${r.status}`);
-const persona = await r.json(); // same shape you saw in the JSON viewer
-
+          // Load personalized DOP
+          const response = await fetch(`/.netlify/functions/dop-persona?id=${encodeURIComponent(dopId)}`);
+          
+          if (!response.ok) {
+            throw new Error(`dop-persona returned ${response.status}`);
+          }
+          
+          const persona = await response.json();
           PERSONA_DATA = persona;
 
-// --- DOP image + spinner, then swap to video ---
-try {
-  const overlay = document.getElementById('respOverlay');
-  const imgEl   = document.getElementById('dopImage');
-  const vidEl   = document.getElementById('resp');
+          // Set up image loading with spinner
+          if (persona.images && persona.images.length > 0) {
+            const firstImage = persona.images[0];
+            const imageUrl = firstImage.url || firstImage.src || 
+              (firstImage.key ? `/.netlify/functions/dop-file?key=${encodeURIComponent(firstImage.key)}` : '');
+            
+            if (imageUrl) {
+              mediaController.setImageSource(imageUrl);
+              mediaController.showImage();
+              mediaController.showSpinner();
+            }
+          }
 
-  if (persona && Array.isArray(persona.images) && persona.images.length) {
-    const first = persona.images[0];
-    imgEl.src = first.url || first.src || (first.key
-      ? `/.netlify/functions/dop-file?key=${encodeURIComponent(first.key)}`
-      : '');
-    imgEl.style.display = 'block';
-    overlay && overlay.classList.add('show');
-  } else {
-    overlay && overlay.classList.add('show');
-  }
+          // Set up video loaded handler
+          mediaController.videoEl.addEventListener('loadeddata', () => {
+            mediaController.showVideo();
+            mediaController.hideSpinner();
+          }, { once: true });
 
-  vidEl && vidEl.addEventListener('loadeddata', () => {
-    if (imgEl) imgEl.style.display = 'none';
-    overlay && overlay.classList.remove('show');
-    vidEl.style.display = 'block';
-  });
-} catch (e) { /* no-op */ }
-
-
-
+          // Update header
           header.style.display = 'flex';
           nameEl.textContent = persona.name || 'DOP';
-          bioEl.textContent  = persona.bio  || 'Your AI doppelgänger';
-          qs('#dopNameDisplay').textContent = `Ask ${PERSONA_DATA.name || 'DOP'} one of these questions.`;
+          bioEl.textContent = persona.bio || 'Your AI doppelgänger';
+          qs('#dopNameDisplay').textContent = `Ask ${persona.name || 'DOP'} one of these questions.`;
 
-          // portrait: legacy base64 or new blobs url
-          let imageUrl = null;
+          // Set avatar image
+          let avatarUrl = null;
           if (persona.image) {
-            imageUrl = persona.image.startsWith('data:')
-              ? persona.image
+            avatarUrl = persona.image.startsWith('data:') 
+              ? persona.image 
               : `data:image/jpeg;base64,${persona.image}`;
-          } else if (Array.isArray(persona.images) && persona.images[0]?.url) {
-            imageUrl = persona.images[0].url;
+          } else if (persona.images && persona.images[0]?.url) {
+            avatarUrl = persona.images[0].url;
           }
-          if (imageUrl){
-            qs('#dopAvatar').src = imageUrl;
-            dopImg.src = imageUrl;
-            resp.style.display = 'none';
-            dopImg.style.display = 'block';
+          
+          if (avatarUrl && avatarEl) {
+            avatarEl.src = avatarUrl;
           }
 
-          // prompts + videos
-          const raw = Array.isArray(persona.prompts) ? persona.prompts : [];
+          // Build prompts config
+          const rawPrompts = Array.isArray(persona.prompts) ? persona.prompts : [];
           const videosByKey = Object.fromEntries(
             (persona.videos || []).map(v => [String(v.key || '').toLowerCase(), v.url])
           );
 
-          PROMPTS_CONFIG = raw.map((p, i)=>{
-            const obj = (typeof p === 'string') ? { key: guessKey(p), text: p } : p;
-            const k   = String(obj.key || '').toLowerCase();
-            const vUrl = videosByKey[k] ?? persona.videoUrls?.[`prompt${i}`] ?? null;
-            return { question: obj.text || 'Ask me something', file:null, videoUrl: vUrl };
+          PROMPTS_CONFIG = rawPrompts.map((prompt, index) => {
+            const promptObj = typeof prompt === 'string' 
+              ? { key: guessKey(prompt), text: prompt } 
+              : prompt;
+            
+            const key = String(promptObj.key || '').toLowerCase();
+            const videoUrl = videosByKey[key] ?? persona.videoUrls?.[`prompt${index}`] ?? null;
+            
+            return {
+              question: promptObj.text || 'Ask me something',
+              file: null,
+              videoUrl
+            };
           });
         }
 
-        // Render buttons
+        // Render prompt buttons
         const grid = qs('#promptGrid');
-        grid.innerHTML = PROMPTS_CONFIG.map((p, i) =>
-          `<button class="btn" data-index="${i}">${(p.question||'').toUpperCase()}</button>`
+        grid.innerHTML = PROMPTS_CONFIG.map((prompt, index) =>
+          `<button class="btn" data-index="${index}">${(prompt.question || '').toUpperCase()}</button>`
         ).join('');
 
-        // Show UI
-        loading.style.display = 'none';
-        mainUI.style.display  = 'block';
+        // Show main UI
+        loadingEl.style.display = 'none';
+        mainUI.style.display = 'block';
 
+        // Initialize app
         initializeApp();
 
-        // Poll while processing
+        // Continue polling if still processing
         if (dopId && PERSONA_DATA.status !== 'ready') {
-          setTimeout(loadPersona, 4000);
+          setTimeout(loadPersona, CONFIG.PERSONA_POLL_INTERVAL);
         }
 
-      } catch (e){
-        console.error('[chat] load error', e);
-        loading.style.display = 'none';
-        errorBox.style.display = 'block';
-        details.textContent = e.message || String(e);
+      } catch (error) {
+        console.error('[Persona] Load error:', error);
+        loadingEl.style.display = 'none';
+        errorEl.style.display = 'block';
+        errorDetails.textContent = error.message || String(error);
       }
     }
 
-    // -----------------------------
-    // App logic (kept from your original)
-    // -----------------------------
+    // ========================================
+    // MAIN APP INITIALIZATION
+    // ========================================
     function initializeApp() {
-      const resp = document.getElementById('resp');
-      const respOverlay = document.getElementById('respOverlay');
-      const micBtn = document.getElementById('micBtn');
-      const resetBtn = document.getElementById('resetBtn');
-      const statusPill = document.getElementById('statusPill');
-      const pillText = document.getElementById('pillText');
-      const srStatus = document.getElementById('srStatus');
-      const grid = document.getElementById('promptGrid');
-      const dopImage = document.getElementById('dopImage');
+      mediaController.init();
 
-      // Disable mic for user-generated DOPs (upgrade required)
+      // Cache DOM elements
+      const micBtn = qs('#micBtn');
+      const resetBtn = qs('#resetBtn');
+      const statusPill = qs('#statusPill');
+      const pillText = qs('#pillText');
+      const srStatus = qs('#srStatus');
+      const grid = qs('#promptGrid');
+
+      // Disable mic for user-generated DOPs
       const isUserDOP = !!dopId;
       if (isUserDOP) {
         micBtn.disabled = true;
         micBtn.title = 'Upgrade to have a conversation';
       }
 
-      // Session
-      let sessionId = 'sess_' + Date.now() + '_' + Math.random().toString(36).slice(2,9);
+      // ========================================
+      // SESSION MANAGEMENT
+      // ========================================
+      let sessionId = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
       let conversationHistory = [];
-      const MAX_CONTEXT = 8;
-      function pushTurn(role, content, meta={}){
-        conversationHistory.push({ role, content, ...meta });
-        if (conversationHistory.length > MAX_CONTEXT*2) {
-          conversationHistory.splice(0, conversationHistory.length - MAX_CONTEXT*2);
+
+      function pushTurn(role, content, metadata = {}) {
+        conversationHistory.push({ role, content, ...metadata });
+        
+        const maxLength = CONFIG.MAX_CONTEXT_TURNS * 2;
+        if (conversationHistory.length > maxLength) {
+          conversationHistory.splice(0, conversationHistory.length - maxLength);
         }
       }
-      function getBoundedContext(){
-        return conversationHistory.slice(-MAX_CONTEXT*2).map(t => ({ role:t.role, content:t.content }));
+
+      function getBoundedContext() {
+        return conversationHistory
+          .slice(-CONFIG.MAX_CONTEXT_TURNS * 2)
+          .map(turn => ({ role: turn.role, content: turn.content }));
       }
-      function resetSession(){
+
+      function resetSession() {
         if (confirm('Reset conversation memory?')) {
           conversationHistory = [];
-          sessionId = 'sess_' + Date.now() + '_' + Math.random().toString(36).slice(2,9);
+          sessionId = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
           stopAll();
           setIdleUI();
           showToast('Session reset');
         }
       }
+
+      // Expose for external use
       window.DTA_reset = resetSession;
 
-      // State
-      let currentFile = null, lastFile = null, lastMode = null, lastText = '';
-      let isStopped = false, micLocked = false;
-      let currentAudio = null, currentAudioURL = null;
+      // ========================================
+      // STATE & AUDIO
+      // ========================================
+      let currentFile = null;
+      let lastFile = null;
+      let lastMode = null;
+      let lastText = '';
+      let isStopped = false;
+      let micLocked = false;
+      let currentAudio = null;
+      let currentAudioURL = null;
 
-      function haptic(){ if ('vibrate' in navigator) navigator.vibrate(60); }
-      function lockMic(){ micLocked = true; setTimeout(() => micLocked = false, 350); }
-      function showOverlay(){ respOverlay.classList.add('show'); }
-      function hideOverlay(){ respOverlay.classList.remove('show'); }
-      function showToast(msg){ const t = document.createElement('div'); t.className='toast show'; t.textContent=msg; document.body.append(t); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 250); }, 2000); }
+      function lockMic() {
+        micLocked = true;
+        setTimeout(() => {
+          micLocked = false;
+        }, CONFIG.MIC_LOCK_DURATION);
+      }
 
-      function setPill(mode, text){
-        statusPill.classList.remove('listening','thinking','speaking','ready');
+      // ========================================
+      // UI STATE MANAGEMENT
+      // ========================================
+      function setPill(mode, text) {
+        statusPill.classList.remove('listening', 'thinking', 'speaking', 'ready');
         statusPill.classList.add(mode);
         pillText.textContent = text;
         srStatus.textContent = text;
       }
-      function setListeningUI(){ micBtn.classList.add('listening'); micBtn.textContent = '⏹ Stop'; setPill('listening','Listening…'); }
-      function setThinkingUI(){ micBtn.classList.remove('listening','stopping'); micBtn.textContent = '🎤 Tap to Talk'; setPill('thinking','Thinking…'); }
-      function setPlayingUI(){ micBtn.classList.remove('listening','stopping'); micBtn.textContent = '🎤 Tap to Talk'; setPill('speaking','Speaking…'); }
-      function setIdleUI(){ micBtn.classList.remove('listening','stopping'); micBtn.textContent = '🎤 Tap to Talk'; setPill('ready','Ready'); }
 
-      function stopAll(){
-        stopVideo();
+      function setListeningUI() {
+        micBtn.classList.add('listening');
+        micBtn.textContent = '⏹ Stop';
+        setPill('listening', 'Listening…');
+      }
+
+      function setThinkingUI() {
+        micBtn.classList.remove('listening', 'stopping');
+        micBtn.textContent = '🎤 Tap to Talk';
+        setPill('thinking', 'Thinking…');
+      }
+
+      function setPlayingUI() {
+        micBtn.classList.remove('listening', 'stopping');
+        micBtn.textContent = '🎤 Tap to Talk';
+        setPill('speaking', 'Speaking…');
+      }
+
+      function setIdleUI() {
+        micBtn.classList.remove('listening', 'stopping');
+        micBtn.textContent = '🎤 Tap to Talk';
+        setPill('ready', 'Ready');
+      }
+
+      // ========================================
+      // PLAYBACK CONTROL
+      // ========================================
+      function stopAll() {
+        mediaController.stopVideo();
         stopASR();
         stopAudio();
         setIdleUI();
-        hideOverlay();
+        mediaController.hideSpinner();
       }
-      function stopVideo(){ if (resp && !resp.paused) resp.pause(); isStopped = true; }
-      function stopAudio(){ if (currentAudio) { currentAudio.pause(); currentAudio.src=''; } if (currentAudioURL) URL.revokeObjectURL(currentAudioURL); currentAudio=null; currentAudioURL=null; }
 
-      function safePlay(){ try { resp.play().catch(e => { console.warn('Autoplay blocked:',e); showToast('Tap video to play'); }); } catch{} }
+      function stopAudio() {
+        if (currentAudio) {
+          currentAudio.pause();
+          currentAudio.src = '';
+        }
+        if (currentAudioURL) {
+          URL.revokeObjectURL(currentAudioURL);
+        }
+        currentAudio = null;
+        currentAudioURL = null;
+      }
 
-      // Voice mapping logic (kept)
+      // ========================================
+      // VOICE MAPPING
+      // ========================================
       window.DOP_LAST_PROMPT = null;
-      function getVoiceIdForNextTTS(){
-        if (!PERSONA_DATA.voiceId) return null;
-        return PERSONA_DATA.voiceId;
+
+      function getVoiceIdForNextTTS() {
+        return PERSONA_DATA?.voiceId || null;
       }
-      function setVoiceForNextTTSByFile(file){ 
+
+      function setVoiceForNextTTSByFile(file) {
         if (!file) return;
-        const key = file.replace(/^assets\//,'').replace(/\.mp4$/i,'');
+        const key = file.replace(/^assets\//, '').replace(/\.mp4$/i, '');
         window.DOP_LAST_PROMPT = key;
       }
-      function forceFallbackVoiceForMic(){ if (!window.DOP_LAST_PROMPT) window.DOP_LAST_PROMPT = 'fallback'; }
 
-      // Player helpers
-      function preloadSources(firstFile){
+      function forceFallbackVoiceForMic() {
+        if (!window.DOP_LAST_PROMPT) {
+          window.DOP_LAST_PROMPT = 'fallback';
+        }
+      }
+
+      // ========================================
+      // VIDEO PRELOADING
+      // ========================================
+      function preloadSources(firstFile) {
         if (!firstFile) return;
+        
         setTimeout(() => {
-          PROMPTS_CONFIG.forEach(p => {
-            if (p.file) {
-              const v = document.createElement('video');
-              v.src = p.file; v.preload = 'auto'; v.load();
+          PROMPTS_CONFIG.forEach(prompt => {
+            if (prompt.file) {
+              const video = document.createElement('video');
+              video.src = prompt.file;
+              video.preload = 'auto';
+              video.load();
             }
           });
-        }, 100);
-      }
-      function primeFirstFrame(file){
-        if (!file || !resp) return;
-        resp.src = file;
-        resp.classList.add('fade-start');
-        resp.load();
-        setTimeout(() => { resp.currentTime = 0.1; resp.classList.remove('fade-start'); }, 80);
+        }, CONFIG.PRELOAD_DELAY);
       }
 
-      // Updated playFile (local demo fallback)
-      function playFile(file) {
+      function primeFirstFrame(file) {
+        if (!file || !mediaController.videoEl) return;
+        
+        mediaController.videoEl.src = file;
+        mediaController.videoEl.classList.add('fade-start');
+        mediaController.videoEl.load();
+        
+        setTimeout(() => {
+          mediaController.videoEl.currentTime = CONFIG.VIDEO_PRIME_TIME;
+          mediaController.videoEl.classList.remove('fade-start');
+        }, CONFIG.PRIME_DELAY);
+      }
+
+      // ========================================
+      // VIDEO PLAYBACK
+      // ========================================
+      async function playFile(file) {
         if (!file) return;
-        console.log('Playing file:', file);
+        
+        console.log('[App] Playing file:', file);
         currentFile = file;
         lastFile = file;
         lastMode = 'clip';
@@ -566,30 +808,26 @@ try {
 
         stopAll();
         setPlayingUI();
-        showOverlay();
+        mediaController.showSpinner();
 
         pushTurn('user', findQuestionForFile(file), { inputType: 'button' });
 
-        resp.src = file;
-        resp.load();
-
-        resp.onloadeddata = () => {
-          hideOverlay();
-          safePlay();
+        try {
+          await mediaController.playVideo(file);
           const transcript = findTranscriptForFile(file);
-          if (transcript)
-            console.log('[assistant transcript]', transcript);
-        };
-
-        resp.onerror = () => {
-          hideOverlay();
+          if (transcript) {
+            console.log('[App] Assistant transcript:', transcript);
+          }
+        } catch (error) {
+          console.error('[App] Video playback error:', error);
           setIdleUI();
-        };
+        }
       }
 
-      function playHeyGenVideo(videoUrl){
+      async function playHeyGenVideo(videoUrl) {
         if (!videoUrl) return;
-        console.log('Playing HeyGen video:', videoUrl.substring(0, 80) + '…');
+        
+        console.log('[App] Playing HeyGen video:', videoUrl.substring(0, 80) + '…');
         currentFile = videoUrl;
         lastFile = videoUrl;
         lastMode = 'heygen';
@@ -598,49 +836,56 @@ try {
 
         stopAll();
         setPlayingUI();
-        showOverlay();
 
-        // show the video, hide portrait
-        dopImage.style.display = 'none';
-        resp.style.display = 'block';
-
-        resp.src = videoUrl;
-        resp.load();
-        resp.onloadeddata = () => {
-          hideOverlay();
-          safePlay();
-        };
-        resp.onerror = () => { 
-          console.error('[chat] HeyGen video failed to load');
-          hideOverlay(); 
-          setIdleUI(); 
-        };
-        resp.onended = () => {
-          resp.style.display = 'none';
-          dopImage.style.display = 'block';
+        try {
+          await mediaController.playVideo(videoUrl);
+        } catch (error) {
+          console.error('[App] HeyGen video playback error:', error);
           setIdleUI();
-        };
+        }
+
+        // Return to image when video ends
+        mediaController.videoEl.addEventListener('ended', () => {
+          mediaController.showImage();
+          setIdleUI();
+        }, { once: true });
       }
 
-      function findQuestionForFile(file){
+      // Expose for external use
+      window.playHeyGenVideo = playHeyGenVideo;
+
+      function findQuestionForFile(file) {
         const match = PROMPTS_CONFIG.find(p => p.file === file);
         return match ? match.question : '';
       }
-      function findTranscriptForFile(file){
+
+      function findTranscriptForFile(file) {
         const match = PROMPTS_CONFIG.find(p => p.file === file);
         return match ? match.response || '' : '';
       }
 
-      // Click handlers
-      resp.addEventListener('click', () => {
-        if (resp.paused) { safePlay(); isStopped = false; setPlayingUI(); }
-        else { stopVideo(); setIdleUI(); hideOverlay(); }
+      // ========================================
+      // EVENT HANDLERS
+      // ========================================
+      mediaController.videoEl.addEventListener('click', () => {
+        if (mediaController.videoEl.paused) {
+          mediaController.videoEl.play().catch(error => {
+            console.warn('[App] Play error:', error);
+          });
+          isStopped = false;
+          setPlayingUI();
+        } else {
+          mediaController.stopVideo();
+          setIdleUI();
+          mediaController.hideSpinner();
+        }
       });
 
-      grid.addEventListener('click', (e) => {
-        const btn = e.target.closest('.btn');
+      grid.addEventListener('click', (event) => {
+        const btn = event.target.closest('.btn');
         if (!btn) return;
-        const index = parseInt(btn.dataset.index);
+        
+        const index = parseInt(btn.dataset.index, 10);
         const promptConfig = PROMPTS_CONFIG[index];
 
         if (promptConfig.videoUrl) {
@@ -650,31 +895,48 @@ try {
           playFile(promptConfig.file);
         } else {
           const question = promptConfig.question;
-          pushTurn('user', question, { inputType:'button' });
-          setPill('thinking','Thinking…');
+          pushTurn('user', question, { inputType: 'button' });
+          setPill('thinking', 'Thinking…');
           routeToBackend(question, { forceLLM: true });
         }
       });
 
-      resp.addEventListener('ended', () => { stopVideo(); setIdleUI(); });
-      resp.addEventListener('error', () => { stopVideo(); setIdleUI(); hideOverlay(); });
+      mediaController.videoEl.addEventListener('ended', () => {
+        mediaController.stopVideo();
+        setIdleUI();
+      });
 
-      // ASR + backend routing + ElevenLabs TTS (kept)
+      mediaController.videoEl.addEventListener('error', () => {
+        mediaController.stopVideo();
+        setIdleUI();
+        mediaController.hideSpinner();
+      });
+
+      // ========================================
+      // SPEECH RECOGNITION (ASR)
+      // ========================================
       const supportsASR = ('SpeechRecognition' in window) || ('webkitSpeechRecognition' in window);
-      let recognizer = null, recognizing = false, finalTranscript = '';
+      let recognizer = null;
+      let recognizing = false;
+      let finalTranscript = '';
       let asrFinalSent = false;
 
-      if (!supportsASR) { micBtn.disabled = true; srStatus.textContent = 'Speech input not available.'; }
+      if (!supportsASR) {
+        micBtn.disabled = true;
+        srStatus.textContent = 'Speech input not available.';
+      }
 
-      function initRecognizer(){
-        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-        recognizer = new SR();
+      function initRecognizer() {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        recognizer = new SpeechRecognition();
         recognizer.lang = 'en-US';
         recognizer.interimResults = true;
         recognizer.continuous = false;
 
         recognizer.onstart = () => {
-          recognizing = true; finalTranscript = ''; asrFinalSent = false;
+          recognizing = true;
+          finalTranscript = '';
+          asrFinalSent = false;
           stopAll();
           setListeningUI();
           srStatus.textContent = 'Listening…';
@@ -682,21 +944,43 @@ try {
           haptic();
           forceFallbackVoiceForMic();
         };
-        recognizer.onerror = (e) => { srStatus.textContent = 'Mic error: ' + (e.error || 'unknown'); stopASR(); setIdleUI(); hideOverlay(); };
-        recognizer.onend = () => { recognizing = false; if (!asrFinalSent) setIdleUI(); };
+
+        recognizer.onerror = (event) => {
+          console.error('[ASR] Error:', event.error);
+          srStatus.textContent = `Mic error: ${event.error || 'unknown'}`;
+          stopASR();
+          setIdleUI();
+          mediaController.hideSpinner();
+        };
+
+        recognizer.onend = () => {
+          recognizing = false;
+          if (!asrFinalSent) {
+            setIdleUI();
+          }
+        };
+
         recognizer.onresult = (event) => {
           for (let i = event.resultIndex; i < event.results.length; i++) {
-            const res = event.results[i];
-            if (res.isFinal) {
-              finalTranscript += res[0].transcript.trim() + ' ';
+            const result = event.results[i];
+            
+            if (result.isFinal) {
+              finalTranscript += result[0].transcript.trim() + ' ';
+              
               if (!asrFinalSent) {
                 asrFinalSent = true;
                 const text = finalTranscript.trim();
+                
                 if (text) {
-                  try { stopASR(); } catch {}
-                  pushTurn('user', text, { inputType:'mic' });
+                  try {
+                    stopASR();
+                  } catch (error) {
+                    console.error('[ASR] Stop error:', error);
+                  }
+                  
+                  pushTurn('user', text, { inputType: 'mic' });
                   srStatus.textContent = 'Processing…';
-                  setPill('thinking','Thinking…');
+                  setPill('thinking', 'Thinking…');
                   routeToBackend(text, { forceLLM: true });
                 }
               }
@@ -704,62 +988,97 @@ try {
           }
         };
       }
-      function startASR(){ if (!recognizer) initRecognizer(); try { recognizer.start(); } catch { try { recognizer.stop(); recognizer.start(); } catch(_){} } }
-      function stopASR(){ if (recognizer && recognizing) recognizer.stop(); recognizing = false; }
 
-      micBtn.addEventListener('click', () => {
-        if (micLocked) return;
-        if (micBtn.textContent.includes('Stop')) { stopAll(); lockMic(); return; }
-        if (!supportsASR) return;
-        startASR();
-      });
-      window.addEventListener('keydown', (e) => { if (e.key === 'Escape') stopAll(); });
-
-      async function safeJSON(res){
-        const txt = await res.text();
-        try { return JSON.parse(txt); }
-        catch { throw new Error('Non-JSON response: ' + txt.slice(0,120)); }
-      }
-      async function callFunction(url, payload){
-        const res = await fetch(url, {
-          method:'POST',
-          headers:{ 'Content-Type':'application/json' },
-          body: JSON.stringify(payload)
-        });
-        if (!res.ok) throw new Error(`${url} ${res.status}`);
-        return await safeJSON(res);
-      }
-
-      async function routeToBackend(text, opts = {}){
-        const payload = { text, message:text, sessionId, context:getBoundedContext(), personaId:dopId, ...opts };
-        try{
-          const data = await callFunction('/.netlify/functions/session-chat', payload);
-          await handleBackendResponse(data);
-        } catch (e1){
-          console.warn('[DTA] session-chat failed, falling back → dop-chat', e1);
-          try{
-            const data = await callFunction('/.netlify/functions/dop-chat', { text });
-            await handleBackendResponse(data);
-            showToast('Using fallback chat');
-          } catch (e2){
-            console.error('[DTA] dop-chat also failed', e2);
-            srStatus.textContent = 'Backend error';
-            setIdleUI();
-            showToast('Backend error');
+      function startASR() {
+        if (!recognizer) {
+          initRecognizer();
+        }
+        
+        try {
+          recognizer.start();
+        } catch (error) {
+          console.warn('[ASR] Start error, retrying:', error);
+          try {
+            recognizer.stop();
+            recognizer.start();
+          } catch (retryError) {
+            console.error('[ASR] Retry failed:', retryError);
           }
         }
       }
 
-      async function handleBackendResponse(data){
+      function stopASR() {
+        if (recognizer && recognizing) {
+          recognizer.stop();
+        }
+        recognizing = false;
+      }
+
+      micBtn.addEventListener('click', () => {
+        if (micLocked) return;
+        
+        if (micBtn.textContent.includes('Stop')) {
+          stopAll();
+          lockMic();
+          return;
+        }
+        
+        if (!supportsASR) return;
+        
+        startASR();
+      });
+
+      window.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          stopAll();
+        }
+      });
+
+      // ========================================
+      // BACKEND COMMUNICATION
+      // ========================================
+      async function routeToBackend(text, options = {}) {
+        const payload = {
+          text,
+          message: text,
+          sessionId,
+          context: getBoundedContext(),
+          personaId: dopId,
+          ...options
+        };
+
+        try {
+          const data = await callFunction('/.netlify/functions/session-chat', payload);
+          await handleBackendResponse(data);
+        } catch (error) {
+          console.warn('[Backend] session-chat failed, falling back to dop-chat:', error);
+          
+          try {
+            const data = await callFunction('/.netlify/functions/dop-chat', { text });
+            await handleBackendResponse(data);
+            showToast('Using fallback chat');
+          } catch (fallbackError) {
+            console.error('[Backend] dop-chat also failed:', fallbackError);
+            srStatus.textContent = 'Backend error';
+            setIdleUI();
+            showToast('Backend error. Please try again.');
+          }
+        }
+      }
+
+      // Expose for external use
+      window.routeToBackend = routeToBackend;
+
+      async function handleBackendResponse(data) {
         if (data.matchedClip) {
           setPlayingUI();
-          playFile(data.matchedClip);
+          await playFile(data.matchedClip);
         } else if (data.fallbackResponse || data.reply) {
           setPlayingUI();
           const speech = data.fallbackResponse || data.reply;
           lastMode = 'tts';
           lastText = speech;
-          pushTurn('assistant', speech, { audio:true });
+          pushTurn('assistant', speech, { audio: true });
           await speakWithElevenLabs(speech);
           setIdleUI();
         } else {
@@ -767,343 +1086,128 @@ try {
         }
       }
 
-      async function speakWithElevenLabs(text){
-        try{
-          stopVideo();
-          showOverlay();
+      // ========================================
+      // TEXT-TO-SPEECH
+      // ========================================
+      async function speakWithElevenLabs(text) {
+        try {
+          mediaController.stopVideo();
+          mediaController.showSpinner();
+
           let clipHint = null;
           if (lastFile && typeof lastFile === 'string') {
-            clipHint = lastFile.replace(/^assets\//,'').replace(/\.mp4$/i,'');
+            clipHint = lastFile.replace(/^assets\//, '').replace(/\.mp4$/i, '');
           }
-          if (!clipHint && window.DOP_LAST_PROMPT) clipHint = window.DOP_LAST_PROMPT;
+          if (!clipHint && window.DOP_LAST_PROMPT) {
+            clipHint = window.DOP_LAST_PROMPT;
+          }
 
-          const res = await fetch('/.netlify/functions/tts-eleven', {
-            method:'POST',
-            headers:{ 'Content-Type':'application/json' },
-            body: JSON.stringify({ text, clip: clipHint, voiceId: getVoiceIdForNextTTS() })
+          const response = await fetch('/.netlify/functions/tts-eleven', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              text,
+              clip: clipHint,
+              voiceId: getVoiceIdForNextTTS()
+            })
           });
-          if (!res.ok) throw new Error('TTS failed');
 
-          const buf = await res.arrayBuffer();
-          const blob = new Blob([buf], { type: 'audio/mpeg' });
+          if (!response.ok) {
+            throw new Error('TTS request failed');
+          }
+
+          const buffer = await response.arrayBuffer();
+          const blob = new Blob([buffer], { type: 'audio/mpeg' });
           const url = URL.createObjectURL(blob);
           currentAudioURL = url;
           currentAudio = new Audio(url);
 
-          setPill('speaking','Speaking…');
-          await currentAudio.play().catch(()=>{});
-          await new Promise((resolve) => {
-            const cleanup = () => { currentAudio && currentAudio.removeEventListener('ended', cleanup); resolve(); };
-            currentAudio.addEventListener('ended', cleanup, { once:true });
+          setPill('speaking', 'Speaking…');
+          
+          await currentAudio.play().catch(error => {
+            console.warn('[TTS] Play error:', error);
           });
-        } catch(e){
-          console.warn('ElevenLabs TTS error, falling back to device TTS', e);
+
+          await new Promise((resolve) => {
+            const cleanup = () => {
+              if (currentAudio) {
+                currentAudio.removeEventListener('ended', cleanup);
+              }
+              resolve();
+            };
+            currentAudio.addEventListener('ended', cleanup, { once: true });
+          });
+
+        } catch (error) {
+          console.warn('[TTS] ElevenLabs error, falling back to device TTS:', error);
+          
+          // Fallback to browser TTS
           if ('speechSynthesis' in window) {
-            const u = new SpeechSynthesisUtterance(text);
-            u.lang = 'en-US';
-            setPill('speaking','Speaking…');
-            try { speechSynthesis.cancel(); speechSynthesis.speak(u); } catch {}
-            await new Promise((resolve) => { u.onend = resolve; setTimeout(resolve, 12000); });
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'en-US';
+            setPill('speaking', 'Speaking…');
+            
+            try {
+              speechSynthesis.cancel();
+              speechSynthesis.speak(utterance);
+            } catch (synthError) {
+              console.error('[TTS] Browser TTS error:', synthError);
+            }
+
+            await new Promise((resolve) => {
+              utterance.onend = resolve;
+              setTimeout(resolve, CONFIG.TTS_TIMEOUT);
+            });
           }
         } finally {
-          hideOverlay();
-          try{
-            if (currentAudio) { currentAudio.pause(); currentAudio.src=''; }
-            if (currentAudioURL) URL.revokeObjectURL(currentAudioURL);
-          }catch{}
-          currentAudio=null; currentAudioURL=null;
+          mediaController.hideSpinner();
+          
+          try {
+            if (currentAudio) {
+              currentAudio.pause();
+              currentAudio.src = '';
+            }
+            if (currentAudioURL) {
+              URL.revokeObjectURL(currentAudioURL);
+            }
+          } catch (cleanupError) {
+            console.error('[TTS] Cleanup error:', cleanupError);
+          }
+          
+          currentAudio = null;
+          currentAudioURL = null;
         }
       }
 
-      // Reset button
+      // ========================================
+      // RESET BUTTON
+      // ========================================
       resetBtn.addEventListener('click', resetSession);
 
-      // Boot
+      // ========================================
+      // INITIALIZATION
+      // ========================================
       const firstPrompt = PROMPTS_CONFIG[0];
       if (firstPrompt && firstPrompt.file) {
         primeFirstFrame(firstPrompt.file);
-        setTimeout(() => preloadSources(firstPrompt.file), 300);
+        setTimeout(() => {
+          preloadSources(firstPrompt.file);
+        }, CONFIG.PRELOAD_SOURCES_DELAY);
       }
 
       // Pre-warm TTS function
       window.addEventListener('load', () => {
-        fetch('/.netlify/functions/tts-eleven', { method:'OPTIONS' }).catch(()=>{});
+        fetch('/.netlify/functions/tts-eleven', { method: 'OPTIONS' })
+          .catch(() => {
+            // Silently ignore - just warming up
+          });
       });
     }
 
-    // Kick off
+    // ========================================
+    // START APPLICATION
+    // ========================================
     loadPersona();
   </script>
-<script>
-/* chat-glue (inline, v2) — do not remove
-   Adds prompt → LLM → HeyGen → poll → play without touching your logic.
-   Uses existing UI (portrait, spinner, media box). */
-(() => {
-  if (window.__chatGlueV2Loaded) return; window.__chatGlueV2Loaded = true;
-  const TAG = "[chat-glue][v2]";
-  console.log(TAG, "loaded");
-
-  const HEYGEN_POLL_MS = 3000;
-  const HEYGEN_POLL_MAX = 80;
-  const qs = new URLSearchParams(location.search);
-  const dopId = qs.get('id') || (window.dopId || 'demo');
-
-  async function j(url, opts){
-    const r = await fetch(url, opts);
-    if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
-    return r.json();
-  }
-
-  // Spinner helpers: use your existing overlay if present
-  const showSpinner = window.showOverlay || window.showSpinner || ((s)=> {
-    const el = document.getElementById('respOverlay') || document.getElementById('mediaSpinner');
-    if (el) el.style.display = s ? 'grid' : 'none';
-  });
-
-  function playVideo(url){
-    console.log(TAG, "play", url);
-    if (typeof window.playHeyGenVideo === 'function') return window.playHeyGenVideo(url);
-    const resp = document.getElementById('resp');
-    if (resp && resp.tagName === 'VIDEO'){
-      resp.src = url; resp.muted = true; resp.loop = true; resp.autoplay = true; resp.playsInline = true;
-      resp.play().catch(()=>{});
-      showSpinner(false);
-      return;
-    }
-    const mediaBox = document.getElementById('mediaBox') || document.getElementById('dopHero');
-    if (mediaBox){
-      mediaBox.querySelectorAll('video,img').forEach(n => n.remove());
-      const v = document.createElement('video');
-      v.src = url; v.muted = true; v.loop = true; v.autoplay = true; v.playsInline = true;
-      v.addEventListener('canplay', () => showSpinner(false));
-      mediaBox.appendChild(v);
-    } else {
-      window.open(url, "_blank");
-    }
-  }
-
-  async function pollGET(jobId){
-    return j(`/.netlify/functions/heygen-proxy?job_id=${encodeURIComponent(jobId)}&id=${encodeURIComponent(dopId)}`);
-  }
-  async function pollPOST(jobId){
-    return j('/.netlify/functions/heygen-proxy', {
-      method:'POST', headers:{'content-type':'application/json'},
-      body: JSON.stringify({ action:'check_video', videoId: jobId, id: dopId })
-    });
-  }
-
-  async function pollHeygenJob(jobId){
-    console.log(TAG, "poll start", jobId);
-    for (let i=0;i<HEYGEN_POLL_MAX;i++){
-      await new Promise(r => setTimeout(r, HEYGEN_POLL_MS));
-      try{
-        let stat;
-        try { stat = await pollGET(jobId); }
-        catch { stat = await pollPOST(jobId); }
-        console.log(TAG, "poll", stat);
-        const status = (stat.status||'').toLowerCase();
-        const url = stat.url || stat.video_url || stat.data?.video_url;
-        if (status === 'completed' && url){ playVideo(url); return true; }
-        if (status === 'failed') throw new Error('heygen failed');
-      }catch(e){ console.warn(TAG, "poll error", e); }
-    }
-    console.warn(TAG, "poll timeout");
-    showSpinner(false);
-    return false;
-  }
-
-  async function llmReply(text){
-    console.log(TAG, "LLM in", text);
-    const res = await j('/.netlify/functions/session-chat', {
-      method:'POST',
-      headers:{'content-type':'application/json'},
-      body: JSON.stringify({ id:dopId, message:text, sessionId:(window.sessionId||'s') })
-    });
-    console.log(TAG, "LLM out", res);
-    return (res && res.reply) || text;
-  }
-
-  async function startHeygen(script){
-    console.log(TAG, "HeyGen start", script);
-    const start = await j('/.netlify/functions/heygen-proxy', {
-      method:'POST', headers:{'content-type':'application/json'},
-      body: JSON.stringify({ id:dopId, script })
-    });
-    const jobId = start.job_id || start.video_id || start.task_id || start?.data?.video_id || start?.data?.task_id;
-    console.log(TAG, "HeyGen start result", start, "jobId:", jobId);
-    if (!jobId) throw new Error("no job id from heygen-proxy");
-    return jobId;
-  }
-
- async function askAndRender(inputText){
-  try{
-    showSpinner(true);
-    const script = await llmReply(inputText);
-    const job = await startHeygen(script);
-    const ok  = await pollHeygenJob(job);
-    return ok;
-  } catch(e){
-    console.warn(TAG, "askAndRender fallback", e);
-    showSpinner(false);
-    if (typeof window.speak === 'function') window.speak(inputText);
-    return false;
-  }
-} // <-- function ends here
-
-// expose globally (outside the function)
-window.askAndRender = askAndRender;
-
-
-  // Patch the two hooks non-destructively
-  const prevRoute = window.routeToBackend;
-  window.routeToBackend = async function(text, opts){
-    console.log(TAG, "routeToBackend patched", text, opts);
-    if (!text) return;
-    try{
-      const done = await askAndRender(text);
-      if (!done && typeof prevRoute === 'function'){
-        return prevRoute.call(this, text, opts);
-      }
-    }catch(e){
-      if (typeof prevRoute === 'function') return prevRoute.call(this, text, opts);
-    }
-  };
-
-  if (typeof window.handlePrompt === 'function'){
-    const prevHandlePrompt = window.handlePrompt;
-    window.handlePrompt = async function(promptText){
-      console.log(TAG, "handlePrompt patched", promptText);
-      try{
-        const ok = await askAndRender(promptText);
-        if (!ok) return prevHandlePrompt.call(this, promptText);
-      }catch(e){ return prevHandlePrompt.call(this, promptText); }
-    };
-  }
-
-  console.log(TAG, "ready");
-})();
-
-  // --- Wire actual UI controls directly (in case app never calls routeToBackend/handlePrompt)
-  window.askAndRender = askAndRender; // expose for debugging
-
-  // 1) Prompt chips/buttons
-  const promptRoot = document.getElementById('promptButtons') || document.querySelector('#promptButtons,.prompt-buttons,.buttons');
-  if (promptRoot && !promptRoot.__glued) {
-    promptRoot.__glued = true;
-    promptRoot.addEventListener('click', (e) => {
-      const btn = e.target && e.target.closest('button');
-      if (!btn) return;
-      e.preventDefault();
-      e.stopPropagation();
-      const text = (btn.textContent || btn.value || '').trim();
-      if (text) askAndRender(text);
-    }, true);
-  }
-
-  // 2) Manual text form (if present)
-  const form = document.getElementById('promptForm') || document.querySelector('#promptForm form, form#promptForm');
-  const input = document.getElementById('promptText') || document.querySelector('#promptText,input[name="prompt"]');
-  if (form && !form.__glued) {
-    form.__glued = true;
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const val = (input && input.value || '').trim();
-      if (val) askAndRender(val);
-      if (input) input.value = '';
-    }, true);
-  }
-
-  // 3) Chat box send (optional)
-  const chatSend = document.getElementById('chatSend');
-  const chatInput = document.getElementById('chatInput');
-  if (chatSend && !chatSend.__glued) {
-    chatSend.__glued = true;
-    chatSend.addEventListener('click', (e) => {
-      const val = (chatInput && chatInput.value || '').trim();
-      if (val) { e.preventDefault(); askAndRender(val); chatInput.value=''; }
-    }, true);
-  }
-  if (chatInput && !chatInput.__glued) {
-    chatInput.__glued = true;
-    chatInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        const val = (chatInput && chatInput.value || '').trim();
-        if (val) { e.preventDefault(); askAndRender(val); chatInput.value=''; }
-      }
-    }, true);
-  }
-  // --- Wire actual UI controls directly (final)
-const callAsk = (t) => (window.askAndRender && window.askAndRender(t));
-
-// 1) Prompt chips/buttons
-const promptRoot =
-  document.getElementById('promptButtons') ||
-  document.querySelector('#promptButtons,.prompt-buttons,.buttons');
-if (promptRoot && !promptRoot.__glued) {
-  promptRoot.__glued = true;
-  promptRoot.addEventListener(
-    'click',
-    (e) => {
-      const btn = e.target && e.target.closest('button');
-      if (!btn) return;
-      e.preventDefault();
-      e.stopPropagation();
-      const text = (btn.textContent || btn.value || '').trim();
-      if (text) callAsk(text);
-    },
-    true
-  );
-}
-
-// 2) Manual text form (if present)
-const form =
-  document.getElementById('promptForm') ||
-  document.querySelector('#promptForm form, form#promptForm');
-const input =
-  document.getElementById('promptText') ||
-  document.querySelector('#promptText,input[name="prompt"]');
-if (form && !form.__glued) {
-  form.__glued = true;
-  form.addEventListener(
-    'submit',
-    (e) => {
-      e.preventDefault();
-      const val = (input && input.value ? input.value : '').trim();
-      if (val) callAsk(val);
-      if (input) input.value = '';
-    },
-    true
-  );
-}
-
-// 3) Chat box send / Enter (optional)
-const chatSend = document.getElementById('chatSend');
-const chatInput = document.getElementById('chatInput');
-if (chatSend && !chatSend.__glued) {
-  chatSend.__glued = true;
-  chatSend.addEventListener(
-    'click',
-    (e) => {
-      const val = (chatInput && chatInput.value ? chatInput.value : '').trim();
-      if (val) { e.preventDefault(); callAsk(val); chatInput.value=''; }
-    },
-    true
-  );
-}
-if (chatInput && !chatInput.__glued) {
-  chatInput.__glued = true;
-  chatInput.addEventListener(
-    'keydown',
-    (e) => {
-      if (e.key === 'Enter') {
-        const val = (chatInput.value || '').trim();
-        if (val) { e.preventDefault(); callAsk(val); chatInput.value=''; }
-      }
-    },
-    true
-  );
-}
-  
-</script>
 </body>
 </html>

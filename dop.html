@@ -1,84 +1,103 @@
 <!doctype html>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>DOP Viewer</title>
-<style>
-  :root { --muted:#666; --err:#b00020; }
-  body{
-    font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
-    max-width:760px;margin:24px auto;padding:0 16px
-  }
-  .card{border:1px solid #eee;border-radius:12px;padding:16px;box-shadow:0 6px 20px rgba(0,0,0,.05)}
-  img{max-width:100%;border-radius:12px;background:#f4f4f4}
-  audio{width:100%;margin-top:12px}
-  .err{color:var(--err);margin-top:12px}
-  .muted{color:var(--muted);font-size:14px}
-  code{background:#f4f4f4;padding:2px 6px;border-radius:6px}
-  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-  .chip{font-size:12px;background:#f4f4f4;border-radius:999px;padding:2px 8px}
-</style>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>DOP Viewer</title>
+  <style>
+    :root { --muted:#666; --err:#b00020; }
+    body{
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+      max-width:760px;margin:24px auto;padding:0 16px
+    }
+    .card{border:1px solid #eee;border-radius:12px;padding:16px;box-shadow:0 6px 20px rgba(0,0,0,.05)}
+    img{max-width:100%;border-radius:12px;background:#f4f4f4}
+    audio{width:100%;margin-top:12px}
+    .err{color:var(--err);margin-top:12px}
+    .muted{color:var(--muted);font-size:14px}
+    code{background:#f4f4f4;padding:2px 6px;border-radius:6px}
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .chip{font-size:12px;background:#f4f4f4;border-radius:999px;padding:2px 8px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Your DOP</h1>
+    <div id="out">Loading…</div>
+  </div>
 
-<div class="card">
-  <h1>Your DOP</h1>
-  <div id="out">Loading…</div>
-</div>
+  <script>
+  (async () => {
+    const out = document.getElementById('out');
 
-<script>
-(async () => {
-  const out = document.getElementById('out');
-
-  // Get dopId from ?id= or /dop/:id
-  const qs = new URLSearchParams(location.search);
-  let dopId = qs.get('id');
-  if (!dopId) {
-    const m = /\/dop\/([^/?#]+)/i.exec(location.pathname);
-    if (m) dopId = decodeURIComponent(m[1]);
-  }
-  if (!dopId) { out.innerHTML = '<div class="err">Missing dopId</div>'; return; }
-
-  const cacheBust = () => `&t=${Date.now()}`;
-  const fileURL  = (key) => `/.netlify/functions/dop-file?key=${encodeURIComponent(key)}${cacheBust()}`;
-
-  try {
-    // Fetch listing JSON
-    const res  = await fetch(`/.netlify/functions/dop-view?id=${encodeURIComponent(dopId)}${cacheBust()}`);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to load DOP.');
-
-    // Pick newest image/voice if multiple exist
-    const newest = (arr=[]) => {
-      return [...arr].sort((a,b) =>
-        new Date(b.uploadedAt || b.lastModified || 0) - new Date(a.uploadedAt || a.lastModified || 0)
-      )[0];
+    // HTML escape function to prevent XSS
+    const escapeHtml = (str) => {
+      if (!str) return '';
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
     };
-    const img   = newest(data.images || []);
-    const voice = newest(data.voices || []);
 
-    const imgUrl = img ? fileURL(img.key) : null;
-    const audUrl = voice ? fileURL(voice.key) : null;
+    // Get dopId from ?id= or /dop/:id
+    const qs = new URLSearchParams(location.search);
+    let dopId = qs.get('id');
+    if (!dopId) {
+      const m = /\/dop\/([^/?#]+)/i.exec(location.pathname);
+      if (m) dopId = decodeURIComponent(m[1]);
+    }
+    if (!dopId) { out.innerHTML = '<div class="err">Missing dopId</div>'; return; }
 
-    out.innerHTML = `
-      <div class="muted">dopId: <code>${data.dopId || dopId}</code></div>
+    const cacheBust = () => `&t=${Date.now()}`;
+    const fileURL  = (key) => `/.netlify/functions/dop-file?key=${encodeURIComponent(key)}${cacheBust()}`;
 
-      ${imgUrl
-        ? `<img alt="DOP image" src="${imgUrl}"
-               onerror="this.outerHTML='<div class=&quot;err&quot;>Image failed to load.</div>'">`
-        : `<div class="err">No image found</div>`}
+    try {
+      // Fetch listing JSON
+      const res  = await fetch(`/.netlify/functions/dop-view?id=${encodeURIComponent(dopId)}${cacheBust()}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load DOP.');
 
-      ${audUrl
-        ? `<audio controls preload="metadata"
-                  onerror="this.outerHTML='<div class=&quot;err&quot;>Audio failed to load.</div>'"
-                  src="${audUrl}"></audio>`
-        : `<div class="err">No voice found</div>`}
+      // Pick newest image/voice if multiple exist
+      const newest = (arr) => {
+        if (!arr || !Array.isArray(arr) || arr.length === 0) return null;
+        return [...arr].sort((a,b) =>
+          new Date(b.uploadedAt || b.lastModified || 0) - new Date(a.uploadedAt || a.lastModified || 0)
+        )[0];
+      };
+      const img   = newest(data.images);
+      const voice = newest(data.voices);
 
-      <div class="row" style="margin-top:10px">
-        <span class="chip">${img ? img.key.split('/').pop() : 'no-image'}</span>
-        <span class="chip">${voice ? voice.key.split('/').pop() : 'no-voice'}</span>
-        <a class="muted" href="/.netlify/functions/dop-view?id=${encodeURIComponent(dopId)}" target="_blank" rel="noopener">view JSON</a>
-      </div>
-    `;
-  } catch (e) {
-    out.innerHTML = `<div class="err">${e.message || e}</div>`;
-  }
-})();
-</script>
+      const imgUrl = img ? fileURL(img.key) : null;
+      const audUrl = voice ? fileURL(voice.key) : null;
+
+      const displayDopId = escapeHtml(data.dopId || dopId);
+      const imgFileName = img ? escapeHtml(img.key.split('/').pop()) : 'no-image';
+      const voiceFileName = voice ? escapeHtml(voice.key.split('/').pop()) : 'no-voice';
+      const jsonUrl = escapeHtml(`/.netlify/functions/dop-view?id=${encodeURIComponent(dopId)}`);
+
+      out.innerHTML = `
+        <div class="muted">dopId: <code>${displayDopId}</code></div>
+
+        ${imgUrl
+          ? `<img alt="DOP image" src="${escapeHtml(imgUrl)}"
+                 onerror="this.outerHTML='<div class=&quot;err&quot;>Image failed to load.</div>'">`
+          : `<div class="err">No image found</div>`}
+
+        ${audUrl
+          ? `<audio controls preload="metadata"
+                    onerror="this.outerHTML='<div class=&quot;err&quot;>Audio failed to load.</div>'"
+                    src="${escapeHtml(audUrl)}"></audio>`
+          : `<div class="err">No voice found</div>`}
+
+        <div class="row" style="margin-top:10px">
+          <span class="chip">${imgFileName}</span>
+          <span class="chip">${voiceFileName}</span>
+          <a class="muted" href="${jsonUrl}" target="_blank" rel="noopener">view JSON</a>
+        </div>
+      `;
+    } catch (e) {
+      out.innerHTML = `<div class="err">${escapeHtml(e.message || String(e))}</div>`;
+    }
+  })();
+  </script>
+</body>
+</html>
