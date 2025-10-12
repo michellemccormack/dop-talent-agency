@@ -103,7 +103,7 @@ async function processPersona(store, key, timeLimit) {
       : [
           { key: 'fun', text: 'What do you like to do for fun?' },
           { key: 'from', text: 'Where are you from?' },
-          { key: 'relax', text: 'What's your favorite way to relax?' }
+          { key: 'relax', text: 'What is your favorite way to relax?' }
         ];
     persona.pending = persona.pending || {};
 
@@ -165,7 +165,7 @@ async function processPersona(store, key, timeLimit) {
           delete persona.pending[promptKey];
           changed = true;
           completed++;
-          console.log(`[${key}] ✓ Video for '${promptKey}' completed: ${res.video_url}`);
+          console.log(`[${key}] [OK] Video for '${promptKey}' completed: ${res.video_url}`);
 
         } else if (res.status === 'failed' || res.status === 'error') {
           // Failed permanently
@@ -174,12 +174,12 @@ async function processPersona(store, key, timeLimit) {
           delete persona.pending[promptKey];
           changed = true;
           failed++;
-          console.error(`[${key}] ✗ Video for '${promptKey}' failed: ${res.status}`);
+          console.error(`[${key}] [FAIL] Video for '${promptKey}' failed: ${res.status}`);
 
         } else {
           // Still processing
           stillPending++;
-          console.log(`[${key}] ⏳ Video for '${promptKey}' still processing (${res.status})`);
+          console.log(`[${key}] [PENDING] Video for '${promptKey}' still processing (${res.status})`);
         }
 
         // Rate limiting between API calls
