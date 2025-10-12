@@ -979,6 +979,55 @@ try {
   console.log(TAG, "ready");
 })();
 </script>
+  // --- Wire actual UI controls directly (in case app never calls routeToBackend/handlePrompt)
+  window.askAndRender = askAndRender; // expose for debugging
+
+  // 1) Prompt chips/buttons
+  const promptRoot = document.getElementById('promptButtons') || document.querySelector('#promptButtons,.prompt-buttons,.buttons');
+  if (promptRoot && !promptRoot.__glued) {
+    promptRoot.__glued = true;
+    promptRoot.addEventListener('click', (e) => {
+      const btn = e.target && e.target.closest('button');
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const text = (btn.textContent || btn.value || '').trim();
+      if (text) askAndRender(text);
+    }, true);
+  }
+
+  // 2) Manual text form (if present)
+  const form = document.getElementById('promptForm') || document.querySelector('#promptForm form, form#promptForm');
+  const input = document.getElementById('promptText') || document.querySelector('#promptText,input[name="prompt"]');
+  if (form && !form.__glued) {
+    form.__glued = true;
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const val = (input && input.value || '').trim();
+      if (val) askAndRender(val);
+      if (input) input.value = '';
+    }, true);
+  }
+
+  // 3) Chat box send (optional)
+  const chatSend = document.getElementById('chatSend');
+  const chatInput = document.getElementById('chatInput');
+  if (chatSend && !chatSend.__glued) {
+    chatSend.__glued = true;
+    chatSend.addEventListener('click', (e) => {
+      const val = (chatInput && chatInput.value || '').trim();
+      if (val) { e.preventDefault(); askAndRender(val); chatInput.value=''; }
+    }, true);
+  }
+  if (chatInput && !chatInput.__glued) {
+    chatInput.__glued = true;
+    chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const val = (chatInput && chatInput.value || '').trim();
+        if (val) { e.preventDefault(); askAndRender(val); chatInput.value=''; }
+      }
+    }, true);
+  }
 
 </body>
 </html>
