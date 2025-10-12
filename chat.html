@@ -157,7 +157,7 @@
       .prompt-grid{gap:10px 12px; margin:14px auto 26px}
     }
 
-    .dop-spinner .spinner {
+  .dop-spinner .spinner {
   width: 36px;
   height: 36px;
   border: 3px solid rgba(255,255,255,0.25);
@@ -169,6 +169,7 @@
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
   </style>
 </head>
 <body>
@@ -213,26 +214,26 @@
         <div class="prompt-grid stack-m" id="promptGrid"></div>
 
    <div class="hero" style="position: relative;">
-  <!-- Static uploaded photo (hidden by default) -->
+  <!-- Static uploaded photo (shown until video loads) -->
   <img id="dopImage"
        alt="DOP"
        style="display:none;width:100%;height:auto;border-radius:12px;object-fit:cover;position:absolute;top:0;left:0;" />
 
   <!-- Final DOP video -->
-  <video id="dopVideo"
+  <video id="resp"
          playsinline
          preload="auto"
          tabindex="0"
          aria-label="Response video (tap to play or pause)"
-         style="display:none;width:100%;border-radius:12px;"></video>
+         style="display:none;width:100%;border-radius:12px;object-fit:cover;"></video>
 
   <!-- Spinner overlay -->
-  <div id="dopSpinner"
-       class="dop-spinner"
-       style="display:none;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">
+  <div id="respOverlay"
+       style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;background:rgba(0,0,0,.18);border-radius:12px;">
     <div class="spinner"></div>
   </div>
 </div>
+
 
 
   <div id="srStatus" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
@@ -284,6 +285,15 @@
       const header   = qs('#dopHeader');
       const nameEl   = qs('#dopName');
       const bioEl    = qs('#dopBio');
+      
+      // Guard: if any required element is missing, bail gracefully
+const overlay = qs('#respOverlay');
+if (!resp || !dopImg || !overlay) {
+  console.error('UI element missing', { resp, dopImg, overlay });
+  showError('Sorry, this DOP couldn’t be loaded. (ui-missing)');
+  return;
+}
+
 
       try{
         if (!dopId){
