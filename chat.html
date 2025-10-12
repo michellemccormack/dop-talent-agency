@@ -156,6 +156,19 @@
       #resp, .dop-image{max-height:68vh}
       .prompt-grid{gap:10px 12px; margin:14px auto 26px}
     }
+
+    .dop-spinner .spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(255,255,255,0.25);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
   </style>
 </head>
 <body>
@@ -199,14 +212,28 @@
 
         <div class="prompt-grid stack-m" id="promptGrid"></div>
 
-        <div class="hero">
-          <video id="resp" playsinline preload="auto" tabindex="0" aria-label="Response video (tap to play or pause)"></video>
-          <img class="dop-image" id="dopImage" alt="DOP" />
-          <div class="overlay" id="respOverlay"><div class="spinner"></div></div>
-        </div>
-      </div>
-    </div>
+   <div class="hero" style="position: relative;">
+  <!-- Static uploaded photo (hidden by default) -->
+  <img id="dopImage"
+       alt="DOP"
+       style="display:none;width:100%;height:auto;border-radius:12px;object-fit:cover;position:absolute;top:0;left:0;" />
+
+  <!-- Final DOP video -->
+  <video id="dopVideo"
+         playsinline
+         preload="auto"
+         tabindex="0"
+         aria-label="Response video (tap to play or pause)"
+         style="display:none;width:100%;border-radius:12px;"></video>
+
+  <!-- Spinner overlay -->
+  <div id="dopSpinner"
+       class="dop-spinner"
+       style="display:none;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">
+    <div class="spinner"></div>
   </div>
+</div>
+
 
   <div id="srStatus" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
 
