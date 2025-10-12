@@ -329,8 +329,6 @@ function guessKey(t = '') {
   if (t.includes('relax')) return 'relax';
   return t.replace(/[^a-z]/g, '').slice(0, 12) || 'q1';
 }
-</script>
-
     // ===== DYNAMIC PERSONA LOADING =====
     const urlParams = new URLSearchParams(window.location.search);
     const dopId = urlParams.get('id');
@@ -385,11 +383,27 @@ function guessKey(t = '') {
           console.log('[chat] Persona loaded:', PERSONA_DATA);
 
           // Build prompts config - now with video URLs!
-          PROMPTS_CONFIG = (PERSONA_DATA.prompts || []).map((prompt, index) => ({
-            question: prompt,
-            file: null, // No pre-recorded local files
-            videoUrl: PERSONA_DATA.videoUrls?.[`prompt${index}`] || null // HeyGen video URL
-          }));
+          // Build prompts config — supports strings or {key,text}; videos[] or legacy videoUrls
+const promptsRaw = Array.isArray(PERSONA_DATA.prompts) ? PERSONA_DATA.prompts : [];
+const videosByKey = Object.fromEntries(
+  (PERSONA_DATA.videos || []).map(v => [String(v.key || '').toLowerCase(), v.url])
+);
+
+PROMPTS_CONFIG = promptsRaw.map((p, index) => {
+  const obj = (typeof p === 'string') ? { key: '', text: p } : p;
+  const k = String(obj.key || '').toLowerCase();
+  const videoUrl =
+    videosByKey[k] ??
+    PERSONA_DATA.videoUrls?.[`prompt${index}`] ??
+    null;
+
+  return {
+    question: obj.text || 'Ask me something',
+    file: null,
+    videoUrl
+  };
+});
+
 
           // Show DOP header for user-generated DOPs
           dopHeader.style.display = 'flex';
@@ -397,14 +411,21 @@ function guessKey(t = '') {
           dopBio.textContent = PERSONA_DATA.bio || 'Your AI doppelgänger';
 
           // Set avatar and main image using base64 data
-          if (PERSONA_DATA.image) {
-            const imageUrl = PERSONA_DATA.image.startsWith('data:') 
-              ? PERSONA_DATA.image 
-              : `data:image/jpeg;base64,${PERSONA_DATA.image}`;
-            
-            console.log('[chat] Setting image URL (first 100 chars):', imageUrl.substring(0, 100));
-            dopAvatar.src = imageUrl;
-            dopImage.src = imageUrl;
+         // Set avatar and main image (support old base64 field OR new images[0].url)
+let imageUrl = null;
+if (PERSONA_DATA.image) {
+  imageUrl = PERSONA_DATA.image.startsWith('data:')
+    ? PERSONA_DATA.image
+    : `data:image/jpeg;base64,${PERSONA_DATA.image}`;
+} else if (Array.isArray(PERSONA_DATA.images) && PERSONA_DATA.images[0]?.url) {
+  imageUrl = PERSONA_DATA.images[0].url;
+}
+
+if (imageUrl) {
+  console.log('[chat] Setting image URL (first 100 chars):', imageUrl.substring(0, 100));
+  dopAvatar.src = imageUrl;
+  dopImage.src = imageUrl;
+
             
             // Add error handler
             dopImage.onerror = () => {
@@ -447,6 +468,7 @@ function guessKey(t = '') {
         errorDetails.textContent = error.message;
       }
     }
+    </script>
 
     // Start loading
     loadPersona();
