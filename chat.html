@@ -279,6 +279,58 @@
   <div id="srStatus" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
 
   <script>
+// === persona → UI adapter (ADD) ===
+async function hydrateFromPersona(persona) {
+  // 1) portrait (old field OR first of images[])
+  const portrait =
+    persona.imageUrl ||
+    (persona.images && persona.images[0] && persona.images[0].url) ||
+    null;
+  const avatarEl = document.querySelector('[data-role="dop-avatar"]') || document.querySelector('#dopAvatar');
+  if (portrait && avatarEl) avatarEl.src = portrait;
+
+  // 2) prompts: support strings OR {key,text}
+  const promptsRaw = Array.isArray(persona.prompts) ? persona.prompts : [];
+  const prompts = promptsRaw.map(p => typeof p === 'string' ? { key: guessKey(p), text: p } : p);
+
+  // 3) map videos by key, if any
+  const videoByKey = {};
+  if (Array.isArray(persona.videos)) {
+    for (const v of persona.videos) {
+      const k = (v.key || v.prompt || '').toLowerCase();
+      if (k && v.url) videoByKey[k] = v.url;
+    }
+  }
+
+  // 4) write labels + attach overrides on your 3 buttons
+  const btns = Array.from(document.querySelectorAll('#promptGrid .btn, [data-role="prompt-btn"]'));
+  for (let i = 0; i < btns.length; i++) {
+    const btn = btns[i];
+    const p = prompts[i];
+    if (!btn || !p) continue;
+
+    // label (fixes [object Object])
+    btn.textContent = (p.text || '').toUpperCase();
+
+    // store key for later
+    const k = (p.key || '').toLowerCase();
+    if (k) btn.dataset.key = k;
+
+    // if video already ready, attach its URL so playFile can use it
+    if (videoByKey[k]) btn.dataset.url = videoByKey[k];
+  }
+}
+
+// Fallback: infer a key from prompt text
+function guessKey(t = '') {
+  t = t.toLowerCase();
+  if (t.includes('fun')) return 'fun';
+  if (t.includes('from')) return 'from';
+  if (t.includes('relax')) return 'relax';
+  return t.replace(/[^a-z]/g, '').slice(0, 12) || 'q1';
+}
+</script>
+
     // ===== DYNAMIC PERSONA LOADING =====
     const urlParams = new URLSearchParams(window.location.search);
     const dopId = urlParams.get('id');
@@ -512,31 +564,43 @@
         setTimeout(() => { resp.currentTime = 0.1; resp.classList.remove('fade-start'); }, 80);
       }
 
-      function playFile(file){
-        if (!file) return;
-        console.log('Playing file:', file);
-        currentFile = file;
-        lastFile = file;
-        lastMode = 'clip';
-        lastText = '';
-        isStopped = false;
+      function playFile(file) {
+  if (!file) return;
+  console.log('Playing file:', file);
+  currentFile = file;
+  lastFile = file;
+  lastMode = 'clip';
+  lastText = '';
+  isStopped = false;
 
-        stopAll();
-        setPlayingUI();
-        showOverlay();
+  stopAll();
+  setPlayingUI();
+  showOverlay();
 
-        pushTurn('user', findQuestionForFile(file), { inputType:'button' });
+  pushTurn('user', findQuestionForFile(file), { inputType: 'button' });
 
-        resp.src = file;
-        resp.load();
-        resp.onloadeddata = () => {
-          hideOverlay();
-          safePlay();
-          const transcript = findTranscriptForFile(file);
-          if (transcript) pushTurn('assistant', transcript, { audio:false, video:file });
-        };
-        resp.onerror = () => { hideOverlay(); setIdleUI(); };
-      }
+  // 🔽 NEW: prefer the personalized HeyGen URL if available
+  const btn = Array.from(document.querySelectorAll('#promptGrid .btn, .prompt-btn, button'))
+    .find(b => b.dataset && b.dataset.file === file);
+  const overrideUrl = btn && btn.dataset && btn.dataset.url ? btn.dataset.url : null;
+
+  // 🔽 use persona video URL if present, fallback to default
+  resp.src = overrideUrl || file;
+  resp.load();
+
+  resp.onloadeddata = () => {
+    hideOverlay();
+    safePlay();
+    const transcript = findTranscriptForFile(file);
+    if (transcript)
+      pushTurn('assistant', transcript, { audio: false, video: overrideUrl || file });
+  };
+
+  resp.onerror = () => {
+    hideOverlay();
+    setIdleUI();
+  };
+}
 
       function playHeyGenVideo(videoUrl){
         if (!videoUrl) return;
@@ -817,5 +881,25 @@
       console.log('Debug: conversationHistory, getBoundedContext(), DTA_reset()');
     }
   </script>
+  <script>
+// === persona loader (ADD) ===
+async function loadPersona() {
+  const id = new URLSearchParams(location.search).get('id');
+  if (!id) return;
+  try {
+    const r = await fetch(`/.netlify/functions/dop-view?dopId=${encodeURIComponent(id)}`);
+    if (!r.ok) return;
+    const persona = await r.json();
+    await hydrateFromPersona(persona);
+
+    // If videos aren’t ready yet, poll a bit (no UI change)
+    if (persona.status !== 'ready') {
+      setTimeout(loadPersona, 4000);
+    }
+  } catch {}
+}
+loadPersona();
+</script>
+
 </body>
 </html>
