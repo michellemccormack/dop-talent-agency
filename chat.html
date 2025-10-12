@@ -107,12 +107,10 @@
   overflow: hidden;
   background: #000;
 }
-#resp, #dopImage{
-  display: block;
-  width: 100%;
-  height: auto;
-  background: #000;
-}
+#resp{ outline: none; cursor: pointer; opacity: 1; transition: opacity 320ms ease; }
+#resp:focus-visible{ box-shadow: 0 0 0 3px var(--accent); }
+.dop-image{ display: none; }
+
 
 /* Media elements fill the hero and are stacked */
 .hero > video,
