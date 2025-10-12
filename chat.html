@@ -169,6 +169,41 @@
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+/* DOP video area */
+.hero{
+  position:relative;
+  width:100%;
+  max-width:620px;
+  margin:16px auto;
+  aspect-ratio: 9 / 16;     /* keeps a visible box even before media loads */
+  background:#000;          /* black box while empty */
+  border-radius:12px;
+  overflow:hidden;
+}
+
+/* stack items */
+.hero > video,
+.hero > img,
+.hero > #respOverlay{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+
+/* start hidden; JS will flip these */
+.hero > video{ display:none; }
+.hero > img{ display:none; }
+
+/* overlay uses flex to center the spinner */
+#respOverlay{
+  display:none;
+  align-items:center;
+  justify-content:center;
+  background:rgba(0,0,0,.18);
+  border-radius:12px;
+}
 
   </style>
 </head>
