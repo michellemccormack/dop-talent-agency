@@ -935,20 +935,24 @@ try {
     return jobId;
   }
 
-  async function askAndRender(inputText){
-    try{
-      showSpinner(true);
-      const script = await llmReply(inputText);
-      const job = await startHeygen(script);
-      const ok = await pollHeygenJob(job);
-      return ok;
-    } catch(e){
-      console.warn(TAG, "askAndRender fallback", e);
-      showSpinner(false);
-      if (typeof window.speak === 'function') window.speak(inputText);
-      return false;
-    }
+ async function askAndRender(inputText){
+  try{
+    showSpinner(true);
+    const script = await llmReply(inputText);
+    const job = await startHeygen(script);
+    const ok  = await pollHeygenJob(job);
+    return ok;
+  } catch(e){
+    console.warn(TAG, "askAndRender fallback", e);
+    showSpinner(false);
+    if (typeof window.speak === 'function') window.speak(inputText);
+    return false;
   }
+} // <-- function ends here
+
+// expose globally (outside the function)
+window.askAndRender = askAndRender;
+
 
   // Patch the two hooks non-destructively
   const prevRoute = window.routeToBackend;
@@ -1028,6 +1032,77 @@ try {
       }
     }, true);
   }
+  // --- Wire actual UI controls directly (final)
+const callAsk = (t) => (window.askAndRender && window.askAndRender(t));
+
+// 1) Prompt chips/buttons
+const promptRoot =
+  document.getElementById('promptButtons') ||
+  document.querySelector('#promptButtons,.prompt-buttons,.buttons');
+if (promptRoot && !promptRoot.__glued) {
+  promptRoot.__glued = true;
+  promptRoot.addEventListener(
+    'click',
+    (e) => {
+      const btn = e.target && e.target.closest('button');
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const text = (btn.textContent || btn.value || '').trim();
+      if (text) callAsk(text);
+    },
+    true
+  );
+}
+
+// 2) Manual text form (if present)
+const form =
+  document.getElementById('promptForm') ||
+  document.querySelector('#promptForm form, form#promptForm');
+const input =
+  document.getElementById('promptText') ||
+  document.querySelector('#promptText,input[name="prompt"]');
+if (form && !form.__glued) {
+  form.__glued = true;
+  form.addEventListener(
+    'submit',
+    (e) => {
+      e.preventDefault();
+      const val = (input && input.value ? input.value : '').trim();
+      if (val) callAsk(val);
+      if (input) input.value = '';
+    },
+    true
+  );
+}
+
+// 3) Chat box send / Enter (optional)
+const chatSend = document.getElementById('chatSend');
+const chatInput = document.getElementById('chatInput');
+if (chatSend && !chatSend.__glued) {
+  chatSend.__glued = true;
+  chatSend.addEventListener(
+    'click',
+    (e) => {
+      const val = (chatInput && chatInput.value ? chatInput.value : '').trim();
+      if (val) { e.preventDefault(); callAsk(val); chatInput.value=''; }
+    },
+    true
+  );
+}
+if (chatInput && !chatInput.__glued) {
+  chatInput.__glued = true;
+  chatInput.addEventListener(
+    'keydown',
+    (e) => {
+      if (e.key === 'Enter') {
+        const val = (chatInput.value || '').trim();
+        if (val) { e.preventDefault(); callAsk(val); chatInput.value=''; }
+      }
+    },
+    true
+  );
+}
   
 </script>
 </body>
