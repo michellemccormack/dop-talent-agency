@@ -20,5 +20,5 @@
   status = 200
 
   [[scheduled]]
-path = "/.netlify/functions/heygen-video-processor"
+path = "/.netlify/functions/heygen_video_processor"
 schedule = "*/2 * * * *"
