@@ -279,9 +279,11 @@
           dopImg.style.display = 'none';
         } else {
           // Personalized DOP
-          const r = await fetch(`/.netlify/functions/dop-view?dopId=${encodeURIComponent(dopId)}`);
-          if (!r.ok) throw new Error(`dop-view ${r.status}`);
-          const persona = await r.json();
+          // Personalized DOP (use dop-persona)
+const r = await fetch(`/.netlify/functions/dop-persona?id=${encodeURIComponent(dopId)}`);
+if (!r.ok) throw new Error(`dop-persona ${r.status}`);
+const persona = await r.json(); // same shape you saw in the JSON viewer
+
           PERSONA_DATA = persona;
 
           header.style.display = 'flex';
