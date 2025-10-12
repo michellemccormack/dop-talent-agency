@@ -834,7 +834,151 @@ try {
     // Kick off
     loadPersona();
   </script>
-<script src="/chat-glue-v2.js?v=1"></script>
+<script>
+/* chat-glue (inline, v2) — do not remove
+   Adds prompt → LLM → HeyGen → poll → play without touching your logic.
+   Uses existing UI (portrait, spinner, media box). */
+(() => {
+  if (window.__chatGlueV2Loaded) return; window.__chatGlueV2Loaded = true;
+  const TAG = "[chat-glue][v2]";
+  console.log(TAG, "loaded");
+
+  const HEYGEN_POLL_MS = 3000;
+  const HEYGEN_POLL_MAX = 80;
+  const qs = new URLSearchParams(location.search);
+  const dopId = qs.get('id') || (window.dopId || 'demo');
+
+  async function j(url, opts){
+    const r = await fetch(url, opts);
+    if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+    return r.json();
+  }
+
+  // Spinner helpers: use your existing overlay if present
+  const showSpinner = window.showOverlay || window.showSpinner || ((s)=> {
+    const el = document.getElementById('respOverlay') || document.getElementById('mediaSpinner');
+    if (el) el.style.display = s ? 'grid' : 'none';
+  });
+
+  function playVideo(url){
+    console.log(TAG, "play", url);
+    if (typeof window.playHeyGenVideo === 'function') return window.playHeyGenVideo(url);
+    const resp = document.getElementById('resp');
+    if (resp && resp.tagName === 'VIDEO'){
+      resp.src = url; resp.muted = true; resp.loop = true; resp.autoplay = true; resp.playsInline = true;
+      resp.play().catch(()=>{});
+      showSpinner(false);
+      return;
+    }
+    const mediaBox = document.getElementById('mediaBox') || document.getElementById('dopHero');
+    if (mediaBox){
+      mediaBox.querySelectorAll('video,img').forEach(n => n.remove());
+      const v = document.createElement('video');
+      v.src = url; v.muted = true; v.loop = true; v.autoplay = true; v.playsInline = true;
+      v.addEventListener('canplay', () => showSpinner(false));
+      mediaBox.appendChild(v);
+    } else {
+      window.open(url, "_blank");
+    }
+  }
+
+  async function pollGET(jobId){
+    return j(`/.netlify/functions/heygen-proxy?job_id=${encodeURIComponent(jobId)}&id=${encodeURIComponent(dopId)}`);
+  }
+  async function pollPOST(jobId){
+    return j('/.netlify/functions/heygen-proxy', {
+      method:'POST', headers:{'content-type':'application/json'},
+      body: JSON.stringify({ action:'check_video', videoId: jobId, id: dopId })
+    });
+  }
+
+  async function pollHeygenJob(jobId){
+    console.log(TAG, "poll start", jobId);
+    for (let i=0;i<HEYGEN_POLL_MAX;i++){
+      await new Promise(r => setTimeout(r, HEYGEN_POLL_MS));
+      try{
+        let stat;
+        try { stat = await pollGET(jobId); }
+        catch { stat = await pollPOST(jobId); }
+        console.log(TAG, "poll", stat);
+        const status = (stat.status||'').toLowerCase();
+        const url = stat.url || stat.video_url || stat.data?.video_url;
+        if (status === 'completed' && url){ playVideo(url); return true; }
+        if (status === 'failed') throw new Error('heygen failed');
+      }catch(e){ console.warn(TAG, "poll error", e); }
+    }
+    console.warn(TAG, "poll timeout");
+    showSpinner(false);
+    return false;
+  }
+
+  async function llmReply(text){
+    console.log(TAG, "LLM in", text);
+    const res = await j('/.netlify/functions/session-chat', {
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body: JSON.stringify({ id:dopId, message:text, sessionId:(window.sessionId||'s') })
+    });
+    console.log(TAG, "LLM out", res);
+    return (res && res.reply) || text;
+  }
+
+  async function startHeygen(script){
+    console.log(TAG, "HeyGen start", script);
+    const start = await j('/.netlify/functions/heygen-proxy', {
+      method:'POST', headers:{'content-type':'application/json'},
+      body: JSON.stringify({ id:dopId, script })
+    });
+    const jobId = start.job_id || start.video_id || start.task_id || start?.data?.video_id || start?.data?.task_id;
+    console.log(TAG, "HeyGen start result", start, "jobId:", jobId);
+    if (!jobId) throw new Error("no job id from heygen-proxy");
+    return jobId;
+  }
+
+  async function askAndRender(inputText){
+    try{
+      showSpinner(true);
+      const script = await llmReply(inputText);
+      const job = await startHeygen(script);
+      const ok = await pollHeygenJob(job);
+      return ok;
+    } catch(e){
+      console.warn(TAG, "askAndRender fallback", e);
+      showSpinner(false);
+      if (typeof window.speak === 'function') window.speak(inputText);
+      return false;
+    }
+  }
+
+  // Patch the two hooks non-destructively
+  const prevRoute = window.routeToBackend;
+  window.routeToBackend = async function(text, opts){
+    console.log(TAG, "routeToBackend patched", text, opts);
+    if (!text) return;
+    try{
+      const done = await askAndRender(text);
+      if (!done && typeof prevRoute === 'function'){
+        return prevRoute.call(this, text, opts);
+      }
+    }catch(e){
+      if (typeof prevRoute === 'function') return prevRoute.call(this, text, opts);
+    }
+  };
+
+  if (typeof window.handlePrompt === 'function'){
+    const prevHandlePrompt = window.handlePrompt;
+    window.handlePrompt = async function(promptText){
+      console.log(TAG, "handlePrompt patched", promptText);
+      try{
+        const ok = await askAndRender(promptText);
+        if (!ok) return prevHandlePrompt.call(this, promptText);
+      }catch(e){ return prevHandlePrompt.call(this, promptText); }
+    };
+  }
+
+  console.log(TAG, "ready");
+})();
+</script>
 
 </body>
 </html>
