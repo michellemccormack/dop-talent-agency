@@ -75,36 +75,44 @@ async function processPersona(store, key){
     return { key, status:'ready' };
   }
 
-  const start = Date.now();
   let changed = false;
+let remaining = 0;
 
-  while (Date.now() - start < POLL_LIMIT_MS) {
-    let remaining = 0;
+for (const [k, info] of Object.entries(p.pending || {})) {
+  if (!info) continue;
 
-    for (const [k, info] of Object.entries(p.pending)) {
-      if (!info) continue;
+  // already captured?
+  if ((p.videos || []).some(v => (v.key || v.prompt) === k)) continue;
 
-      // already captured?
-      if ((p.videos||[]).some(v => (v.key||v.prompt) === k)) continue;
+  try {
+    const res = await checkHeygenTask({ task_id: info.task_id, video_id: info.video_id });
 
-      try {
-        const res = await checkHeygenTask({ task_id: info.task_id, video_id: info.video_id });
-        if ((res.status === 'completed' || res.status === 'succeed' || res.video_url) && res.video_url) {
-          p.videos.push({ key:k, url:res.video_url, thumbnail_url:res.thumbnail_url, duration:res.duration });
-          delete p.pending[k];
-          changed = true;
-        } else if (res.status === 'failed' || res.status === 'error') {
-          p.failures ||= {};
-          p.failures[k] = 'render failed';
-          delete p.pending[k];
-          changed = true;
-        } else {
-          remaining++;
-        }
-      } catch (e) {
-        remaining++; // transient error → try later
-      }
+    if ((res.status === 'completed' || res.status === 'succeed') && res.video_url) {
+      p.videos.push({
+        key: k,
+        url: res.video_url,
+        thumbnail_url: res.thumbnail_url,
+        duration: res.duration
+      });
+      delete p.pending[k];
+      changed = true;
+
+    } else if (res.status === 'failed' || res.status === 'error') {
+      p.failures ||= {};
+      p.failures[k] = 'render failed';
+      delete p.pending[k];
+      changed = true;
+
+    } else {
+      // still rendering – next cron run will re-check
+      remaining++;
     }
+
+  } catch {
+    // transient – try again next run
+    remaining++;
+  }
+}
 
     if (!remaining) break;
     await sleep(SLEEP_MS);
