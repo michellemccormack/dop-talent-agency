@@ -676,12 +676,29 @@
       let micLocked = false;
       let currentAudio = null;
       let currentAudioURL = null;
+      let buttonsLocked = false;
 
       function lockMic() {
         micLocked = true;
         setTimeout(() => {
           micLocked = false;
         }, CONFIG.MIC_LOCK_DURATION);
+      }
+
+      function lockButtons() {
+        buttonsLocked = true;
+        qsa('.btn', grid).forEach(btn => {
+          btn.disabled = true;
+          btn.style.opacity = '0.5';
+        });
+      }
+
+      function unlockButtons() {
+        buttonsLocked = false;
+        qsa('.btn', grid).forEach(btn => {
+          btn.disabled = false;
+          btn.style.opacity = '';
+        });
       }
 
       // ========================================
@@ -716,6 +733,7 @@
         micBtn.classList.remove('listening', 'stopping');
         micBtn.textContent = '🎤 Tap to Talk';
         setPill('ready', 'Ready');
+        unlockButtons();
       }
 
       // ========================================
@@ -727,6 +745,7 @@
         stopAudio();
         setIdleUI();
         mediaController.hideSpinner();
+        unlockButtons();
       }
 
       function stopAudio() {
@@ -885,19 +904,57 @@
         const btn = event.target.closest('.btn');
         if (!btn) return;
         
+        // Prevent multiple simultaneous clicks
+        if (buttonsLocked) {
+          console.log('[App] Buttons locked, ignoring click');
+          return;
+        }
+        
+        lockButtons();
+        
+        // Failsafe: unlock buttons after 30 seconds no matter what
+        const failsafeTimeout = setTimeout(() => {
+          console.warn('[App] Failsafe timeout: unlocking buttons');
+          unlockButtons();
+        }, 30000);
+        
         const index = parseInt(btn.dataset.index, 10);
         const promptConfig = PROMPTS_CONFIG[index];
 
-        if (promptConfig.videoUrl) {
-          playHeyGenVideo(promptConfig.videoUrl);
-        } else if (promptConfig.file) {
-          setVoiceForNextTTSByFile(promptConfig.file);
-          playFile(promptConfig.file);
-        } else {
-          const question = promptConfig.question;
-          pushTurn('user', question, { inputType: 'button' });
-          setPill('thinking', 'Thinking…');
-          routeToBackend(question, { forceLLM: true });
+        // Add visual feedback for the clicked button
+        btn.classList.add('active');
+        setTimeout(() => btn.classList.remove('active'), 300);
+
+        try {
+          if (promptConfig.videoUrl) {
+            playHeyGenVideo(promptConfig.videoUrl).finally(() => {
+              clearTimeout(failsafeTimeout);
+            });
+          } else if (promptConfig.file) {
+            setVoiceForNextTTSByFile(promptConfig.file);
+            playFile(promptConfig.file).finally(() => {
+              clearTimeout(failsafeTimeout);
+            });
+          } else {
+            const question = promptConfig.question;
+            pushTurn('user', question, { inputType: 'button' });
+            setPill('thinking', 'Thinking…');
+            routeToBackend(question, { forceLLM: true })
+              .catch(error => {
+                console.error('[App] Backend error:', error);
+                setIdleUI();
+                showToast('Error processing request');
+              })
+              .finally(() => {
+                clearTimeout(failsafeTimeout);
+              });
+          }
+        } catch (error) {
+          console.error('[App] Button click error:', error);
+          clearTimeout(failsafeTimeout);
+          unlockButtons();
+          setIdleUI();
+          showToast('Error processing request');
         }
       });
 
