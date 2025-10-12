@@ -30,7 +30,6 @@
       min-height:100vh;
     }
 
-    /* Layout */
     .wrap{max-width:1100px; margin:0 auto; padding:28px 20px 48px}
     .card{
       position:relative;
@@ -47,7 +46,6 @@
     .stack-l{margin-top:24px}
     .stack-xl{margin-top:32px}
 
-    /* Reset Session button */
     .reset{
       position:absolute; right:18px; top:18px;
       appearance:none; border:1px solid var(--stroke-strong);
@@ -56,7 +54,6 @@
     }
     .reset:hover{filter:brightness(1.05)}
 
-    /* BIG mic button */
     .mic-rail{display:flex; justify-content:center}
     .mic{
       appearance:none; border:none; cursor:pointer;
@@ -73,19 +70,7 @@
     .mic.listening{background:linear-gradient(180deg,var(--warn),#ffdf8a)}
     .mic.stopping{background:linear-gradient(180deg,var(--stop),#ff8a8a); color:#000}
     .mic[disabled]{opacity:.45; cursor:not-allowed}
-    .mic[disabled]:hover::after{
-      content: 'Upgrade to have a conversation';
-      position:absolute; bottom:calc(100% + 12px); left:50%;
-      transform:translateX(-50%);
-      background:#1b1c25; color:#eaeaf1;
-      border:1px solid var(--stroke-strong);
-      padding:8px 12px; border-radius:8px;
-      font-size:12px; white-space:nowrap;
-      box-shadow:0 4px 12px rgba(0,0,0,.3);
-      pointer-events:none;
-    }
 
-    /* Status pill */
     .status-rail{display:flex; justify-content:center}
     .pill{
       display:inline-flex; align-items:center; gap:8px;
@@ -100,7 +85,6 @@
     .pill.speaking  .dot{background:#16db65}
     .pill.ready     .dot{background:#6f7284}
 
-    /* Instructions */
     .instructions{
       text-align:center;
       font-family:'Montserrat',sans-serif; font-weight:800; text-transform:uppercase;
@@ -108,7 +92,6 @@
     }
     .instructions small{display:block; color:#bfc1cd; margin-top:6px; font-size:9px}
 
-    /* Prompt buttons */
     .prompt-grid{
       display:flex; flex-wrap:wrap; justify-content:center;
       gap:12px 14px;
@@ -130,7 +113,6 @@
     .btn[disabled]{opacity:.45; cursor:not-allowed}
     .btn.active{background:linear-gradient(180deg,#e9ebff,#dfe1ff); border-color:#cfd1ff}
 
-    /* Video */
     .hero{display:flex; justify-content:center; position:relative}
     #resp, .dop-image{
       width:min(100%,560px); aspect-ratio:9/16; max-height:70vh;
@@ -141,69 +123,31 @@
       cursor:pointer; outline:none;
       object-fit:cover;
     }
-    .dop-image{display:none} /* Hidden by default, shown for user DOPs */
+    .dop-image{display:none}
     #resp:focus-visible{box-shadow:0 0 0 3px var(--accent)}
     .fade-start{opacity:0}
 
-    /* Buffering overlay */
-    .overlay {
-      position:absolute; inset:0; display:none;
-      align-items:center; justify-content:center;
-      background:rgba(0,0,0,.18); border-radius:14px;
-      pointer-events:none;
-    }
+    .overlay { position:absolute; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.18); border-radius:14px; pointer-events:none; }
     .overlay.show{display:flex}
-    .spinner{
-      width:38px; height:38px; border-radius:999px;
-      border:3px solid rgba(255,255,255,.35);
-      border-top-color:#fff; animation:spin 900ms linear infinite;
-      box-shadow:0 0 18px rgba(255,255,255,.25);
-    }
+    .spinner{ width:38px; height:38px; border-radius:999px; border:3px solid rgba(255,255,255,.35); border-top-color:#fff; animation:spin 900ms linear infinite; box-shadow:0 0 18px rgba(255,255,255,.25); }
     @keyframes spin{to{transform:rotate(360deg)}}
 
     .footer{font-size:12px; color:#b7b8c3; text-align:center; margin-top:26px; margin-bottom:60px}
 
-    /* Toast */
-    .toast{
-      position:absolute; left:50%; bottom:20px; transform:translateX(-50%);
-      background:#1b1c25; color:#eaeaf1; border:1px solid var(--stroke-strong);
-      padding:10px 14px; border-radius:12px; box-shadow:var(--shadow);
-      font-size:12px; letter-spacing:.2px;
-      opacity:0; pointer-events:none; transition:opacity .20s ease;
-    }
+    .toast{ position:absolute; left:50%; bottom:20px; transform:translateX(-50%); background:#1b1c25; color:#eaeaf1; border:1px solid var(--stroke-strong); padding:10px 14px; border-radius:12px; box-shadow:var(--shadow); font-size:12px; letter-spacing:.2px; opacity:0; pointer-events:none; transition:opacity .20s ease; }
     .toast.show{opacity:1}
 
-    /* SR-only */
-    .sr-only{
-      position:absolute !important; width:1px; height:1px; padding:0; margin:-1px;
-      overflow:hidden; clip:rect(0,0,0,0); border:0;
-    }
+    .sr-only{ position:absolute !important; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); border:0; }
 
-    /* DOP Header */
-    .dop-header{
-      display:flex; align-items:center; gap:16px; margin-bottom:24px;
-      padding:16px 0; border-bottom:1px solid var(--stroke);
-    }
-    .dop-avatar{
-      width:50px; height:50px; border-radius:50%;
-      background:var(--stroke); object-fit:cover;
-      border:2px solid var(--stroke-strong);
-    }
-    .dop-info h1{
-      margin:0; font-size:1.5rem; font-weight:700;
-      font-family:'Montserrat',sans-serif;
-    }
-    .dop-info p{margin:4px 0 0; color:var(--muted); font-size:14px}
+    .dop-header{ display:flex; align-items:center; gap:16px; margin-bottom:24px; padding:16px 0; border-bottom:1px solid var(--stroke); }
+    .dop-avatar{ width:50px; height:50px; border-radius:50%; background:var(--stroke); object-fit:cover; border:2px solid var(--stroke-strong); }
+    .dop-info h1{ margin:0; font-size:1.5rem; font-weight:700; font-family:'Montserrat',sans-serif; }
+    .dop-info p{ margin:4px 0 0; color:#b7b8c3; font-size:14px }
 
-    /* Loading state */
-    .loading-state{
-      text-align:center; padding:60px 20px; color:var(--muted);
-    }
+    .loading-state{ text-align:center; padding:60px 20px; color:#b7b8c3; }
     .loading-state .spinner{margin:0 auto 20px}
-    .error-state{
-      text-align:center; padding:40px; color:var(--stop);
-    }
-    .error-state .details{font-size:12px; margin-top:8px; color:var(--muted)}
+    .error-state{ text-align:center; padding:40px; color:#ff6b6b; }
+    .error-state .details{font-size:12px; margin-top:8px; color:#b7b8c3 }
 
     @media (max-width:480px){
       .dop-header{flex-direction:column; text-align:center}
@@ -217,21 +161,17 @@
 <body>
   <div class="wrap">
     <div class="card section">
-      <!-- Loading state -->
       <div class="loading-state" id="loadingState">
         <div class="spinner"></div>
         <div>Loading your DOP...</div>
       </div>
 
-      <!-- Error state -->
       <div class="error-state" id="errorState" style="display:none">
         <div>Sorry, this DOP couldn't be loaded.</div>
         <div class="details" id="errorDetails"></div>
       </div>
 
-      <!-- Main interface (hidden until loaded) -->
       <div id="mainInterface" style="display:none">
-        <!-- DOP Header (only shown for user DOPs) -->
         <div class="dop-header" id="dopHeader" style="display:none">
           <img class="dop-avatar" id="dopAvatar" alt="DOP Avatar" />
           <div class="dop-info">
@@ -239,33 +179,26 @@
             <p id="dopBio">Loading personality...</p>
           </div>
         </div>
-        <!-- Reset Session (Tier 1 memory) -->
+
         <button class="reset" id="resetBtn" type="button" title="Reset session (clears local memory)">Reset Session</button>
 
-        <!-- BIG mic button -->
         <div class="mic-rail">
           <button class="mic" id="micBtn" aria-pressed="false">🎤 Tap to Talk</button>
         </div>
 
-        <!-- status pill -->
         <div class="status-rail stack-s">
           <div id="statusPill" class="pill ready" aria-live="polite">
             <span class="dot"></span><span id="pillText">Ready</span>
           </div>
         </div>
 
-        <!-- instructions -->
         <div class="instructions stack-l">
           <span id="dopNameDisplay">Ask one of these questions.</span>
           <small>If your microphone doesn't work, tap the question.</small>
         </div>
 
-        <!-- prompt buttons -->
-        <div class="prompt-grid stack-m" id="promptGrid">
-          <!-- Dynamically populated -->
-        </div>
+        <div class="prompt-grid stack-m" id="promptGrid"></div>
 
-        <!-- response video + overlay -->
         <div class="hero">
           <video id="resp" playsinline preload="auto" tabindex="0" aria-label="Response video (tap to play or pause)"></video>
           <img class="dop-image" id="dopImage" alt="DOP" />
@@ -275,205 +208,145 @@
     </div>
   </div>
 
-  <!-- SR-only status for screen readers -->
   <div id="srStatus" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
 
   <script>
-// === persona → UI adapter (ADD) ===
-async function hydrateFromPersona(persona) {
-  // 1) portrait (old field OR first of images[])
-  const portrait =
-    persona.imageUrl ||
-    (persona.images && persona.images[0] && persona.images[0].url) ||
-    null;
-  const avatarEl = document.querySelector('[data-role="dop-avatar"]') || document.querySelector('#dopAvatar');
-  if (portrait && avatarEl) avatarEl.src = portrait;
-
-  // 2) prompts: support strings OR {key,text}
-  const promptsRaw = Array.isArray(persona.prompts) ? persona.prompts : [];
-  const prompts = promptsRaw.map(p => typeof p === 'string' ? { key: guessKey(p), text: p } : p);
-
-  // 3) map videos by key, if any
-  const videoByKey = {};
-  if (Array.isArray(persona.videos)) {
-    for (const v of persona.videos) {
-      const k = (v.key || v.prompt || '').toLowerCase();
-      if (k && v.url) videoByKey[k] = v.url;
-    }
-  }
-
-  // 4) write labels + attach overrides on your 3 buttons
-  const btns = Array.from(document.querySelectorAll('#promptGrid .btn, [data-role="prompt-btn"]'));
-  for (let i = 0; i < btns.length; i++) {
-    const btn = btns[i];
-    const p = prompts[i];
-    if (!btn || !p) continue;
-
-    // label (fixes [object Object])
-    btn.textContent = (p.text || '').toUpperCase();
-
-    // store key for later
-    const k = (p.key || '').toLowerCase();
-    if (k) btn.dataset.key = k;
-
-    // if video already ready, attach its URL so playFile can use it
-    if (videoByKey[k]) btn.dataset.url = videoByKey[k];
-  }
-}
-
-// Fallback: infer a key from prompt text
-function guessKey(t = '') {
-  t = t.toLowerCase();
-  if (t.includes('fun')) return 'fun';
-  if (t.includes('from')) return 'from';
-  if (t.includes('relax')) return 'relax';
-  return t.replace(/[^a-z]/g, '').slice(0, 12) || 'q1';
-}
-    // ===== DYNAMIC PERSONA LOADING =====
+    // -----------------------------
+    // Helpers
+    // -----------------------------
+    const qs  = (s, r=document) => r.querySelector(s);
+    const qsa = (s, r=document) => Array.from(r.querySelectorAll(s));
     const urlParams = new URLSearchParams(window.location.search);
     const dopId = urlParams.get('id');
-    
+
     let PERSONA_DATA = null;
     let PROMPTS_CONFIG = [];
 
-    // Load persona on startup
-    async function loadPersona() {
-      const loadingState = document.getElementById('loadingState');
-      const errorState = document.getElementById('errorState');
-      const errorDetails = document.getElementById('errorDetails');
-      const mainInterface = document.getElementById('mainInterface');
-      const dopHeader = document.getElementById('dopHeader');
-      const dopName = document.getElementById('dopName');
-      const dopBio = document.getElementById('dopBio');
-      const dopAvatar = document.getElementById('dopAvatar');
-      const dopImage = document.getElementById('dopImage');
-      const resp = document.getElementById('resp');
+    function showOverlay(){ qs('#respOverlay').classList.add('show'); }
+    function hideOverlay(){ qs('#respOverlay').classList.remove('show'); }
+    function setPill(mode, text){
+      const pill = qs('#statusPill'), txt = qs('#pillText');
+      pill.classList.remove('listening','thinking','speaking','ready');
+      pill.classList.add(mode);
+      txt.textContent = text;
+      qs('#srStatus').textContent = text;
+    }
+    function showToast(msg){
+      const t = document.createElement('div'); t.className='toast show'; t.textContent=msg;
+      document.body.append(t); setTimeout(()=>{ t.classList.remove('show'); setTimeout(()=>t.remove(),250); }, 2000);
+    }
+    const guessKey = (t='')=>{
+      t = t.toLowerCase();
+      if (t.includes('fun')) return 'fun';
+      if (t.includes('from')) return 'from';
+      if (t.includes('relax')) return 'relax';
+      return t.replace(/[^a-z]/g,'').slice(0,12) || 'q1';
+    };
 
-      try {
-        if (!dopId) {
-          // No ID - use default Sasha persona
-          console.log('[chat] No DOP ID, using default persona');
+    // -----------------------------
+    // Persona loader (uses dop-view)
+    // -----------------------------
+    async function loadPersona(){
+      const loading  = qs('#loadingState');
+      const errorBox = qs('#errorState');
+      const details  = qs('#errorDetails');
+      const mainUI   = qs('#mainInterface');
+
+      const resp     = qs('#resp');
+      const dopImg   = qs('#dopImage');
+      const header   = qs('#dopHeader');
+      const nameEl   = qs('#dopName');
+      const bioEl    = qs('#dopBio');
+
+      try{
+        if (!dopId){
+          // Default demo
           PERSONA_DATA = {
             name: 'Sasha',
+            bio: 'Demo persona',
             prompts: [
               'What do you like to do for fun?',
               'Where are you from?',
-              "What's your favorite way to relax?"
+              "What’s your favorite way to relax?"
             ]
           };
           PROMPTS_CONFIG = [
-            { question: 'What do you like to do for fun?', file: 'assets/p_fun.mp4' },
-            { question: 'Where are you from?', file: 'assets/p_from.mp4' },
-            { question: "What's your favorite way to relax?", file: 'assets/p_relax.mp4' }
+            { question:'What do you like to do for fun?', file:'assets/p_fun.mp4',   videoUrl:null },
+            { question:'Where are you from?',            file:'assets/p_from.mp4',  videoUrl:null },
+            { question:'What’s your favorite way to relax?', file:'assets/p_relax.mp4', videoUrl:null }
           ];
-          
-          // Show video element for default persona
           resp.style.display = 'block';
-          dopImage.style.display = 'none';
+          dopImg.style.display = 'none';
         } else {
-          // Load persona from backend
-          console.log('[chat] Loading DOP:', dopId);
-          const response = await fetch(`/.netlify/functions/dop-persona?id=${encodeURIComponent(dopId)}`);
-          
-          if (!response.ok) {
-            throw new Error(`Failed to load DOP: ${response.status}`);
+          // Personalized DOP
+          const r = await fetch(`/.netlify/functions/dop-view?dopId=${encodeURIComponent(dopId)}`);
+          if (!r.ok) throw new Error(`dop-view ${r.status}`);
+          const persona = await r.json();
+          PERSONA_DATA = persona;
+
+          header.style.display = 'flex';
+          nameEl.textContent = persona.name || 'DOP';
+          bioEl.textContent  = persona.bio  || 'Your AI doppelgänger';
+          qs('#dopNameDisplay').textContent = `Ask ${PERSONA_DATA.name || 'DOP'} one of these questions.`;
+
+          // portrait: legacy base64 or new blobs url
+          let imageUrl = null;
+          if (persona.image) {
+            imageUrl = persona.image.startsWith('data:')
+              ? persona.image
+              : `data:image/jpeg;base64,${persona.image}`;
+          } else if (Array.isArray(persona.images) && persona.images[0]?.url) {
+            imageUrl = persona.images[0].url;
           }
-
-          PERSONA_DATA = await response.json();
-          console.log('[chat] Persona loaded:', PERSONA_DATA);
-
-          // Build prompts config - now with video URLs!
-          // Build prompts config — supports strings or {key,text}; videos[] or legacy videoUrls
-const promptsRaw = Array.isArray(PERSONA_DATA.prompts) ? PERSONA_DATA.prompts : [];
-const videosByKey = Object.fromEntries(
-  (PERSONA_DATA.videos || []).map(v => [String(v.key || '').toLowerCase(), v.url])
-);
-
-PROMPTS_CONFIG = promptsRaw.map((p, index) => {
-  const obj = (typeof p === 'string') ? { key: '', text: p } : p;
-  const k = String(obj.key || '').toLowerCase();
-  const videoUrl =
-    videosByKey[k] ??
-    PERSONA_DATA.videoUrls?.[`prompt${index}`] ??
-    null;
-
-  return {
-    question: obj.text || 'Ask me something',
-    file: null,
-    videoUrl
-  };
-});
-
-
-          // Show DOP header for user-generated DOPs
-          dopHeader.style.display = 'flex';
-          dopName.textContent = PERSONA_DATA.name || 'DOP';
-          dopBio.textContent = PERSONA_DATA.bio || 'Your AI doppelgänger';
-
-          // Set avatar and main image using base64 data
-         // Set avatar and main image (support old base64 field OR new images[0].url)
-let imageUrl = null;
-if (PERSONA_DATA.image) {
-  imageUrl = PERSONA_DATA.image.startsWith('data:')
-    ? PERSONA_DATA.image
-    : `data:image/jpeg;base64,${PERSONA_DATA.image}`;
-} else if (Array.isArray(PERSONA_DATA.images) && PERSONA_DATA.images[0]?.url) {
-  imageUrl = PERSONA_DATA.images[0].url;
-}
-
-if (imageUrl) {
-  console.log('[chat] Setting image URL (first 100 chars):', imageUrl.substring(0, 100));
-  dopAvatar.src = imageUrl;
-  dopImage.src = imageUrl;
-
-            
-            // Add error handler
-            dopImage.onerror = () => {
-              console.error('[chat] Image failed to load');
-            };
-            dopImage.onload = () => {
-              console.log('[chat] Image loaded successfully');
-            };
-            
-            // Show image, hide video for user DOPs
+          if (imageUrl){
+            qs('#dopAvatar').src = imageUrl;
+            dopImg.src = imageUrl;
             resp.style.display = 'none';
-            dopImage.style.display = 'block';
-            console.log('[chat] Image display set to block, video hidden');
-          } else {
-            console.log('[chat] No image data found in persona');
+            dopImg.style.display = 'block';
           }
+
+          // prompts + videos
+          const raw = Array.isArray(persona.prompts) ? persona.prompts : [];
+          const videosByKey = Object.fromEntries(
+            (persona.videos || []).map(v => [String(v.key || '').toLowerCase(), v.url])
+          );
+
+          PROMPTS_CONFIG = raw.map((p, i)=>{
+            const obj = (typeof p === 'string') ? { key: guessKey(p), text: p } : p;
+            const k   = String(obj.key || '').toLowerCase();
+            const vUrl = videosByKey[k] ?? persona.videoUrls?.[`prompt${i}`] ?? null;
+            return { question: obj.text || 'Ask me something', file:null, videoUrl: vUrl };
+          });
         }
 
-        // Update UI
-        document.getElementById('dopNameDisplay').textContent = 
-          `Ask ${PERSONA_DATA.name || 'DOP'} one of these questions.`;
-
-        // Create prompt buttons
-        const grid = document.getElementById('promptGrid');
-        grid.innerHTML = PROMPTS_CONFIG.map((p, i) => 
-          `<button class="btn" data-index="${i}">${p.question}</button>`
+        // Render buttons
+        const grid = qs('#promptGrid');
+        grid.innerHTML = PROMPTS_CONFIG.map((p, i) =>
+          `<button class="btn" data-index="${i}">${(p.question||'').toUpperCase()}</button>`
         ).join('');
 
-        // Show interface
-        loadingState.style.display = 'none';
-        mainInterface.style.display = 'block';
+        // Show UI
+        loading.style.display = 'none';
+        mainUI.style.display  = 'block';
 
-        // Initialize the rest of the app
         initializeApp();
 
-      } catch (error) {
-        console.error('[chat] Failed to load persona:', error);
-        loadingState.style.display = 'none';
-        errorState.style.display = 'block';
-        errorDetails.textContent = error.message;
+        // Poll while processing
+        if (dopId && PERSONA_DATA.status !== 'ready') {
+          setTimeout(loadPersona, 4000);
+        }
+
+      } catch (e){
+        console.error('[chat] load error', e);
+        loading.style.display = 'none';
+        errorBox.style.display = 'block';
+        details.textContent = e.message || String(e);
       }
     }
-    </script>
 
-    // Start loading
-    loadPersona();
-
-    // ===== REST OF THE WORKING CODE FROM INDEX.HTML =====
+    // -----------------------------
+    // App logic (kept from your original)
+    // -----------------------------
     function initializeApp() {
       const resp = document.getElementById('resp');
       const respOverlay = document.getElementById('respOverlay');
@@ -486,18 +359,16 @@ if (imageUrl) {
       const dopImage = document.getElementById('dopImage');
 
       // Disable mic for user-generated DOPs (upgrade required)
-      const isUserDOP = dopId && dopId.startsWith('dop_');
+      const isUserDOP = !!dopId;
       if (isUserDOP) {
         micBtn.disabled = true;
         micBtn.title = 'Upgrade to have a conversation';
-        console.log('[chat] Mic disabled for user DOP (upgrade required)');
       }
 
       // Session
       let sessionId = 'sess_' + Date.now() + '_' + Math.random().toString(36).slice(2,9);
       let conversationHistory = [];
       const MAX_CONTEXT = 8;
-
       function pushTurn(role, content, meta={}){
         conversationHistory.push({ role, content, ...meta });
         if (conversationHistory.length > MAX_CONTEXT*2) {
@@ -552,7 +423,7 @@ if (imageUrl) {
 
       function safePlay(){ try { resp.play().catch(e => { console.warn('Autoplay blocked:',e); showToast('Tap video to play'); }); } catch{} }
 
-      // Voice mapping logic
+      // Voice mapping logic (kept)
       window.DOP_LAST_PROMPT = null;
       function getVoiceIdForNextTTS(){
         if (!PERSONA_DATA.voiceId) return null;
@@ -565,10 +436,9 @@ if (imageUrl) {
       }
       function forceFallbackVoiceForMic(){ if (!window.DOP_LAST_PROMPT) window.DOP_LAST_PROMPT = 'fallback'; }
 
-      // Video player
+      // Player helpers
       function preloadSources(firstFile){
         if (!firstFile) return;
-        // Preload video files if they exist
         setTimeout(() => {
           PROMPTS_CONFIG.forEach(p => {
             if (p.file) {
@@ -586,48 +456,42 @@ if (imageUrl) {
         setTimeout(() => { resp.currentTime = 0.1; resp.classList.remove('fade-start'); }, 80);
       }
 
+      // Updated playFile (local demo fallback)
       function playFile(file) {
-  if (!file) return;
-  console.log('Playing file:', file);
-  currentFile = file;
-  lastFile = file;
-  lastMode = 'clip';
-  lastText = '';
-  isStopped = false;
+        if (!file) return;
+        console.log('Playing file:', file);
+        currentFile = file;
+        lastFile = file;
+        lastMode = 'clip';
+        lastText = '';
+        isStopped = false;
 
-  stopAll();
-  setPlayingUI();
-  showOverlay();
+        stopAll();
+        setPlayingUI();
+        showOverlay();
 
-  pushTurn('user', findQuestionForFile(file), { inputType: 'button' });
+        pushTurn('user', findQuestionForFile(file), { inputType: 'button' });
 
-  // 🔽 NEW: prefer the personalized HeyGen URL if available
-  const btn = Array.from(document.querySelectorAll('#promptGrid .btn, .prompt-btn, button'))
-    .find(b => b.dataset && b.dataset.file === file);
-  const overrideUrl = btn && btn.dataset && btn.dataset.url ? btn.dataset.url : null;
+        resp.src = file;
+        resp.load();
 
-  // 🔽 use persona video URL if present, fallback to default
-  resp.src = overrideUrl || file;
-  resp.load();
+        resp.onloadeddata = () => {
+          hideOverlay();
+          safePlay();
+          const transcript = findTranscriptForFile(file);
+          if (transcript)
+            console.log('[assistant transcript]', transcript);
+        };
 
-  resp.onloadeddata = () => {
-    hideOverlay();
-    safePlay();
-    const transcript = findTranscriptForFile(file);
-    if (transcript)
-      pushTurn('assistant', transcript, { audio: false, video: overrideUrl || file });
-  };
-
-  resp.onerror = () => {
-    hideOverlay();
-    setIdleUI();
-  };
-}
+        resp.onerror = () => {
+          hideOverlay();
+          setIdleUI();
+        };
+      }
 
       function playHeyGenVideo(videoUrl){
         if (!videoUrl) return;
-        console.log('Playing HeyGen video:', videoUrl.substring(0, 50) + '...');
-        
+        console.log('Playing HeyGen video:', videoUrl.substring(0, 80) + '…');
         currentFile = videoUrl;
         lastFile = videoUrl;
         lastMode = 'heygen';
@@ -637,6 +501,10 @@ if (imageUrl) {
         stopAll();
         setPlayingUI();
         showOverlay();
+
+        // show the video, hide portrait
+        dopImage.style.display = 'none';
+        resp.style.display = 'block';
 
         resp.src = videoUrl;
         resp.load();
@@ -650,7 +518,6 @@ if (imageUrl) {
           setIdleUI(); 
         };
         resp.onended = () => {
-          // Return to image after video ends
           resp.style.display = 'none';
           dopImage.style.display = 'block';
           setIdleUI();
@@ -666,7 +533,7 @@ if (imageUrl) {
         return match ? match.response || '' : '';
       }
 
-      // Events
+      // Click handlers
       resp.addEventListener('click', () => {
         if (resp.paused) { safePlay(); isStopped = false; setPlayingUI(); }
         else { stopVideo(); setIdleUI(); hideOverlay(); }
@@ -675,26 +542,15 @@ if (imageUrl) {
       grid.addEventListener('click', (e) => {
         const btn = e.target.closest('.btn');
         if (!btn) return;
-        
         const index = parseInt(btn.dataset.index);
         const promptConfig = PROMPTS_CONFIG[index];
-        
+
         if (promptConfig.videoUrl) {
-          // HeyGen video available - play it!
-          console.log('[chat] Playing HeyGen video:', promptConfig.videoUrl.substring(0, 50) + '...');
-          
-          // Hide image, show video
-          dopImage.style.display = 'none';
-          resp.style.display = 'block';
-          
-          // Play HeyGen video
           playHeyGenVideo(promptConfig.videoUrl);
         } else if (promptConfig.file) {
-          // Pre-recorded local video exists (default Sasha)
           setVoiceForNextTTSByFile(promptConfig.file);
           playFile(promptConfig.file);
         } else {
-          // No video - use LLM + TTS
           const question = promptConfig.question;
           pushTurn('user', question, { inputType:'button' });
           setPill('thinking','Thinking…');
@@ -705,7 +561,7 @@ if (imageUrl) {
       resp.addEventListener('ended', () => { stopVideo(); setIdleUI(); });
       resp.addEventListener('error', () => { stopVideo(); setIdleUI(); hideOverlay(); });
 
-      // ASR + backend routing + ElevenLabs TTS
+      // ASR + backend routing + ElevenLabs TTS (kept)
       const supportsASR = ('SpeechRecognition' in window) || ('webkitSpeechRecognition' in window);
       let recognizer = null, recognizing = false, finalTranscript = '';
       let asrFinalSent = false;
@@ -729,10 +585,7 @@ if (imageUrl) {
           forceFallbackVoiceForMic();
         };
         recognizer.onerror = (e) => { srStatus.textContent = 'Mic error: ' + (e.error || 'unknown'); stopASR(); setIdleUI(); hideOverlay(); };
-        recognizer.onend = () => {
-          recognizing = false;
-          if (!asrFinalSent) setIdleUI();
-        };
+        recognizer.onend = () => { recognizing = false; if (!asrFinalSent) setIdleUI(); };
         recognizer.onresult = (event) => {
           for (let i = event.resultIndex; i < event.results.length; i++) {
             const res = event.results[i];
@@ -764,7 +617,6 @@ if (imageUrl) {
       });
       window.addEventListener('keydown', (e) => { if (e.key === 'Escape') stopAll(); });
 
-      // Helpers for JSON fetch
       async function safeJSON(res){
         const txt = await res.text();
         try { return JSON.parse(txt); }
@@ -780,16 +632,8 @@ if (imageUrl) {
         return await safeJSON(res);
       }
 
-      // NON-STREAM route only
       async function routeToBackend(text, opts = {}){
-        const payload = { 
-          text, 
-          message: text, 
-          sessionId, 
-          context: getBoundedContext(),
-          personaId: dopId,
-          ...opts 
-        };
+        const payload = { text, message:text, sessionId, context:getBoundedContext(), personaId:dopId, ...opts };
         try{
           const data = await callFunction('/.netlify/functions/session-chat', payload);
           await handleBackendResponse(data);
@@ -817,7 +661,6 @@ if (imageUrl) {
           const speech = data.fallbackResponse || data.reply;
           lastMode = 'tts';
           lastText = speech;
-
           pushTurn('assistant', speech, { audio:true });
           await speakWithElevenLabs(speech);
           setIdleUI();
@@ -826,30 +669,20 @@ if (imageUrl) {
         }
       }
 
-      // TTS — pass voice AND clip hint so server picks the right voice deterministically
       async function speakWithElevenLabs(text){
         try{
           stopVideo();
           showOverlay();
-
-          // clip hint from lastFile (e.g., "assets/p_fun.mp4" -> "p_fun")
           let clipHint = null;
           if (lastFile && typeof lastFile === 'string') {
             clipHint = lastFile.replace(/^assets\//,'').replace(/\.mp4$/i,'');
           }
-          // ADD-ONLY: if mic-only (no lastFile), reuse last prompt key
-          if (!clipHint && window.DOP_LAST_PROMPT) {
-            clipHint = window.DOP_LAST_PROMPT; // e.g., "p_fun"
-          }
+          if (!clipHint && window.DOP_LAST_PROMPT) clipHint = window.DOP_LAST_PROMPT;
 
           const res = await fetch('/.netlify/functions/tts-eleven', {
             method:'POST',
             headers:{ 'Content-Type':'application/json' },
-            body: JSON.stringify({
-              text,
-              clip: clipHint,
-              voiceId: getVoiceIdForNextTTS()
-            })
+            body: JSON.stringify({ text, clip: clipHint, voiceId: getVoiceIdForNextTTS() })
           });
           if (!res.ok) throw new Error('TTS failed');
 
@@ -894,34 +727,14 @@ if (imageUrl) {
         setTimeout(() => preloadSources(firstPrompt.file), 300);
       }
 
-      // Pre-warm TTS function to cut first-utterance latency
+      // Pre-warm TTS function
       window.addEventListener('load', () => {
         fetch('/.netlify/functions/tts-eleven', { method:'OPTIONS' }).catch(()=>{});
       });
-
-      // Debug tips in console:
-      console.log('Debug: conversationHistory, getBoundedContext(), DTA_reset()');
     }
+
+    // Kick off
+    loadPersona();
   </script>
-  <script>
-// === persona loader (ADD) ===
-async function loadPersona() {
-  const id = new URLSearchParams(location.search).get('id');
-  if (!id) return;
-  try {
-    const r = await fetch(`/.netlify/functions/dop-view?dopId=${encodeURIComponent(id)}`);
-    if (!r.ok) return;
-    const persona = await r.json();
-    await hydrateFromPersona(persona);
-
-    // If videos aren’t ready yet, poll a bit (no UI change)
-    if (persona.status !== 'ready') {
-      setTimeout(loadPersona, 4000);
-    }
-  } catch {}
-}
-loadPersona();
-</script>
-
 </body>
 </html>
