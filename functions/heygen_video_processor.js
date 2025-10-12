@@ -114,9 +114,6 @@ for (const [k, info] of Object.entries(p.pending || {})) {
   }
 }
 
-    if (!remaining) break;
-    await sleep(SLEEP_MS);
-  }
 
   p.status = hasAllVideos(p) ? 'ready' : 'processing';
   if (changed) {
