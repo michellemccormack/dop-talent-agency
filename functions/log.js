@@ -1,4 +1,4 @@
-// functions/log.js — Append-only JSONL logger to Netlify Blobs (CommonJS)
+// functions/log.js — Append JSONL using GET→PUT (portable + reliable)
 const crypto = require("crypto");
 
 exports.handler = async (event) => {
@@ -37,56 +37,39 @@ exports.handler = async (event) => {
       raw: body.raw || null,
     };
 
-    // Use a path-like key. IMPORTANT: do NOT encode slashes.
     const key = `logs/${project}.jsonl`;
     const base = `https://api.netlify.com/api/v1/blobs/${siteId}/${key}`;
+    const auth = { Authorization: `Bearer ${token}` };
 
-    // Try to append (PATCH). If 404, create the blob (PUT) then append.
+    // 1) GET existing blob (ok → text; 404 → empty)
+    let existing = "";
+    const getRes = await fetch(base, { headers: auth });
+    if (getRes.ok) {
+      existing = await getRes.text();
+    } else if (getRes.status !== 404) {
+      const txt = await getRes.text();
+      throw new Error(`Read failed: ${getRes.status} ${txt}`);
+    }
+
+    // 2) Append the new line and PUT full content back
     const line = JSON.stringify(entry) + "\n";
-
-    let res = await fetch(base, {
-      method: "PATCH",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "content-type": "text/plain",
-        "x-ntlb-append": "true",
-      },
-      body: line,
+    const putRes = await fetch(base, {
+      method: "PUT",
+      headers: { ...auth, "content-type": "text/plain" },
+      body: existing + line,
     });
 
-    if (res.status === 404) {
-      // Create the file with first line
-      const create = await fetch(base, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "content-type": "text/plain",
-        },
-        body: line,
-      });
-      if (!create.ok) {
-        const txt = await create.text();
-        throw new Error(`Create failed: ${create.status} ${txt}`);
-      }
-      // Success on first write
-      return ok(entry.id);
+    if (!putRes.ok) {
+      const txt = await putRes.text();
+      throw new Error(`Write failed: ${putRes.status} ${txt}`);
     }
 
-    if (!res.ok) {
-      const txt = await res.text();
-      throw new Error(`Append failed: ${res.status} ${txt}`);
-    }
-
-    return ok(entry.id);
+    return {
+      statusCode: 200,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ok: true, id: entry.id }),
+    };
   } catch (err) {
     return { statusCode: 400, body: `Bad Request: ${err.message}` };
   }
 };
-
-function ok(id) {
-  return {
-    statusCode: 200,
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ ok: true, id }),
-  };
-}
