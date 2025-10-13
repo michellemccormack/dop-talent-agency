@@ -84,6 +84,12 @@
     .pill.thinking  .dot{background:#8a8cff}
     .pill.speaking  .dot{background:#16db65}
     .pill.ready     .dot{background:#6f7284}
+    .pill.processing .dot{background:#ffa500; animation:pulse 1.5s ease-in-out infinite}
+
+    @keyframes pulse{
+      0%, 100%{opacity:1}
+      50%{opacity:0.4}
+    }
 
     .instructions{
       text-align:center;
@@ -170,6 +176,33 @@
     }
     
     @keyframes spin{to{transform:rotate(360deg)}}
+
+    .processing-message{
+      position:absolute;
+      inset:0;
+      display:none;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      background:rgba(0,0,0,.85);
+      border-radius:12px;
+      padding:20px;
+      text-align:center;
+      z-index:10;
+    }
+    .processing-message.show{display:flex}
+    .processing-message .emoji{font-size:64px; margin-bottom:16px}
+    .processing-message .title{
+      font-size:20px;
+      font-weight:700;
+      margin-bottom:8px;
+      color:var(--text);
+    }
+    .processing-message .subtitle{
+      font-size:14px;
+      color:var(--muted);
+      max-width:280px;
+    }
 
     .footer{font-size:12px; color:#b7b8c3; text-align:center; margin-top:26px; margin-bottom:60px}
 
@@ -306,6 +339,11 @@
           <div class="overlay" id="respOverlay">
             <div class="spinner" aria-hidden="true"></div>
           </div>
+          <div class="processing-message" id="processingMessage">
+            <div class="emoji">🧑‍🍳</div>
+            <div class="title">We're cookin'...</div>
+            <div class="subtitle">Your DOP is being crafted! Videos will appear here when ready.</div>
+          </div>
         </div>
       </div>
     </div>
@@ -405,17 +443,20 @@
         this.videoEl = null;
         this.imageEl = null;
         this.overlayEl = null;
+        this.processingEl = null;
       }
 
       init() {
         this.videoEl = qs('#resp');
         this.imageEl = qs('#dopImage');
         this.overlayEl = qs('#respOverlay');
+        this.processingEl = qs('#processingMessage');
       }
 
       showVideo() {
         if (this.videoEl) this.videoEl.style.display = 'block';
         if (this.imageEl) this.imageEl.style.display = 'none';
+        this.hideProcessingMessage();
       }
 
       showImage() {
@@ -429,6 +470,14 @@
 
       hideSpinner() {
         if (this.overlayEl) this.overlayEl.classList.remove('show');
+      }
+
+      showProcessingMessage() {
+        if (this.processingEl) this.processingEl.classList.add('show');
+      }
+
+      hideProcessingMessage() {
+        if (this.processingEl) this.processingEl.classList.remove('show');
       }
 
       async playVideo(url) {
@@ -500,6 +549,7 @@
           PERSONA_DATA = {
             name: 'Sasha',
             bio: 'Demo persona',
+            status: 'ready',
             prompts: [
               'What do you like to do for fun?',
               'Where are you from?',
@@ -525,6 +575,8 @@
           const persona = await response.json();
           PERSONA_DATA = persona;
 
+          console.log('[Persona] Loaded DOP:', persona.name, 'Status:', persona.status);
+
           // Set up image loading with spinner
           if (persona.images && persona.images.length > 0) {
             const firstImage = persona.images[0];
@@ -535,17 +587,32 @@
               mediaController.setImageSource(imageUrl);
               mediaController.showImage();
               mediaController.showSpinner();
-              const img = document.querySelector('#dopImage');
-if (img) { img.addEventListener('load', () => mediaController.hideSpinner(), { once:true }); }
-
+              
+              const img = qs('#dopImage');
+              if (img) { 
+                img.addEventListener('load', () => mediaController.hideSpinner(), { once: true });
+                img.addEventListener('error', () => {
+                  console.warn('[Persona] Image failed to load');
+                  mediaController.hideSpinner();
+                }, { once: true });
+              }
             }
           }
 
-          // Set up video loaded handler
-          mediaController.videoEl.addEventListener('loadeddata', () => {
-            mediaController.showVideo();
-            mediaController.hideSpinner();
-          }, { once: true });
+          // Show "We're cookin'" message if still processing
+          if (persona.status === 'uploaded' || persona.status === 'processing') {
+            mediaController.showProcessingMessage();
+            console.log('[Persona] Showing processing message');
+          }
+
+          // Set up video loaded handler only if we expect videos
+          const videoEl = qs('#resp');
+          if (videoEl && persona.status === 'ready' && persona.videos && persona.videos.length > 0) {
+            videoEl.addEventListener('loadeddata', () => {
+              mediaController.showVideo();
+              mediaController.hideSpinner();
+            }, { once: true });
+          }
 
           // Update header
           header.style.display = 'flex';
@@ -587,6 +654,8 @@ if (img) { img.addEventListener('load', () => mediaController.hideSpinner(), { o
               videoUrl
             };
           });
+
+          console.log('[Persona] Built prompts config:', PROMPTS_CONFIG);
         }
 
         // Render prompt buttons (only on first load)
@@ -607,9 +676,13 @@ if (img) { img.addEventListener('load', () => mediaController.hideSpinner(), { o
         }
 
         // Continue polling if still processing (without re-initializing)
-        if (dopId && PERSONA_DATA.status !== 'ready') {
+        if (dopId && PERSONA_DATA && (PERSONA_DATA.status === 'uploaded' || PERSONA_DATA.status === 'processing')) {
           console.log('[App] DOP not ready, polling again in', CONFIG.PERSONA_POLL_INTERVAL, 'ms');
           setTimeout(loadPersona, CONFIG.PERSONA_POLL_INTERVAL);
+        } else if (PERSONA_DATA && PERSONA_DATA.status === 'ready') {
+          // Hide processing message when ready
+          mediaController.hideProcessingMessage();
+          console.log('[App] DOP is ready!');
         }
 
       } catch (error) {
@@ -642,7 +715,7 @@ if (img) { img.addEventListener('load', () => mediaController.hideSpinner(), { o
       const srStatus = qs('#srStatus');
       const grid = qs('#promptGrid');
 
-      // Disable mic for user-generated DOPs
+      // Disable mic for user-generated DOPs (but keep enabled for demo)
       const isUserDOP = !!dopId;
       if (isUserDOP) {
         micBtn.disabled = true;
@@ -739,7 +812,7 @@ if (img) { img.addEventListener('load', () => mediaController.hideSpinner(), { o
       // UI STATE MANAGEMENT
       // ========================================
       function setPill(mode, text) {
-        statusPill.classList.remove('listening', 'thinking', 'speaking', 'ready');
+        statusPill.classList.remove('listening', 'thinking', 'speaking', 'ready', 'processing');
         statusPill.classList.add(mode);
         pillText.textContent = text;
         srStatus.textContent = text;
@@ -766,7 +839,14 @@ if (img) { img.addEventListener('load', () => mediaController.hideSpinner(), { o
       function setIdleUI() {
         micBtn.classList.remove('listening', 'stopping');
         micBtn.textContent = '🎤 Tap to Talk';
-        setPill('ready', 'Ready');
+        
+        // Show processing status if DOP is still being created
+        if (PERSONA_DATA && (PERSONA_DATA.status === 'uploaded' || PERSONA_DATA.status === 'processing')) {
+          setPill('processing', 'DOP Processing…');
+        } else {
+          setPill('ready', 'Ready');
+        }
+        
         unlockButtons();
       }
 
@@ -898,10 +978,13 @@ if (img) { img.addEventListener('load', () => mediaController.hideSpinner(), { o
         }
 
         // Return to image when video ends
-        mediaController.videoEl.addEventListener('ended', () => {
-          mediaController.showImage();
-          setIdleUI();
-        }, { once: true });
+        const videoEl = qs('#resp');
+        if (videoEl) {
+          videoEl.addEventListener('ended', () => {
+            mediaController.showImage();
+            setIdleUI();
+          }, { once: true });
+        }
       }
 
       // Expose for external use
@@ -920,19 +1003,33 @@ if (img) { img.addEventListener('load', () => mediaController.hideSpinner(), { o
       // ========================================
       // EVENT HANDLERS
       // ========================================
-      mediaController.videoEl.addEventListener('click', () => {
-        if (mediaController.videoEl.paused) {
-          mediaController.videoEl.play().catch(error => {
-            console.warn('[App] Play error:', error);
-          });
-          isStopped = false;
-          setPlayingUI();
-        } else {
+      const videoEl = qs('#resp');
+      if (videoEl) {
+        videoEl.addEventListener('click', () => {
+          if (videoEl.paused) {
+            videoEl.play().catch(error => {
+              console.warn('[App] Play error:', error);
+            });
+            isStopped = false;
+            setPlayingUI();
+          } else {
+            mediaController.stopVideo();
+            setIdleUI();
+            mediaController.hideSpinner();
+          }
+        });
+
+        videoEl.addEventListener('ended', () => {
+          mediaController.stopVideo();
+          setIdleUI();
+        });
+
+        videoEl.addEventListener('error', () => {
           mediaController.stopVideo();
           setIdleUI();
           mediaController.hideSpinner();
-        }
-      });
+        });
+      }
 
       grid.addEventListener('click', (event) => {
         // Prevent event bubbling and default behavior
@@ -977,19 +1074,25 @@ if (img) { img.addEventListener('load', () => mediaController.hideSpinner(), { o
 
         try {
           if (promptConfig.videoUrl) {
+            // Has video ready
+            console.log('[App] Playing existing video');
             playHeyGenVideo(promptConfig.videoUrl).finally(() => {
               clearTimeout(failsafeTimeout);
             });
           } else if (promptConfig.file) {
+            // Pre-recorded demo file
+            console.log('[App] Playing demo file');
             setVoiceForNextTTSByFile(promptConfig.file);
             playFile(promptConfig.file).finally(() => {
               clearTimeout(failsafeTimeout);
             });
           } else {
+            // No video yet - use LLM
+            console.log('[App] No video available, using LLM for:', promptConfig.question);
             const question = promptConfig.question;
             pushTurn('user', question, { inputType: 'button' });
             setPill('thinking', 'Thinking…');
-            routeToBackend(question, { forceLLM: true })
+            routeToBackend(question, { forceLLM: true, personaId: dopId })
               .catch(error => {
                 console.error('[App] Backend error:', error);
                 setIdleUI();
@@ -1007,17 +1110,6 @@ if (img) { img.addEventListener('load', () => mediaController.hideSpinner(), { o
           showToast('Error processing request');
         }
       }, { capture: true });
-
-      mediaController.videoEl.addEventListener('ended', () => {
-        mediaController.stopVideo();
-        setIdleUI();
-      });
-
-      mediaController.videoEl.addEventListener('error', () => {
-        mediaController.stopVideo();
-        setIdleUI();
-        mediaController.hideSpinner();
-      });
 
       // ========================================
       // SPEECH RECOGNITION (ASR)
@@ -1088,7 +1180,7 @@ if (img) { img.addEventListener('load', () => mediaController.hideSpinner(), { o
                   pushTurn('user', text, { inputType: 'mic' });
                   srStatus.textContent = 'Processing…';
                   setPill('thinking', 'Thinking…');
-                  routeToBackend(text, { forceLLM: true });
+                  routeToBackend(text, { forceLLM: true, personaId: dopId });
                 }
               }
             }
@@ -1150,9 +1242,11 @@ if (img) { img.addEventListener('load', () => mediaController.hideSpinner(), { o
           message: text,
           sessionId,
           context: getBoundedContext(),
-          personaId: dopId,
+          personaId: options.personaId || dopId,
           ...options
         };
+
+        console.log('[Backend] Calling session-chat with persona:', payload.personaId);
 
         try {
           const data = await callFunction('/.netlify/functions/session-chat', payload);
@@ -1177,6 +1271,8 @@ if (img) { img.addEventListener('load', () => mediaController.hideSpinner(), { o
       window.routeToBackend = routeToBackend;
 
       async function handleBackendResponse(data) {
+        console.log('[Backend] Response:', data);
+        
         if (data.matchedClip) {
           setPlayingUI();
           await playFile(data.matchedClip);
@@ -1189,6 +1285,7 @@ if (img) { img.addEventListener('load', () => mediaController.hideSpinner(), { o
           await speakWithElevenLabs(speech);
           setIdleUI();
         } else {
+          console.warn('[Backend] No response content');
           setIdleUI();
         }
       }
