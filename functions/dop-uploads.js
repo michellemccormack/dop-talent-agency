@@ -1,5 +1,5 @@
 // functions/dop-uploads.js
-// MINIMAL DEBUG VERSION - helps identify exact failure point
+// Fixed version with proper URLs
 
 const { uploadsStore } = require('./_lib/blobs');
 const { randomUUID } = require('crypto');
@@ -25,73 +25,70 @@ function stripDataPrefix(dataUrl) {
 }
 
 exports.handler = async (event) => {
-  console.log('[dop-uploads] === START ===');
-  console.log('[dop-uploads] Method:', event.httpMethod);
+  console.log('[dop-uploads] START');
   
   if (event.httpMethod === 'OPTIONS') {
-    console.log('[dop-uploads] OPTIONS request, returning 204');
     return { statusCode: 204, headers: CORS };
   }
   
   if (event.httpMethod !== 'POST') {
-    console.log('[dop-uploads] Wrong method:', event.httpMethod);
     return jsonResponse(405, { error: 'Method not allowed' });
   }
 
   try {
-    console.log('[dop-uploads] Step 1: Parse body');
+    console.log('[dop-uploads] Parsing body');
     const body = JSON.parse(event.body || '{}');
-    console.log('[dop-uploads] Body parsed OK');
     
-    console.log('[dop-uploads] Step 2: Extract fields');
     const photo = body.photo || body.imageBase64;
     const voice = body.voice || body.audioBase64;
     const name = (body.name || 'My DOP').trim();
     const bio = (body.bio || '').trim();
     
     if (!photo || !voice) {
-      console.log('[dop-uploads] Missing photo or voice');
-      return jsonResponse(400, { error: 'Both photo and voice are required' });
+      return jsonResponse(400, { error: 'Both photo and voice required' });
     }
     
-    console.log('[dop-uploads] Step 3: Generate dopId');
+    console.log('[dop-uploads] Generating dopId');
     const dopId = 'dop_' + randomUUID().replace(/-/g, '');
-    console.log('[dop-uploads] DopId:', dopId);
     
-    console.log('[dop-uploads] Step 4: Decode base64');
-    const photoStripped = stripDataPrefix(photo);
-    const voiceStripped = stripDataPrefix(voice);
-    console.log('[dop-uploads] Stripped prefixes');
+    console.log('[dop-uploads] Decoding files');
+    const imgBuf = Buffer.from(stripDataPrefix(photo), 'base64');
+    const vocBuf = Buffer.from(stripDataPrefix(voice), 'base64');
+    console.log('[dop-uploads] Image:', imgBuf.length, 'bytes');
+    console.log('[dop-uploads] Voice:', vocBuf.length, 'bytes');
     
-    const imgBuf = Buffer.from(photoStripped, 'base64');
-    console.log('[dop-uploads] Image decoded:', imgBuf.length, 'bytes');
-    
-    const vocBuf = Buffer.from(voiceStripped, 'base64');
-    console.log('[dop-uploads] Voice decoded:', vocBuf.length, 'bytes');
-    
-    console.log('[dop-uploads] Step 5: Initialize store');
+    console.log('[dop-uploads] Storing files');
     const store = uploadsStore();
-    console.log('[dop-uploads] Store initialized');
-    
-    console.log('[dop-uploads] Step 6: Store image');
     const imageKey = 'images/' + dopId + '/photo.jpg';
-    await store.set(imageKey, imgBuf, { contentType: 'image/jpeg' });
-    console.log('[dop-uploads] Image stored at:', imageKey);
-    
-    console.log('[dop-uploads] Step 7: Store voice');
     const voiceKey = 'voices/' + dopId + '/voice.webm';
-    await store.set(voiceKey, vocBuf, { contentType: 'audio/webm' });
-    console.log('[dop-uploads] Voice stored at:', voiceKey);
     
-    console.log('[dop-uploads] Step 8: Create persona JSON');
+    await store.set(imageKey, imgBuf, { contentType: 'image/jpeg' });
+    console.log('[dop-uploads] Image stored');
+    
+    await store.set(voiceKey, vocBuf, { contentType: 'audio/webm' });
+    console.log('[dop-uploads] Voice stored');
+    
+    console.log('[dop-uploads] Creating persona');
+    
+    // Helper to generate file URLs
+    const fileUrl = function(key) {
+      return '/.netlify/functions/dop-file?key=' + encodeURIComponent(key);
+    };
+    
     const persona = {
       dopId: dopId,
       name: name,
       bio: bio,
       created: new Date().toISOString(),
       status: 'uploaded',
-      images: [{ key: imageKey }],
-      voices: [{ key: voiceKey }],
+      images: [{ 
+        key: imageKey,
+        url: fileUrl(imageKey)
+      }],
+      voices: [{ 
+        key: voiceKey,
+        url: fileUrl(voiceKey)
+      }],
       prompts: [
         { key: 'fun', text: 'What do you like to do for fun?' },
         { key: 'from', text: 'Where are you from?' },
@@ -99,16 +96,13 @@ exports.handler = async (event) => {
       ],
       videos: []
     };
-    console.log('[dop-uploads] Persona object created');
     
-    console.log('[dop-uploads] Step 9: Store persona');
     const personaKey = 'personas/' + dopId + '.json';
     await store.set(personaKey, JSON.stringify(persona), { 
       contentType: 'application/json'
     });
-    console.log('[dop-uploads] Persona stored at:', personaKey);
+    console.log('[dop-uploads] Success!');
     
-    console.log('[dop-uploads] === SUCCESS ===');
     return jsonResponse(200, {
       success: true,
       dopId: dopId,
@@ -117,14 +111,12 @@ exports.handler = async (event) => {
     });
     
   } catch (error) {
-    console.error('[dop-uploads] === ERROR ===');
-    console.error('[dop-uploads] Error:', error);
+    console.error('[dop-uploads] ERROR:', error.message);
     console.error('[dop-uploads] Stack:', error.stack);
     
     return jsonResponse(500, {
       success: false,
-      error: 'Upload failed: ' + error.message,
-      step: 'Check Netlify function logs for details'
+      error: error.message
     });
   }
 };
