@@ -1,9 +1,29 @@
-// functions/log.js — Append JSONL using GET→PUT (portable + reliable)
-const crypto = require("crypto");
-
+// functions/log.js — JSONL logger to Netlify Blobs (CommonJS, CORS enabled)
 exports.handler = async (event) => {
+  // --- CORS preflight ---
+  if (event.httpMethod === "OPTIONS") {
+    return {
+      statusCode: 204,
+      headers: {
+        "access-control-allow-origin": "*",
+        "access-control-allow-methods": "POST,OPTIONS",
+        "access-control-allow-headers": "content-type",
+        "access-control-max-age": "86400",
+      },
+      body: "",
+    };
+  }
+
+  // --- Only POST allowed ---
   if (event.httpMethod !== "POST") {
-    return { statusCode: 405, body: "Method Not Allowed" };
+    return {
+      statusCode: 405,
+      headers: {
+        "access-control-allow-origin": "*",
+        "content-type": "text/plain; charset=utf-8",
+      },
+      body: "Method Not Allowed",
+    };
   }
 
   try {
@@ -16,60 +36,99 @@ exports.handler = async (event) => {
     if (!siteId || !token) {
       return {
         statusCode: 500,
+        headers: {
+          "access-control-allow-origin": "*",
+          "content-type": "text/plain; charset=utf-8",
+        },
         body: "Missing NETLIFY_SITE_ID and/or NETLIFY_BLOBS_TOKEN",
       };
     }
 
-    const body = event.body ? JSON.parse(event.body) : {};
+    // Parse body
+    let body;
+    try {
+      body = JSON.parse(event.body || "{}");
+    } catch {
+      return {
+        statusCode: 400,
+        headers: {
+          "access-control-allow-origin": "*",
+          "content-type": "text/plain; charset=utf-8",
+        },
+        body: "Bad Request: invalid JSON",
+      };
+    }
 
+    // Enrich entry and serialize as JSONL line
     const entry = {
-      id: crypto.randomUUID(),
       ts: new Date().toISOString(),
       project,
-      llm: body.llm || "unknown",
-      session: body.session || null,
-      phase: body.phase || null,
-      step: body.step || null,
-      files: Array.isArray(body.files) ? body.files : [],
-      tags: Array.isArray(body.tags) ? body.tags : [],
-      summary: body.summary || "",
-      details: body.details || "",
-      raw: body.raw || null,
+      ...body,
     };
+    const line = JSON.stringify(entry) + "\n";
 
+    // Blobs REST
     const key = `logs/${project}.jsonl`;
     const base = `https://api.netlify.com/api/v1/blobs/${siteId}/${key}`;
     const auth = { Authorization: `Bearer ${token}` };
 
-    // 1) GET existing blob (ok → text; 404 → empty)
-    let existing = "";
+    // GET current (404 → empty), then PUT concatenated (browser-safe; PATCH append isn’t allowed cross-origin)
+    let current = "";
     const getRes = await fetch(base, { headers: auth });
     if (getRes.ok) {
-      existing = await getRes.text();
+      current = await getRes.text();
     } else if (getRes.status !== 404) {
-      const txt = await getRes.text();
-      throw new Error(`Read failed: ${getRes.status} ${txt}`);
+      const t = await getRes.text();
+      return {
+        statusCode: 502,
+        headers: {
+          "access-control-allow-origin": "*",
+          "content-type": "text/plain; charset=utf-8",
+        },
+        body: `Read failed: ${getRes.status} ${t}`,
+      };
     }
 
-    // 2) Append the new line and PUT full content back
-    const line = JSON.stringify(entry) + "\n";
     const putRes = await fetch(base, {
       method: "PUT",
-      headers: { ...auth, "content-type": "text/plain" },
-      body: existing + line,
+      headers: {
+        ...auth,
+        "content-type": "text/plain; charset=utf-8",
+      },
+      body: current + line,
     });
 
     if (!putRes.ok) {
-      const txt = await putRes.text();
-      throw new Error(`Write failed: ${putRes.status} ${txt}`);
+      const t = await putRes.text();
+      return {
+        statusCode: 502,
+        headers: {
+          "access-control-allow-origin": "*",
+          "content-type": "text/plain; charset=utf-8",
+        },
+        body: `Write failed: ${putRes.status} ${t}`,
+      };
     }
+
+    const id = (await putRes.json()).id || null;
 
     return {
       statusCode: 200,
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ok: true, id: entry.id }),
+      headers: {
+        "access-control-allow-origin": "*",
+        "content-type": "application/json",
+        "cache-control": "no-store",
+      },
+      body: JSON.stringify({ ok: true, id }),
     };
   } catch (err) {
-    return { statusCode: 400, body: `Bad Request: ${err.message}` };
+    return {
+      statusCode: 500,
+      headers: {
+        "access-control-allow-origin": "*",
+        "content-type": "text/plain; charset=utf-8",
+      },
+      body: `Error: ${err.message}`,
+    };
   }
 };
