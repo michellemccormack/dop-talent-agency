@@ -1,8 +1,7 @@
-// functions/log.js  — Append-only JSONL logger to Netlify Blobs (CommonJS, Node 18+)
+// functions/log.js — Append-only JSONL logger to Netlify Blobs (CommonJS)
 const crypto = require("crypto");
 
 exports.handler = async (event) => {
-  // Only allow POST
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method Not Allowed" };
   }
@@ -21,10 +20,8 @@ exports.handler = async (event) => {
       };
     }
 
-    // Parse incoming body (allow empty -> {})
     const body = event.body ? JSON.parse(event.body) : {};
 
-    // Minimal, portable entry schema (extend freely)
     const entry = {
       id: crypto.randomUUID(),
       ts: new Date().toISOString(),
@@ -40,36 +37,56 @@ exports.handler = async (event) => {
       raw: body.raw || null,
     };
 
-    // Append to JSONL blob: logs/<project>.jsonl
+    // Use a path-like key. IMPORTANT: do NOT encode slashes.
     const key = `logs/${project}.jsonl`;
-    const url = `https://api.netlify.com/api/v1/blobs/${siteId}/${encodeURIComponent(
-      key
-    )}`;
+    const base = `https://api.netlify.com/api/v1/blobs/${siteId}/${key}`;
 
-    const res = await fetch(url, {
+    // Try to append (PATCH). If 404, create the blob (PUT) then append.
+    const line = JSON.stringify(entry) + "\n";
+
+    let res = await fetch(base, {
       method: "PATCH",
       headers: {
         Authorization: `Bearer ${token}`,
-        "content-type": "application/jsonl",
+        "content-type": "text/plain",
         "x-ntlb-append": "true",
       },
-      body: JSON.stringify(entry) + "\n",
+      body: line,
     });
+
+    if (res.status === 404) {
+      // Create the file with first line
+      const create = await fetch(base, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "content-type": "text/plain",
+        },
+        body: line,
+      });
+      if (!create.ok) {
+        const txt = await create.text();
+        throw new Error(`Create failed: ${create.status} ${txt}`);
+      }
+      // Success on first write
+      return ok(entry.id);
+    }
 
     if (!res.ok) {
       const txt = await res.text();
-      throw new Error(`Blobs append failed: ${res.status} ${txt}`);
+      throw new Error(`Append failed: ${res.status} ${txt}`);
     }
 
-    return {
-      statusCode: 200,
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ok: true, id: entry.id }),
-    };
+    return ok(entry.id);
   } catch (err) {
-    return {
-      statusCode: 400,
-      body: `Bad Request: ${err.message}`,
-    };
+    return { statusCode: 400, body: `Bad Request: ${err.message}` };
   }
 };
+
+function ok(id) {
+  return {
+    statusCode: 200,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ok: true, id }),
+  };
+}
