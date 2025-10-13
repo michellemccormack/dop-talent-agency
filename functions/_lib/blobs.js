@@ -1,7 +1,6 @@
 // functions/_lib/blobs.js
 // Netlify Blobs helper: supports NETLIFY_* or BLOBS_* env vars.
-// Exports a callable uploadsStore() AND attaches helper methods to it
-// for backwards compatibility with code that uses uploadsStore.setBlob(...).
+// IMPORTANT: Store name is 'dop-uploads' to match all other functions
 
 const { getStore } = require('@netlify/blobs');
 
@@ -29,7 +28,7 @@ function resolveEnv() {
 function uploadsStore() {
   const { siteID, token } = resolveEnv();
   return getStore({
-    name: 'uploads',
+    name: 'dop-uploads',  // CHANGED: was 'uploads', now 'dop-uploads'
     siteID,
     token,
     consistency: 'strong',
@@ -40,23 +39,25 @@ function uploadsStore() {
 uploadsStore.setBlob = async (key, data) => {
   const store = uploadsStore();
   await store.set(key, data);
-  console.log(`[blobs] Stored: ${key}`);
+  console.log('[blobs] Stored: ' + key);
 };
 
-uploadsStore.getBlob = async (key, opts = { type: 'text' }) => {
+uploadsStore.getBlob = async (key, opts) => {
+  opts = opts || { type: 'text' };
   const store = uploadsStore();
   const data = await store.get(key, opts);
-  console.log(`[blobs] Retrieved ${key}: ${data ? 'found' : 'not found'}`);
+  console.log('[blobs] Retrieved ' + key + ': ' + (data ? 'found' : 'not found'));
   return data;
 };
 
 uploadsStore.deleteBlob = async (key) => {
   const store = uploadsStore();
   await store.delete(key);
-  console.log(`[blobs] Deleted: ${key}`);
+  console.log('[blobs] Deleted: ' + key);
 };
 
-uploadsStore.list = async (options = {}) => {
+uploadsStore.list = async (options) => {
+  options = options || {};
   const store = uploadsStore();
   return store.list(options);
 };

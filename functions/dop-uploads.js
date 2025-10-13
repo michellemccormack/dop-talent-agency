@@ -1,5 +1,5 @@
 // functions/dop-uploads.js
-// Simplified version - just store files and create persona record
+// MINIMAL DEBUG VERSION - helps identify exact failure point
 
 const { uploadsStore } = require('./_lib/blobs');
 const { randomUUID } = require('crypto');
@@ -10,194 +10,121 @@ const CORS = {
   'access-control-allow-headers': 'content-type',
 };
 
-const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
-const MAX_AUDIO_SIZE = 10 * 1024 * 1024;
-const MAX_NAME_LENGTH = 100;
-const MAX_BIO_LENGTH = 2000;
-
-const ok = (obj) => ({ 
-  statusCode: 200, 
-  headers: Object.assign({}, CORS, { 'content-type': 'application/json' }), 
-  body: JSON.stringify(obj) 
-});
-
-const bad = (code, msg, extra) => ({ 
-  statusCode: code, 
-  headers: Object.assign({}, CORS, { 'content-type': 'application/json' }), 
-  body: JSON.stringify(Object.assign({ success: false, error: msg }, extra || {}))
-});
-
-function isValidBase64(str) {
-  if (!str || typeof str !== 'string') return false;
-  const base64Regex = /^[A-Za-z0-9+/=]+$/;
-  return base64Regex.test(str);
+function jsonResponse(statusCode, data) {
+  return {
+    statusCode: statusCode,
+    headers: Object.assign({}, CORS, { 'content-type': 'application/json' }),
+    body: JSON.stringify(data)
+  };
 }
 
-function stripPrefix(s) {
-  if (!s) return '';
-  return s.includes(',') ? s.split(',')[1] : s;
-}
-
-function validateAndDecodeBase64(encoded, maxSize, fieldName) {
-  const stripped = stripPrefix(encoded);
-  
-  if (!stripped) {
-    throw new Error(fieldName + ' is required');
-  }
-  
-  if (!isValidBase64(stripped)) {
-    throw new Error(fieldName + ' is not valid base64');
-  }
-  
-  const buffer = Buffer.from(stripped, 'base64');
-  
-  if (buffer.length > maxSize) {
-    throw new Error(fieldName + ' exceeds maximum size of ' + maxSize + ' bytes');
-  }
-  
-  if (buffer.length === 0) {
-    throw new Error(fieldName + ' decoded to empty buffer');
-  }
-  
-  return buffer;
-}
-
-function sanitizeInput(str, maxLength, fieldName) {
-  if (!str) return '';
-  if (typeof str !== 'string') {
-    throw new Error(fieldName + ' must be a string');
-  }
-  if (str.length > maxLength) {
-    throw new Error(fieldName + ' exceeds maximum length of ' + maxLength);
-  }
-  return str.trim();
-}
-
-function generatePersonaPrompts() {
-  return [
-    { key: 'fun',   text: 'What do you like to do for fun?' },
-    { key: 'from',  text: 'Where are you from?' },
-    { key: 'relax', text: 'What is your favorite way to relax?' },
-  ];
-}
-
-function generateSystemPrompt(bio, name) {
-  const n = name || 'Assistant';
-  const core = bio && bio.length > 10 ? 'Here is what people should know about you: ' + bio + '. ' : '';
-  return 'You are ' + n + '. ' + core + 'Stay in character as ' + n + '. Be conversational, warm, and authentic. Keep responses brief and engaging (1-2 sentences, under 25 words). Never break character or mention you are an AI.';
+function stripDataPrefix(dataUrl) {
+  if (!dataUrl) return '';
+  const commaIndex = dataUrl.indexOf(',');
+  return commaIndex >= 0 ? dataUrl.substring(commaIndex + 1) : dataUrl;
 }
 
 exports.handler = async (event) => {
-  console.log('[dop-uploads] Function started');
+  console.log('[dop-uploads] === START ===');
+  console.log('[dop-uploads] Method:', event.httpMethod);
   
   if (event.httpMethod === 'OPTIONS') {
+    console.log('[dop-uploads] OPTIONS request, returning 204');
     return { statusCode: 204, headers: CORS };
   }
   
   if (event.httpMethod !== 'POST') {
-    return bad(405, 'Method not allowed');
-  }
-
-  let body;
-  try {
-    body = JSON.parse(event.body || '{}');
-    console.log('[dop-uploads] Request body parsed');
-  } catch (e) {
-    console.error('[dop-uploads] JSON parse error:', e);
-    return bad(400, 'Invalid JSON in request body');
+    console.log('[dop-uploads] Wrong method:', event.httpMethod);
+    return jsonResponse(405, { error: 'Method not allowed' });
   }
 
   try {
-    let name = body.name || '';
-    let bio = body.bio || '';
+    console.log('[dop-uploads] Step 1: Parse body');
+    const body = JSON.parse(event.body || '{}');
+    console.log('[dop-uploads] Body parsed OK');
+    
+    console.log('[dop-uploads] Step 2: Extract fields');
     const photo = body.photo || body.imageBase64;
     const voice = body.voice || body.audioBase64;
-    const imageType = body.imageType || 'image/jpeg';
-    const imageName = body.imageName || 'photo.jpg';
-    const audioType = body.audioType || 'audio/webm';
-    const audioName = body.audioName || 'voice.webm';
-    const dopIdIn = body.dopId;
-
-    console.log('[dop-uploads] Validating inputs...');
-
-    name = sanitizeInput(name, MAX_NAME_LENGTH, 'name');
-    bio = sanitizeInput(bio, MAX_BIO_LENGTH, 'bio');
+    const name = (body.name || 'My DOP').trim();
+    const bio = (body.bio || '').trim();
     
-    const dopId = dopIdIn || ('dop_' + randomUUID().replace(/-/g, ''));
-    console.log('[dop-uploads] Generated dopId:', dopId);
+    if (!photo || !voice) {
+      console.log('[dop-uploads] Missing photo or voice');
+      return jsonResponse(400, { error: 'Both photo and voice are required' });
+    }
     
-    console.log('[dop-uploads] Decoding image...');
-    const imgBuf = validateAndDecodeBase64(photo, MAX_IMAGE_SIZE, 'photo/imageBase64');
+    console.log('[dop-uploads] Step 3: Generate dopId');
+    const dopId = 'dop_' + randomUUID().replace(/-/g, '');
+    console.log('[dop-uploads] DopId:', dopId);
+    
+    console.log('[dop-uploads] Step 4: Decode base64');
+    const photoStripped = stripDataPrefix(photo);
+    const voiceStripped = stripDataPrefix(voice);
+    console.log('[dop-uploads] Stripped prefixes');
+    
+    const imgBuf = Buffer.from(photoStripped, 'base64');
     console.log('[dop-uploads] Image decoded:', imgBuf.length, 'bytes');
     
-    console.log('[dop-uploads] Decoding voice...');
-    const vocBuf = validateAndDecodeBase64(voice, MAX_AUDIO_SIZE, 'voice/audioBase64');
+    const vocBuf = Buffer.from(voiceStripped, 'base64');
     console.log('[dop-uploads] Voice decoded:', vocBuf.length, 'bytes');
-
-    console.log('[dop-uploads] Storing files in Blobs...');
+    
+    console.log('[dop-uploads] Step 5: Initialize store');
     const store = uploadsStore();
-    const imageKey = 'images/' + dopId + '/' + imageName;
-    const voiceKey = 'voices/' + dopId + '/' + audioName;
+    console.log('[dop-uploads] Store initialized');
     
-    await store.set(imageKey, imgBuf, { contentType: imageType });
-    console.log('[dop-uploads] Image stored:', imageKey);
+    console.log('[dop-uploads] Step 6: Store image');
+    const imageKey = 'images/' + dopId + '/photo.jpg';
+    await store.set(imageKey, imgBuf, { contentType: 'image/jpeg' });
+    console.log('[dop-uploads] Image stored at:', imageKey);
     
-    await store.set(voiceKey, vocBuf, { contentType: audioType });
-    console.log('[dop-uploads] Voice stored:', voiceKey);
-
-    const fileUrl = function(k) {
-      return '/.netlify/functions/dop-file?key=' + encodeURIComponent(k);
-    };
-
-    const prompts = generatePersonaPrompts();
+    console.log('[dop-uploads] Step 7: Store voice');
+    const voiceKey = 'voices/' + dopId + '/voice.webm';
+    await store.set(voiceKey, vocBuf, { contentType: 'audio/webm' });
+    console.log('[dop-uploads] Voice stored at:', voiceKey);
     
+    console.log('[dop-uploads] Step 8: Create persona JSON');
     const persona = {
       dopId: dopId,
-      name: name || 'My DOP',
-      bio: bio || '',
+      name: name,
+      bio: bio,
       created: new Date().toISOString(),
-      systemPrompt: generateSystemPrompt(bio, name),
-      images: [{ 
-        key: imageKey, 
-        url: fileUrl(imageKey), 
-        type: imageType, 
-        name: imageName, 
-        ts: Date.now() 
-      }],
-      voices: [{ 
-        key: voiceKey, 
-        url: fileUrl(voiceKey), 
-        type: audioType, 
-        name: audioName, 
-        ts: Date.now() 
-      }],
-      prompts: prompts,
       status: 'uploaded',
-      videos: [],
-      voice: { id: null, status: 'pending' },
-      heygen: { avatar_id: null, status: 'pending' }
+      images: [{ key: imageKey }],
+      voices: [{ key: voiceKey }],
+      prompts: [
+        { key: 'fun', text: 'What do you like to do for fun?' },
+        { key: 'from', text: 'Where are you from?' },
+        { key: 'relax', text: 'What is your favorite way to relax?' }
+      ],
+      videos: []
     };
-
-    console.log('[dop-uploads] Storing persona JSON...');
+    console.log('[dop-uploads] Persona object created');
+    
+    console.log('[dop-uploads] Step 9: Store persona');
     const personaKey = 'personas/' + dopId + '.json';
     await store.set(personaKey, JSON.stringify(persona), { 
-      contentType: 'application/json; charset=utf-8' 
+      contentType: 'application/json'
     });
-    console.log('[dop-uploads] Persona stored successfully');
-
-    return ok({
+    console.log('[dop-uploads] Persona stored at:', personaKey);
+    
+    console.log('[dop-uploads] === SUCCESS ===');
+    return jsonResponse(200, {
       success: true,
       dopId: dopId,
-      message: 'DOP files uploaded successfully! Processing will complete in the background.',
-      chatUrl: '/chat.html?id=' + dopId,
-      status: 'uploaded'
+      message: 'Upload successful!',
+      chatUrl: '/chat.html?id=' + dopId
     });
-
-  } catch (e) {
-    console.error('[dop-uploads] Error:', e);
-    return bad(500, 'Upload failed', { 
-      message: String(e && e.message ? e.message : e),
-      details: e && e.stack ? e.stack : undefined
+    
+  } catch (error) {
+    console.error('[dop-uploads] === ERROR ===');
+    console.error('[dop-uploads] Error:', error);
+    console.error('[dop-uploads] Stack:', error.stack);
+    
+    return jsonResponse(500, {
+      success: false,
+      error: 'Upload failed: ' + error.message,
+      step: 'Check Netlify function logs for details'
     });
   }
 };
