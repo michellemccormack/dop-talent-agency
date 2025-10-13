@@ -1,59 +1,281 @@
-# Dopple Talent Agency MVP
+# 🧬 Dopple Talent Agency (DOP) — MVP
 
-Interactive AI Doppelgänger demo with personas, prompts, and video responses.
-
----
-
-## 📂 Project Structure
-
-- `index.html` — Main UI for the DOP demo
-- `personas/`
-  - `personas.json` — Persona configuration file (controls name, video, prompts, etc.)
-  - Other persona folders (e.g. `/sasha/`) store videos, metadata, etc.
+Create a **talking AI doppelgänger** from a **photo + voice** and 5 **bio facts**. Share a URL so anyone can **watch** or **converse** with your DOP.  
+**Core magic:** static photo + short voice sample → **talking video** (HeyGen + ElevenLabs).  
+**Initial GTM:** professionals/job seekers (introductions, interviews, networking).
 
 ---
 
-## 🧑‍🤝‍🧑 Personas
+## 🚀 TL;DR
 
-- Each persona is defined inside `personas/` with a folder containing assets.
-- The master list is managed in `personas/personas.json`.
+- **Repo:** `michellemccormack/dop-talent-agency`
+- **Hosting/Runtime:** Netlify + Netlify Functions (Node 18, **CommonJS**)
+- **Frontend:** `index.html` (+ `upload.html`, `chat.html`, `dop.html`) — vanilla JS, HTML5 audio/video
+- **Backend Functions:** `session-chat.js`, `tts-eleven.js`, `heygen-proxy.js`, `heygen_video_processor.js` (scheduled), `dop-uploads.js`, `dop-file.js`, `dop-view.js` (with `_lib/blobs.js`)
+- **APIs:** OpenAI (LLM), ElevenLabs (voice), HeyGen (avatar/video)
+- **Data:** Netlify **Blobs** (persona JSON at `personas/dop_<id>.json`)
+- **Payments (MVP):** Gumroad (Stripe MVP branch exists)
+- **Status:** 42-step roadmap, **mid-Step 27** (finish HeyGen pipeline)
+- **Golden Rules:**  
+  1) **Full files only** for any code change (never shorten `index.html`)  
+  2) **Add-only** (no deletions/refactors unless explicitly requested)  
+  3) **One step at a time**, map to roadmap item, include exact paths + full code + env vars  
+  4) **Voice behavior is locked** (do not change)
 
-Example:
+---
+
+## 🧩 Features (User-Facing)
+
+- **Upload:** photo, voice sample (short), 5 bio facts
+- **Prompt chips** for quick inputs
+- **Mic to speak** directly to the DOP
+- **Chat box** to type prompts
+- **Shareable URL** (`/chat.html?id=<dop_id>`)
+- **Async avatar generation notice:**  
+  > “Your avatar will be finished in a few minutes. Stay here and wait or we will send you an email”
+
+**Monetization:**
+- **Free:** 3 pre-recorded video replies (generated from prompts)
+- **Paid:** full mic-based conversation (unlimited)
+
+---
+
+## 📂 Project Structure (Current)
+
+dop-talent-agency/
+├─ index.html # Landing/demo (layout locked)
+├─ upload.html # Upload photo + voice + 5 bio facts
+├─ chat.html # Conversation/video playback
+├─ dop.html # Public DOP page
+├─ netlify.toml
+├─ functions/
+│ ├─ session-chat.js # OpenAI chat
+│ ├─ tts-eleven.js # ElevenLabs TTS
+│ ├─ heygen-proxy.js # HeyGen create/poll requests
+│ ├─ heygen_video_processor.js # scheduled: finalize videos
+│ ├─ dop-uploads.js # handle uploads + persona init
+│ ├─ dop-file.js # serve blobs (files/base64)
+│ ├─ dop-view.js # view persona JSON
+│ └─ _lib/blobs.js # Netlify Blobs helpers
+└─ README.md
+
+> **Legacy note:** Older builds used `personas/` and `personas/personas.json`.  
+> **Now:** Personas are persisted in **Netlify Blobs** (see schema below).
+
+---
+
+## 🔧 Environment Variables
+
+Set in Netlify (Site Settings → Environment):
+
+| Variable                | Purpose                                                                           |
+| ----------------------- | --------------------------------------------------------------------------------- |
+| **AIRTABLE_API_KEY**    | For integrations with Airtable (e.g. future CRM, analytics, or persona indexing). |
+| **AIRTABLE_BASE_ID**    | The Airtable base containing related data (optional for MVP).                     |
+| **BLOBS_SITE_ID**       | Netlify Blobs Site identifier (used internally).                                  |
+| **BLOBS_TOKEN**         | General access token for Netlify Blobs API.                                       |
+| **ELEVENLABS_API_KEY**  | Authenticates voice synthesis requests to ElevenLabs.                             |
+| **HEYGEN_API_KEY**      | Authenticates video/avatar generation to HeyGen API.                              |
+| **NETLIFY_API_TOKEN**   | Required for programmatic deploys or scheduled function access.                   |
+| **NETLIFY_BLOBS_TOKEN** | Scoped token for read/write access to personas in Blobs.                          |
+| **NETLIFY_SITE_ID**     | Your deployed site’s unique ID (for Netlify API & Blobs linkage).                 |
+| **OPENAI_API_KEY**      | Used for LLM chat, persona brain, and prompt processing.                          |
+| **STRIPE_PRICE_ID**     | Defines the paid-tier product for DOP deployment (linked to Stripe Dashboard).    |
+| **STRIPE_SECRET_KEY**   | Authenticates Stripe Checkout / webhook for monetization tier logic.              |
+
+Optional future: 
+| Variable                       | Use Case                                                                   |
+| ------------------------------ | -------------------------------------------------------------------------- |
+| **AIRTABLE_API_KEY + BASE_ID** | For future dashboard or analytics layer (CRM, persona logs, lead capture). |
+
+
+---
+
+## 🧠 Persona JSON (Stable Contract)
+
+Stored at **Netlify Blobs** key: `personas/dop_<id>.json`
 
 ```json
 {
+  "id": "dop_6a3cbc1ce6214281add227b1d4e01341",
+  "status": "processing",                // "processing" | "ready"
+  "ownerEmail": "user@example.com",
+  "images": [{ "url": "https://.../image.jpg", "uploadedAt": 1730000000 }],
+  "voices": [{ "url": "https://.../voice.mp3", "provider": "elevenlabs", "voiceId": "..." }],
+  "bio": { "facts": ["fact1","fact2","fact3","fact4","fact5"] },
+  "prompts": [
+    "Give me a quick intro",
+    "Tell me about a project you’re proud of",
+    "What are you looking for next?"
+  ],
+  "videos": [
+    { "key": "heygen_video_1", "url": "https://...", "prompt": "Give me a quick intro" }
+  ],
+  "pending": {
+    "videoRequests": [
+      { "prompt": "Tell me about a project you’re proud of", "requestId": "..." }
+    ]
+  },
+  "meta": { "createdAt": 1730000000, "lastUpdated": 1730000000 }
+}
+Lifecycle:
+
+Persona created → status: "processing" + pending.videoRequests[] seeded
+
+Scheduled processor polls HeyGen, moves ready videos into videos[]
+
+status flips to "ready" and UI shows videos (replaces “We’re cookin’”)
+
+💬 Flows
+Creator (Build a DOP)
+
+/upload.html → upload photo, voice, enter 5 bio facts
+
+Modal: “Avatar in a few minutes… wait here or we’ll email you”
+
+Persona saved to Blobs (status="processing")
+
+Processor finalizes videos (~8–10m) → status="ready"
+
+Shareable chat page: /chat.html?id=<dop_id>
+
+Viewer (Interact)
+
+Open /chat.html?id=<dop_id>
+
+Use mic, prompt chips, or text
+
+Replies are video when available; otherwise TTS fallback
+
+🧪 Success Checklist
+
+Processor initializes video generation
+
+Persona → processing
+
+pending.videoRequests[] populated
+
+HeyGen: videos ready in 8–10 minutes
+
+videos[] filled with playable URLs
+
+Persona → ready
+
+pending cleared
+
+Chat UI auto-shows videos
+
+“We’re cookin’” disappears
+
+Time budget: Upload (~2s) + Detection (~2m) + Generation (~8–10m) → ~10–12 min total.
+
+🧷 Known-Good Test Artifacts
+
+Test DOP ID: dop_6a3cbc1ce6214281add227b1d4e01341
+
+Chat URL: https://dopple-talent-demo.netlify.app/chat.html?id=dop_6a3cbc1ce6214281add227b1d4e01341
+
+Debug URL: https://dopple-talent-demo.netlify.app/debug-dop.html?id=dop_6a3cbc1ce6214281add227b1d4e01341
+
+Processor Function: /.netlify/functions/heygen_video_processor (scheduled every 2 minutes)
+
+⚙️ Minimal API Contracts
+POST /.netlify/functions/dop-uploads
+
+In: multipart/form-data → photo, voice, bioFacts[], email?
+
+Out: { id, status: "processing" }
+
+Side effects: creates persona JSON in Blobs; seeds pending.videoRequests with initial prompts
+
+POST /.netlify/functions/heygen-proxy
+
+In: { imageUrl, textOrAudio, voiceId? }
+
+Out: { requestId } (store under pending.videoRequests[])
+
+GET/.cron -> /.netlify/functions/heygen_video_processor
+
+Schedule: every 2 minutes (Netlify Scheduled Functions)
+
+Action: poll HeyGen by requestId → if ready, push into videos[], clear pending as appropriate, set status="ready"
+
+POST /.netlify/functions/session-chat
+
+In: { sessionId, message }
+
+Out: { messages: [...] } (OpenAI-powered)
+
+POST /.netlify/functions/tts-eleven
+
+In: { text, voiceId }
+
+Out: { url | base64 } (audio payload; Voice behavior is locked)
+
+🛡️ Development Rules (MANDATORY)
+
+Deliver FULL FILES for any change (especially index.html). No partials.
+
+Add-only unless explicitly instructed to replace/delete/refactor.
+
+One roadmap step at a time — include step #, exact file paths, complete code, and env vars.
+
+Voice behavior is locked — don’t alter mapping, defaults, or timing.
+
+UI styling is frozen (Phase 1 baseline).
+
+Persona schema stable — append new fields; don’t rename/remove existing keys.
+
+🔁 Migration Notes (Legacy → Current)
+
+Then: personas/ folder with personas/personas.json, static assets per persona (e.g., /personas/sasha/intro.mp4), optional persona switcher logic.
+
+Now: Personas stored as Netlify Blobs; videos/urls referenced from JSON (videos[]).
+
+Persona Switcher: Only relevant if you manage multiple DOPs in the UI. Current MVP focuses on individual DOP URLs; a switcher can be reintroduced later by querying Blobs for a list and rendering a dropdown.
+
+Legacy example (for reference only):
+{
   "activePersona": "sasha",
   "switcher": false,
-  "personas": [
-    {
-      "id": "sasha",
-      "name": "Sasha",
-      "video": "personas/sasha/intro.mp4",
-      "prompts": [
-        "What do you like to do for fun?",
-        "Where are you from?",
-        "What's your favorite way to relax?"
-      ]
-    }
-  ]
+  "personas": [{
+    "id": "sasha",
+    "name": "Sasha",
+    "video": "personas/sasha/intro.mp4",
+    "prompts": ["What do you like to do for fun?", "Where are you from?", "What's your favorite way to relax?"]
+  }]
 }
----
+🧪 Local/Deploy Checklist
 
-## 📝 Notes
+ Netlify env vars set (HEYGEN_API_KEY, NETLIFY_SITE_ID, NETLIFY_BLOBS_TOKEN, OPENAI_API_KEY, ELEVENLABS_API_KEY)
 
-- Videos do **not autoplay or loop** — user engagement (prompt/mic) always starts interaction.
-- `ui.switcher: false` → Persona dropdown hidden (manual mode).
-- `ui.switcher: true` → Persona dropdown visible (shows “Sasha ▼” in header).
-- When adding a new persona, update `personas/personas.json`.
+ dop-uploads creates persona (status=processing)
 
----
+ heygen-proxy returns requestId and seeds pending.videoRequests
 
-## 📌 Current Phase
-- ✅ Phase 1 (baseline UI complete)
-- ✅ Phase 2 / Task 20 (multi-prompt + persona support added)
-- Next: Task 21 (persona switcher toggle) → optional until multiple DOPs exist
-## Persona Switching
+ heygen_video_processor scheduled every 2 minutes and promotes finished videos
 
-- By default, if there is **only one persona** in `personas.json`, no dropdown will appear in the header.
-- Once you add a **second persona**, a dropdown will **automatically appear**, allowing you to switch between them.
-- If you want the dropdown to be visible even with a single persona (e.g., “Sasha ▼”), you would need to update the HTML/JS to always render it. Current setup hides it until multiple personas exist.
+ /chat.html?id=<dop_id> shows videos and removes “We’re cookin’”
+
+ Gumroad paywall toggles full mic conversation (Paid tier)
+ You are the engineering assistant for Dopple Talent Agency (DOP).
+
+Rules (MANDATORY):
+- Deliver FULL files for any change (never shorten index.html)
+- Add-only unless explicitly told to replace/delete
+- One roadmap step at a time with file paths, full code, and env vars
+- DO NOT change voice behavior
+- UI styling and voice baseline are final
+
+Goal:
+Hosted platform where users upload photo + voice + 5 bio facts to create a talking AI clone (DOP). Shareable URL. Free tier = 3 video replies. Paid tier = full mic conversation. Initial GTM: professional branding.
+
+Stack:
+Netlify + Netlify Functions (Node 18, CommonJS)
+Frontend: index.html, upload.html, chat.html, dop.html
+Backend: session-chat.js, tts-eleven.js, heygen-proxy.js, heygen_video_processor.js (scheduled), dop-uploads.js, dop-file.js, dop-view.js; _lib/blobs.js
+APIs: OpenAI, ElevenLabs, HeyGen
+Data: Netlify Blobs (personas/dop_<id>.json)
+Env vars: HEYGEN_API_KEY, NETLIFY_SITE_ID, NETLIFY_BLOBS_TOKEN, OPENAI_API_KEY, ELEVENLABS_API_KEY
+Status: 42 steps; mid-Step 27 (finish HeyGen pipeline). Voices are working baseline—do not change.
+Provide changes for Step 27 ONLY unless instructed otherwise.
