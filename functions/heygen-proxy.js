@@ -122,7 +122,7 @@ async function uploadPhoto({ imageUrl, name, imageKey }) {
   
   let formData = '';
   formData += `--${boundary}\r\n`;
-  formData += `Content-Disposition: form-data; name="asset"; filename="${name || 'avatar'}.jpg"\r\n`;
+  formData += `Content-Disposition: form-data; name="file"; filename="${name || 'avatar'}.jpg"\r\n`;
   formData += `Content-Type: image/jpeg\r\n\r\n`;
   
   const textEncoder = new TextEncoder();
@@ -134,7 +134,7 @@ async function uploadPhoto({ imageUrl, name, imageKey }) {
   fullBody.set(new Uint8Array(imageBlob), formDataStart.length);
   fullBody.set(formDataEnd, formDataStart.length + imageBlob.length);
 
-  const response = await fetch(`${HEYGEN_API_BASE}/v2/asset/upload`, {
+  const response = await fetch(`${HEYGEN_UPLOAD_BASE}/v1/asset`, {
     method: 'POST',
     headers: {
       'X-Api-Key': HEYGEN_API_KEY,
