@@ -529,6 +529,44 @@
     const mediaController = new MediaController();
 
     // ========================================
+    // PROGRESS TRACKING
+    // ========================================
+    async function updateProgressDisplay() {
+      if (!dopId) return;
+      
+      try {
+        const response = await fetch(`/.netlify/functions/check-video?id=${dopId}`);
+        const progress = await response.json();
+        
+        if (progress.status === 'ready') {
+          if (mediaController) {
+            mediaController.hideProcessingMessage();
+          }
+          return;
+        }
+        
+        // Update processing message with progress
+        const processingEl = qs('#processingMessage');
+        if (processingEl) {
+          const progressText = progress.progressPercent > 0 
+            ? `${progress.completedVideos}/${progress.totalVideos} videos ready (${progress.progressPercent}%)`
+            : 'Generating your avatar...';
+          
+          const subtitle = processingEl.querySelector('.subtitle');
+          if (subtitle) {
+            subtitle.textContent = `${progressText}. ${progress.estimatedTimeRemaining}`;
+          }
+        }
+        
+      } catch (error) {
+        console.warn('[Progress] Failed to update progress:', error);
+      }
+    }
+
+    // Make function globally available
+    window.updateProgressDisplay = updateProgressDisplay;
+
+    // ========================================
     // PERSONA LOADER
     // ========================================
     let appInitialized = false;
@@ -681,8 +719,10 @@
           console.log('[App] DOP not ready, polling again in', CONFIG.PERSONA_POLL_INTERVAL, 'ms');
           setTimeout(loadPersona, CONFIG.PERSONA_POLL_INTERVAL);
           
-          // Update progress display
-          updateProgressDisplay();
+          // Update progress display if function is available
+          if (typeof updateProgressDisplay === 'function') {
+            updateProgressDisplay();
+          }
         } else if (PERSONA_DATA && PERSONA_DATA.status === 'ready') {
           // Hide processing message when ready
           mediaController.hideProcessingMessage();
@@ -1282,38 +1322,6 @@
       // Expose for external use
       window.routeToBackend = routeToBackend;
 
-      // ========================================
-      // PROGRESS TRACKING
-      // ========================================
-      async function updateProgressDisplay() {
-        if (!dopId) return;
-        
-        try {
-          const response = await fetch(`/.netlify/functions/check-video?id=${dopId}`);
-          const progress = await response.json();
-          
-          if (progress.status === 'ready') {
-            mediaController.hideProcessingMessage();
-            return;
-          }
-          
-          // Update processing message with progress
-          const processingEl = qs('#processingMessage');
-          if (processingEl) {
-            const progressText = progress.progressPercent > 0 
-              ? `${progress.completedVideos}/${progress.totalVideos} videos ready (${progress.progressPercent}%)`
-              : 'Generating your avatar...';
-            
-            const subtitle = processingEl.querySelector('.subtitle');
-            if (subtitle) {
-              subtitle.textContent = `${progressText}. ${progress.estimatedTimeRemaining}`;
-            }
-          }
-          
-        } catch (error) {
-          console.warn('[Progress] Failed to update progress:', error);
-        }
-      }
 
       // ========================================
       // UPGRADE MODAL
