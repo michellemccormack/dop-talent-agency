@@ -51,16 +51,30 @@ exports.handler = async (event) => {
     // Calculate progress
     const totalVideos = persona.prompts?.length || 3;
     const completedVideos = persona.videos?.length || 0;
-    const pendingVideos = persona.pending?.videoRequests?.length || 0;
+    const pendingRequests = persona.pending?.videoRequests?.length || 0;
+    
+    let status = persona.status || 'unknown';
+    let progressPercent = 0;
+    let estimatedTimeRemaining = 'A few minutes';
+
+    if (totalVideos > 0) {
+      progressPercent = Math.floor((completedVideos / totalVideos) * 100);
+      if (status === 'processing') {
+        estimatedTimeRemaining = `Estimated ${Math.max(1, (totalVideos - completedVideos) * 2)} minutes remaining`;
+      } else if (status === 'ready') {
+        estimatedTimeRemaining = 'Ready!';
+      }
+    }
     
     const progress = {
-      status: persona.status || 'unknown',
-      totalVideos,
-      completedVideos,
-      pendingVideos,
-      progressPercent: Math.round((completedVideos / totalVideos) * 100),
-      videos: persona.videos || [],
-      estimatedTimeRemaining: pendingVideos > 0 ? `${pendingVideos * 3} minutes` : 'Complete'
+      dopId: dopId,
+      status: status,
+      totalVideos: totalVideos,
+      completedVideos: completedVideos,
+      pendingRequests: pendingRequests,
+      progressPercent: progressPercent,
+      estimatedTimeRemaining: estimatedTimeRemaining,
+      lastUpdated: new Date().toISOString()
     };
 
     return {

@@ -1,6 +1,8 @@
 // functions/send-notification.js
 // Send email notifications when DOP is ready
 
+const nodemailer = require('nodemailer');
+
 const CORS_HEADERS = {
   'access-control-allow-origin': '*',
   'access-control-allow-methods': 'POST, OPTIONS',
@@ -32,30 +34,49 @@ exports.handler = async (event) => {
       };
     }
 
-    // For now, just log the notification
-    // In production, you'd integrate with SendGrid, Mailgun, etc.
-    console.log(`[send-notification] DOP ${dopId} is ready for ${email || 'user'}`);
-    console.log(`[send-notification] Chat URL: ${process.env.URL || 'https://dopple-talent-demo.netlify.app'}/chat.html?id=${dopId}`);
-    
-    // TODO: Implement actual email sending
-    // const emailData = {
-    //   to: email,
-    //   subject: `Your DOP "${name || 'AI Doppelgänger'}" is ready!`,
-    //   html: `
-    //     <h2>Your AI Doppelgänger is ready!</h2>
-    //     <p>Hi there!</p>
-    //     <p>Your DOP "${name || 'AI Doppelgänger'}" has been created and is ready for conversations.</p>
-    //     <p><a href="${process.env.URL || 'https://dopple-talent-demo.netlify.app'}/chat.html?id=${dopId}">Start chatting with your DOP</a></p>
-    //     <p>Share this link with others so they can interact with your AI doppelgänger!</p>
-    //   `
-    // };
+    if (!email) {
+      return {
+        statusCode: 400,
+        headers: { ...CORS_HEADERS, 'content-type': 'application/json' },
+        body: JSON.stringify({ error: 'Recipient email is required' })
+      };
+    }
+
+    // Configure Nodemailer transporter
+    const transporter = nodemailer.createTransport({
+      host: process.env.EMAIL_HOST,
+      port: process.env.EMAIL_PORT,
+      secure: process.env.EMAIL_SECURE === 'true', // Use 'true' for 465, 'false' for 587
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+
+    const mailOptions = {
+      from: process.env.EMAIL_FROM,
+      to: email,
+      subject: `🎉 Your DOP "${name || 'Avatar'}" is Ready!`,
+      html: `
+        <p>Hello,</p>
+        <p>Good news! Your AI doppelgänger, <strong>${name || 'your DOP'}</strong>, is now fully generated and ready to chat!</p>
+        <p>You can view and share your DOP here:</p>
+        <p><a href="${process.env.URL}/chat.html?id=${dopId}">${process.env.URL}/chat.html?id=${dopId}</a></p>
+        <p>Start interacting and sharing your unique AI persona!</p>
+        <p>Best regards,<br>The DOP Talent Agency Team</p>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    console.log(`[send-notification] Email sent to ${email} for DOP ${dopId}`);
 
     return {
       statusCode: 200,
       headers: { ...CORS_HEADERS, 'content-type': 'application/json' },
       body: JSON.stringify({
         success: true,
-        message: 'Notification sent (logged)',
+        message: 'Notification email sent',
         chatUrl: `${process.env.URL || 'https://dopple-talent-demo.netlify.app'}/chat.html?id=${dopId}`
       })
     };

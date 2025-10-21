@@ -719,10 +719,8 @@
           console.log('[App] DOP not ready, polling again in', CONFIG.PERSONA_POLL_INTERVAL, 'ms');
           setTimeout(loadPersona, CONFIG.PERSONA_POLL_INTERVAL);
           
-          // Update progress display if function is available
-          if (typeof updateProgressDisplay === 'function') {
-            updateProgressDisplay();
-          }
+          // Update progress display
+          updateProgressDisplay();
         } else if (PERSONA_DATA && PERSONA_DATA.status === 'ready') {
           // Hide processing message when ready
           mediaController.hideProcessingMessage();
