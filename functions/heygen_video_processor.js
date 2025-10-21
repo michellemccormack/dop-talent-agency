@@ -196,12 +196,31 @@ async function processPersona(store, key, timeLimit) {
     }
 
     // Update status
+    const wasReady = persona.status === 'ready';
     persona.status = hasAllVideos(persona) ? 'ready' : 'processing';
 
     // Save if changed
     if (changed) {
       console.log(`[${key}] Saving changes (completed: ${completed}, failed: ${failed}, pending: ${stillPending})`);
       await store.set(key, JSON.stringify(persona), { contentType: 'application/json' });
+      
+      // Send notification if just became ready
+      if (!wasReady && persona.status === 'ready') {
+        try {
+          await fetch('/.netlify/functions/send-notification', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              dopId: persona.dopId,
+              email: persona.ownerEmail,
+              name: persona.name
+            })
+          });
+          console.log(`[${key}] Notification sent for completed DOP`);
+        } catch (notifyError) {
+          console.warn(`[${key}] Failed to send notification:`, notifyError.message);
+        }
+      }
     } else {
       console.log(`[${key}] No changes (pending: ${stillPending})`);
     }

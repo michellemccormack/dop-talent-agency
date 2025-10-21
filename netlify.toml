@@ -22,3 +22,15 @@
   [[scheduled]]
 path = "/.netlify/functions/heygen_video_processor"
 schedule = "*/2 * * * *"
+
+# --- DOP context endpoint (no-cors, GET) ---
+[[redirects]]
+  from = "/dop-context"
+  to = "/.netlify/functions/dop_context"
+  status = 200
+
+# --- Payment success redirect ---
+[[redirects]]
+  from = "/pay-success"
+  to = "/pay-success.html"
+  status = 200

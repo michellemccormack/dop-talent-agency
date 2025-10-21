@@ -78,6 +78,16 @@
     .form-group input:focus, .form-group textarea:focus{outline:none; border-color:var(--accent)}
     .form-group textarea{resize:vertical}
 
+    .bio-facts{
+      display:grid; gap:12px; margin-top:8px;
+    }
+    .bio-facts input{
+      width:100%; padding:12px 16px; border:1px solid var(--stroke);
+      border-radius:12px; background:var(--panel-2); color:var(--text);
+      font-size:16px; transition:border-color .2s ease; font-family:inherit;
+    }
+    .bio-facts input:focus{outline:none; border-color:var(--accent)}
+
     .create-btn{
       width:100%; padding:16px 32px; border:none; border-radius:16px;
       background:linear-gradient(135deg,var(--accent),#9b9dff);
@@ -138,8 +148,25 @@
       </div>
       
       <div class="form-group">
+        <label for="userEmail">Email (optional - for notifications)</label>
+        <input type="email" id="userEmail" placeholder="your@email.com" />
+      </div>
+      
+      <div class="form-group">
         <label for="dopBio">Bio/Personality (optional but recommended)</label>
         <textarea id="dopBio" rows="3" placeholder="Tell us about yourself - your personality, interests, background, etc. The more detail you provide, the better your DOP will be at conversations!"></textarea>
+      </div>
+
+      <!-- Bio Facts Collection -->
+      <div class="form-group">
+        <label>5 Bio Facts About You (helps your DOP be more personal)</label>
+        <div class="bio-facts">
+          <input type="text" id="bioFact1" placeholder="Fact 1: What do you do for work?" />
+          <input type="text" id="bioFact2" placeholder="Fact 2: Where are you from?" />
+          <input type="text" id="bioFact3" placeholder="Fact 3: What are your hobbies?" />
+          <input type="text" id="bioFact4" placeholder="Fact 4: What's your personality like?" />
+          <input type="text" id="bioFact5" placeholder="Fact 5: What makes you unique?" />
+        </div>
       </div>
 
       <!-- Status Messages -->
@@ -240,6 +267,15 @@
 
         console.log('Files converted, uploading to dop-uploads function...');
 
+        // Collect bio facts
+        const bioFacts = [
+          document.getElementById('bioFact1').value.trim(),
+          document.getElementById('bioFact2').value.trim(),
+          document.getElementById('bioFact3').value.trim(),
+          document.getElementById('bioFact4').value.trim(),
+          document.getElementById('bioFact5').value.trim()
+        ].filter(fact => fact.length > 0);
+
         // Create DOP with correct field names that match dop-uploads.js
         const uploadResponse = await fetch('/.netlify/functions/dop-uploads', {
           method: 'POST',
@@ -248,7 +284,9 @@
             photo: photoBase64,        // Matches dop-uploads.js
             voice: voiceBase64,        // Matches dop-uploads.js  
             name: dopNameInput.value.trim() || 'My DOP',  // Matches dop-uploads.js
-            bio: dopBioInput.value.trim() || ''          // Matches dop-uploads.js
+            bio: dopBioInput.value.trim() || '',          // Matches dop-uploads.js
+            bioFacts: bioFacts,        // NEW: Bio facts array
+            email: document.getElementById('userEmail').value.trim() || null  // NEW: Email for notifications
           })
         });
 
