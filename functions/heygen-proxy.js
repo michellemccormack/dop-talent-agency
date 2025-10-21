@@ -120,7 +120,7 @@ async function uploadPhoto({ imageUrl, name, imageKey }) {
   // Create FormData for HeyGen API v2
   const formData = new FormData();
   const blob = new Blob([imageBlob], { type: 'image/jpeg' });
-  formData.append('file', blob, `${name || 'avatar'}.jpg`);
+  formData.append('asset', blob, `${name || 'avatar'}.jpg`);
 
   const response = await fetch(`${HEYGEN_API_BASE}/v2/asset/upload`, {
     method: 'POST',
