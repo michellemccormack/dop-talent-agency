@@ -54,7 +54,7 @@ exports.handler = async (event) => {
     fullBody.set(formDataEnd, formDataStart.length + imageBlob.length);
 
     console.log('[test-heygen-upload] Uploading to HeyGen...');
-    const response = await fetch('https://upload.heygen.com/v1/asset', {
+    const response = await fetch('https://upload.heygen.com/v2/asset', {
       method: 'POST',
       headers: {
         'X-Api-Key': process.env.HEYGEN_API_KEY,

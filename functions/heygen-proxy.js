@@ -138,7 +138,7 @@ async function uploadPhoto({ imageUrl, name, imageKey }) {
   fullBody.set(new Uint8Array(imageBlob), formDataStart.length);
   fullBody.set(formDataEnd, formDataStart.length + imageBlob.length);
 
-  const response = await fetch(`${HEYGEN_UPLOAD_BASE}/v1/asset`, {
+  const response = await fetch(`${HEYGEN_UPLOAD_BASE}/v2/asset`, {
     method: 'POST',
     headers: {
       'X-Api-Key': HEYGEN_API_KEY,
