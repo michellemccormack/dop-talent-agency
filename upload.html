@@ -276,8 +276,8 @@
           document.getElementById('bioFact5').value.trim()
         ].filter(fact => fact.length > 0);
 
-        // TEST: Use simple test function first
-        const uploadResponse = await fetch('/.netlify/functions/test-upload', {
+        // ULTRA-SIMPLE TEST: No dependencies
+        const uploadResponse = await fetch('/.netlify/functions/simple-test', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
