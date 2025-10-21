@@ -572,7 +572,8 @@
             throw new Error(`dop-persona returned ${response.status}`);
           }
           
-          const persona = await response.json();
+          const data = await response.json();
+          const persona = data.persona || data;
           PERSONA_DATA = persona;
 
           console.log('[Persona] Loaded DOP:', persona.name, 'Status:', persona.status);
