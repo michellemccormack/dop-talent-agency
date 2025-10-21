@@ -117,17 +117,30 @@ async function uploadPhoto({ imageUrl, name, imageKey }) {
     imageBlob = Buffer.from(imageBuffer);
   }
 
-  // Create FormData for HeyGen API v2
-  const formData = new FormData();
-  const blob = new Blob([imageBlob], { type: 'image/jpeg' });
-  formData.append('asset', blob, `${name || 'avatar'}.jpg`);
+  // Create multipart form data for HeyGen API v2
+  const boundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
+  
+  let formData = '';
+  formData += `--${boundary}\r\n`;
+  formData += `Content-Disposition: form-data; name="asset"; filename="${name || 'avatar'}.jpg"\r\n`;
+  formData += `Content-Type: image/jpeg\r\n\r\n`;
+  
+  const textEncoder = new TextEncoder();
+  const formDataStart = textEncoder.encode(formData);
+  const formDataEnd = textEncoder.encode(`\r\n--${boundary}--\r\n`);
+  
+  const fullBody = new Uint8Array(formDataStart.length + imageBlob.length + formDataEnd.length);
+  fullBody.set(formDataStart, 0);
+  fullBody.set(new Uint8Array(imageBlob), formDataStart.length);
+  fullBody.set(formDataEnd, formDataStart.length + imageBlob.length);
 
   const response = await fetch(`${HEYGEN_API_BASE}/v2/asset/upload`, {
     method: 'POST',
     headers: {
-      'X-Api-Key': HEYGEN_API_KEY
+      'X-Api-Key': HEYGEN_API_KEY,
+      'Content-Type': `multipart/form-data; boundary=${boundary}`
     },
-    body: formData
+    body: fullBody
   });
 
   const responseText = await response.text();
