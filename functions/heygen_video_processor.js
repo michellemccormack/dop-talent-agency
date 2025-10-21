@@ -286,15 +286,15 @@ async function startVideoGenerationForPersona(store, key, persona) {
     }
     
     const uploadData = JSON.parse(uploadResult.body);
-    const imageKey = uploadData.image_key;
-    console.log(`[${key}] Photo uploaded to HeyGen:`, imageKey);
+    const uploadedImageKey = uploadData.image_key;
+    console.log(`[${key}] Photo uploaded to HeyGen:`, uploadedImageKey);
     
     // Step 2: Create avatar group
     const groupEvent = {
       httpMethod: 'POST',
       body: JSON.stringify({
         action: 'create_avatar_group',
-        imageKey: imageKey,
+        imageKey: uploadedImageKey,
         name: persona.name || 'DOP'
       })
     };
