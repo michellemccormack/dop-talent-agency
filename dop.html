@@ -1,103 +1,376 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>DOP Viewer</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DOP - AI Doppelgänger</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&display=swap" rel="stylesheet">
   <style>
-    :root { --muted:#666; --err:#b00020; }
-    body{
-      font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
-      max-width:760px;margin:24px auto;padding:0 16px
-    }
-    .card{border:1px solid #eee;border-radius:12px;padding:16px;box-shadow:0 6px 20px rgba(0,0,0,.05)}
-    img{max-width:100%;border-radius:12px;background:#f4f4f4}
-    audio{width:100%;margin-top:12px}
-    .err{color:var(--err);margin-top:12px}
-    .muted{color:var(--muted);font-size:14px}
-    code{background:#f4f4f4;padding:2px 6px;border-radius:6px}
-    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    .chip{font-size:12px;background:#f4f4f4;border-radius:999px;padding:2px 8px}
+        :root {
+            --bg: #0e0f12; --bg-2: #08090c;
+            --panel: #12131a; --panel-2: #1a1b25;
+            --text: #ececf1; --muted: #b7b8c3;
+            --stroke: #26283a; --stroke-strong: #3a3b52;
+            --accent: #8a8cff;
+            --ok: #16db65; --warn: #ffd166; --stop: #ff6b6b;
+            --shadow: 0 10px 30px rgba(0,0,0,.35); --radius: 16px;
+        }
+        
+        body {
+            margin: 0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+            color: var(--text);
+            background: 
+                radial-gradient(1200px 600px at 80% -10%, rgba(94,97,255,.12), transparent 40%),
+                radial-gradient(900px 480px at 0% 110%, rgba(138,140,255,.10), transparent 45%),
+                linear-gradient(180deg, var(--bg), var(--bg-2));
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+        
+        .dop-card {
+            background: linear-gradient(180deg, var(--panel), var(--panel-2));
+            border: 1px solid var(--stroke);
+            border-radius: var(--radius);
+            padding: 40px;
+            box-shadow: var(--shadow);
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 2.5rem;
+            background: linear-gradient(135deg, #fff, #d1d5db); 
+            -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+            margin: 0 0 16px;
+        }
+        
+        .dop-name {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 20px;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 20px;
+        }
+        
+        .status-ready {
+            background: rgba(22, 219, 101, 0.2);
+            color: var(--ok);
+            border: 1px solid var(--ok);
+        }
+        
+        .status-processing {
+            background: rgba(255, 209, 102, 0.2);
+            color: var(--warn);
+            border: 1px solid var(--warn);
+        }
+        
+        .status-error {
+            background: rgba(255, 107, 107, 0.2);
+            color: var(--stop);
+            border: 1px solid var(--stop);
+        }
+        
+        .status-uploaded {
+            background: rgba(138, 140, 255, 0.2);
+            color: var(--accent);
+            border: 1px solid var(--accent);
+        }
+        
+        .progress-info {
+            color: var(--muted);
+            margin-bottom: 30px;
+            line-height: 1.5;
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 14px 28px;
+            border: none;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 700;
+            font-family: 'Montserrat', sans-serif;
+            text-transform: uppercase;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: transform 0.2s ease;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent), #9b9dff);
+            color: #000;
+        }
+        
+        .btn-secondary {
+            background: var(--panel-2);
+            color: var(--text);
+            border: 1px solid var(--stroke);
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--muted);
+        }
+        
+        .error {
+            background: rgba(255, 107, 107, 0.1);
+            border: 1px solid var(--stop);
+            border-radius: 12px;
+            padding: 20px;
+            color: var(--stop);
+            margin-bottom: 20px;
+        }
+        
+        .share-info {
+            background: var(--panel-2);
+            border: 1px solid var(--stroke);
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        
+        .share-info h3 {
+            margin: 0 0 12px;
+            color: var(--text);
+        }
+        
+        .share-url {
+            background: var(--panel);
+            border: 1px solid var(--stroke);
+            border-radius: 8px;
+            padding: 12px;
+            font-family: monospace;
+            font-size: 0.9rem;
+            color: var(--text);
+            word-break: break-all;
+            margin-bottom: 12px;
+        }
+        
+        .copy-btn {
+            background: linear-gradient(135deg, var(--accent), #9b9dff);
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        
+        @media (max-width: 768px) {
+            .action-buttons {
+                flex-direction: column;
+            }
+            
+            .btn {
+                width: 100%;
+            }
+        }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h1>Your DOP</h1>
-    <div id="out">Loading…</div>
+    <div class="container">
+        <div id="loading" class="loading">
+            <h1>Loading DOP...</h1>
+            <p>Fetching DOP information...</p>
+        </div>
+        
+        <div id="dopContent" style="display: none;">
+            <div class="dop-card">
+                <h1>AI Doppelgänger</h1>
+                <div class="dop-name" id="dopName">Loading...</div>
+                <div class="status-badge" id="statusBadge">Loading...</div>
+                <div class="progress-info" id="progressInfo">Loading...</div>
+                
+                <div class="action-buttons" id="actionButtons">
+                    <!-- Buttons will be populated by JavaScript -->
+                </div>
+            </div>
+            
+            <div class="share-info">
+                <h3>Share This DOP</h3>
+                <div class="share-url" id="shareUrl">Loading...</div>
+                <button class="copy-btn" onclick="copyShareUrl()">Copy Link</button>
+            </div>
+        </div>
+        
+        <div id="errorContent" style="display: none;">
+            <div class="error">
+                <h1>DOP Not Found</h1>
+                <p id="errorMessage">The requested DOP could not be found.</p>
+            </div>
+        </div>
   </div>
 
   <script>
-  (async () => {
-    const out = document.getElementById('out');
-
-    // HTML escape function to prevent XSS
-    const escapeHtml = (str) => {
-      if (!str) return '';
-      const div = document.createElement('div');
-      div.textContent = str;
-      return div.innerHTML;
-    };
-
-    // Get dopId from ?id= or /dop/:id
-    const qs = new URLSearchParams(location.search);
-    let dopId = qs.get('id');
+        let currentDOP = null;
+        
+        async function loadDOP() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const dopId = urlParams.get('id') || getDOPIdFromPath();
+            
     if (!dopId) {
-      const m = /\/dop\/([^/?#]+)/i.exec(location.pathname);
-      if (m) dopId = decodeURIComponent(m[1]);
-    }
-    if (!dopId) { out.innerHTML = '<div class="err">Missing dopId</div>'; return; }
-
-    const cacheBust = () => `&t=${Date.now()}`;
-    const fileURL  = (key) => `/.netlify/functions/dop-file?key=${encodeURIComponent(key)}${cacheBust()}`;
-
-    try {
-      // Fetch listing JSON
-      const res  = await fetch(`/.netlify/functions/dop-view?id=${encodeURIComponent(dopId)}${cacheBust()}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to load DOP.');
-
-      // Pick newest image/voice if multiple exist
-      const newest = (arr) => {
-        if (!arr || !Array.isArray(arr) || arr.length === 0) return null;
-        return [...arr].sort((a,b) =>
-          new Date(b.uploadedAt || b.lastModified || 0) - new Date(a.uploadedAt || a.lastModified || 0)
-        )[0];
-      };
-      const img   = newest(data.images);
-      const voice = newest(data.voices);
-
-      const imgUrl = img ? fileURL(img.key) : null;
-      const audUrl = voice ? fileURL(voice.key) : null;
-
-      const displayDopId = escapeHtml(data.dopId || dopId);
-      const imgFileName = img ? escapeHtml(img.key.split('/').pop()) : 'no-image';
-      const voiceFileName = voice ? escapeHtml(voice.key.split('/').pop()) : 'no-voice';
-      const jsonUrl = escapeHtml(`/.netlify/functions/dop-view?id=${encodeURIComponent(dopId)}`);
-
-      out.innerHTML = `
-        <div class="muted">dopId: <code>${displayDopId}</code></div>
-
-        ${imgUrl
-          ? `<img alt="DOP image" src="${escapeHtml(imgUrl)}"
-                 onerror="this.outerHTML='<div class=&quot;err&quot;>Image failed to load.</div>'">`
-          : `<div class="err">No image found</div>`}
-
-        ${audUrl
-          ? `<audio controls preload="metadata"
-                    onerror="this.outerHTML='<div class=&quot;err&quot;>Audio failed to load.</div>'"
-                    src="${escapeHtml(audUrl)}"></audio>`
-          : `<div class="err">No voice found</div>`}
-
-        <div class="row" style="margin-top:10px">
-          <span class="chip">${imgFileName}</span>
-          <span class="chip">${voiceFileName}</span>
-          <a class="muted" href="${jsonUrl}" target="_blank" rel="noopener">view JSON</a>
-        </div>
-      `;
-    } catch (e) {
-      out.innerHTML = `<div class="err">${escapeHtml(e.message || String(e))}</div>`;
-    }
-  })();
+                showError('No DOP ID provided');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/.netlify/functions/dop-deploy?id=${dopId}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    currentDOP = data;
+                    displayDOP(data);
+                } else {
+                    showError(data.error || 'Failed to load DOP');
+                }
+            } catch (error) {
+                console.error('Error loading DOP:', error);
+                showError('Failed to load DOP: ' + error.message);
+            }
+        }
+        
+        function getDOPIdFromPath() {
+            // Extract DOP ID from URL path like /dop/abc123
+            const path = window.location.pathname;
+            const match = path.match(/\/dop\/([^\/]+)/);
+            return match ? match[1] : null;
+        }
+        
+        function displayDOP(dop) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('dopContent').style.display = 'block';
+            
+            // Update DOP info
+            document.getElementById('dopName').textContent = dop.name || 'Unnamed DOP';
+            document.getElementById('shareUrl').textContent = window.location.href;
+            
+            // Update status
+            const statusBadge = document.getElementById('statusBadge');
+            statusBadge.textContent = dop.status;
+            statusBadge.className = `status-badge status-${dop.status}`;
+            
+            // Update progress info
+            const progressInfo = document.getElementById('progressInfo');
+            if (dop.status === 'ready') {
+                progressInfo.innerHTML = `
+                    <strong>✅ Ready to Chat!</strong><br>
+                    This DOP is fully generated and ready for conversation.
+                `;
+            } else if (dop.status === 'processing') {
+                progressInfo.innerHTML = `
+                    <strong>🔄 Generating Videos...</strong><br>
+                    ${dop.videos}/${dop.totalVideos} videos completed<br>
+                    This may take a few minutes.
+                `;
+            } else if (dop.status === 'error') {
+                progressInfo.innerHTML = `
+                    <strong>❌ Generation Failed</strong><br>
+                    There was an error generating this DOP.
+                `;
+            } else {
+                progressInfo.innerHTML = `
+                    <strong>⏳ Uploaded</strong><br>
+                    Your DOP is being processed. This may take a few minutes.
+                `;
+            }
+            
+            // Update action buttons
+            const actionButtons = document.getElementById('actionButtons');
+            if (dop.isReady) {
+                actionButtons.innerHTML = `
+                    <a href="/chat.html?id=${dop.dopId}" class="btn btn-primary">Start Chatting</a>
+                    <button class="btn btn-secondary" onclick="checkStatus()">Check Status</button>
+                `;
+            } else {
+                actionButtons.innerHTML = `
+                    <button class="btn btn-secondary" onclick="checkStatus()">Check Status</button>
+                    <button class="btn btn-secondary" onclick="retryGeneration()">Retry Generation</button>
+                `;
+            }
+        }
+        
+        function showError(message) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('errorContent').style.display = 'block';
+            document.getElementById('errorMessage').textContent = message;
+        }
+        
+        async function checkStatus() {
+            if (!currentDOP) return;
+            
+            try {
+                const response = await fetch(`/.netlify/functions/check-video?id=${currentDOP.dopId}`);
+                const data = await response.json();
+                
+                alert(`Status: ${data.status}\nProgress: ${data.completedVideos}/${data.totalVideos} videos\nTime: ${data.estimatedTimeRemaining}`);
+                
+                // Reload the page to update status
+                setTimeout(() => location.reload(), 1000);
+            } catch (error) {
+                alert('Error checking status: ' + error.message);
+            }
+        }
+        
+        async function retryGeneration() {
+            if (!currentDOP) return;
+            
+            try {
+                const response = await fetch('/.netlify/functions/trigger-video-generation', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ dopId: currentDOP.dopId })
+                });
+                const data = await response.json();
+                
+                alert(data.message || 'Video generation triggered');
+                setTimeout(() => location.reload(), 1000);
+            } catch (error) {
+                alert('Error triggering generation: ' + error.message);
+            }
+        }
+        
+        function copyShareUrl() {
+            navigator.clipboard.writeText(window.location.href).then(() => {
+                alert('Share link copied to clipboard!');
+            }).catch(() => {
+                alert('Share link: ' + window.location.href);
+            });
+        }
+        
+        // Load DOP on page load
+        document.addEventListener('DOMContentLoaded', loadDOP);
   </script>
 </body>
 </html>

@@ -252,7 +252,9 @@ exports.handler = async (event) => {
       success: true,
       dopId: dopId,
       message: 'Upload successful! Your avatar will be ready in a few minutes.',
-      chatUrl: '/chat.html?id=' + dopId
+      chatUrl: '/chat.html?id=' + dopId,
+      uniqueUrl: '/dop/' + dopId,
+      shareUrl: process.env.URL + '/dop/' + dopId
     });
     
   } catch (error) {
