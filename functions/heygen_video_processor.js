@@ -266,60 +266,63 @@ async function startVideoGenerationForPersona(store, key, persona) {
   console.log(`[${key}] Starting video generation process...`);
   
   try {
+    // Import heygen-proxy functions directly
+    const heygenProxy = require('./heygen-proxy');
+    
     // Step 1: Upload photo to HeyGen
     const imageUrl = persona.images[0].url;
-    const uploadResponse = await fetch('/.netlify/functions/heygen-proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    const uploadEvent = {
+      httpMethod: 'POST',
       body: JSON.stringify({
         action: 'upload_photo',
         imageUrl: imageUrl,
         name: persona.name || 'DOP'
       })
-    });
+    };
     
-    if (!uploadResponse.ok) {
+    const uploadResult = await heygenProxy.handler(uploadEvent);
+    if (uploadResult.statusCode !== 200) {
       throw new Error('Photo upload to HeyGen failed');
     }
     
-    const uploadData = await uploadResponse.json();
+    const uploadData = JSON.parse(uploadResult.body);
     const imageKey = uploadData.image_key;
     console.log(`[${key}] Photo uploaded to HeyGen:`, imageKey);
     
     // Step 2: Create avatar group
-    const groupResponse = await fetch('/.netlify/functions/heygen-proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    const groupEvent = {
+      httpMethod: 'POST',
       body: JSON.stringify({
         action: 'create_avatar_group',
         imageKey: imageKey,
         name: persona.name || 'DOP'
       })
-    });
+    };
     
-    if (!groupResponse.ok) {
+    const groupResult = await heygenProxy.handler(groupEvent);
+    if (groupResult.statusCode !== 200) {
       throw new Error('Avatar group creation failed');
     }
     
-    const groupData = await groupResponse.json();
+    const groupData = JSON.parse(groupResult.body);
     const avatarGroupId = groupData.avatar_group_id;
     console.log(`[${key}] Avatar group created:`, avatarGroupId);
     
     // Step 3: Get avatar ID
-    const avatarResponse = await fetch('/.netlify/functions/heygen-proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    const avatarEvent = {
+      httpMethod: 'POST',
       body: JSON.stringify({
         action: 'get_avatar_id',
         avatarGroupId: avatarGroupId
       })
-    });
+    };
     
-    if (!avatarResponse.ok) {
+    const avatarResult = await heygenProxy.handler(avatarEvent);
+    if (avatarResult.statusCode !== 200) {
       throw new Error('Failed to get avatar ID');
     }
     
-    const avatarData = await avatarResponse.json();
+    const avatarData = JSON.parse(avatarResult.body);
     const avatarId = avatarData.avatar_id;
     console.log(`[${key}] Got avatar ID:`, avatarId);
     
@@ -327,22 +330,22 @@ async function startVideoGenerationForPersona(store, key, persona) {
     const videoResults = [];
     for (const prompt of persona.prompts) {
       try {
-        const videoResponse = await fetch('/.netlify/functions/heygen-proxy', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        const videoEvent = {
+          httpMethod: 'POST',
           body: JSON.stringify({
             action: 'generate_video',
             text: prompt.text,
             avatarId: avatarId,
             voiceId: 'default'
           })
-        });
+        };
         
-        if (!videoResponse.ok) {
+        const videoResult = await heygenProxy.handler(videoEvent);
+        if (videoResult.statusCode !== 200) {
           throw new Error(`Video generation failed for prompt: ${prompt.key}`);
         }
         
-        const videoData = await videoResponse.json();
+        const videoData = JSON.parse(videoResult.body);
         console.log(`[${key}] Video generation started for prompt ${prompt.key}:`, videoData.video_id);
         
         videoResults.push({
