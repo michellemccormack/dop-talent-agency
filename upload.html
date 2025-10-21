@@ -276,8 +276,8 @@
           document.getElementById('bioFact5').value.trim()
         ].filter(fact => fact.length > 0);
 
-        // ULTRA-SIMPLE TEST: No dependencies
-        const uploadResponse = await fetch('/.netlify/functions/simple-test', {
+        // Create DOP with correct field names that match dop-uploads.js
+        const uploadResponse = await fetch('/.netlify/functions/dop-uploads', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

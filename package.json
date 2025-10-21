@@ -21,6 +21,7 @@
   "dependencies": {
     "@netlify/blobs": "^6.5.0",
     "@netlify/functions": "^2.8.2",
-    "nanoid": "^5.1.5"
+    "nanoid": "^5.1.5",
+    "stripe": "^14.0.0"
   }
 }

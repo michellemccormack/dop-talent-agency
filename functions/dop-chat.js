@@ -9,7 +9,7 @@ const MIN_CONFIDENCE_THRESHOLD = 0.6;
 const INTENT_OPTIONS = [
   { id: 'fun',   label: 'What do you like to do for fun?', clip: 'assets/p_fun.mp4', keywords: ['fun', 'hobby', 'hobbies', 'enjoy', 'pastime'] },
   { id: 'from',  label: 'Where are you from?',              clip: 'assets/p_from.mp4', keywords: ['from', 'where', 'origin', 'hometown', 'grew up'] },
-  { id: 'relax', label: 'What's your favorite way to relax?', clip: 'assets/p_relax.mp4', keywords: ['relax', 'unwind', 'chill', 'de-stress', 'calm down'] },
+  { id: 'relax', label: 'What is your favorite way to relax?', clip: 'assets/p_relax.mp4', keywords: ['relax', 'unwind', 'chill', 'de-stress', 'calm down'] },
 ];
 
 export const handler = async (event) => {
