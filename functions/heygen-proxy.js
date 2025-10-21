@@ -126,7 +126,7 @@ async function uploadPhoto({ imageUrl, name, imageKey }) {
     content_type: 'image/jpeg'
   };
 
-  const response = await fetch(`${HEYGEN_API_BASE}/v2/asset/upload`, {
+  const response = await fetch(`${HEYGEN_API_BASE}/v2/asset`, {
     method: 'POST',
     headers: {
       'X-Api-Key': HEYGEN_API_KEY,
