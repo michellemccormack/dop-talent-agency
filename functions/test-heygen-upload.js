@@ -36,31 +36,18 @@ exports.handler = async (event) => {
     
     console.log('[test-heygen-upload] Image found, size:', imageBlob.length, 'bytes');
     
-    // Test HeyGen upload
-    const boundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
-    
-    let formData = '';
-    formData += `--${boundary}\r\n`;
-    formData += `Content-Disposition: form-data; name="file"; filename="test.jpg"\r\n`;
-    formData += `Content-Type: image/jpeg\r\n\r\n`;
-    
-    const textEncoder = new TextEncoder();
-    const formDataStart = textEncoder.encode(formData);
-    const formDataEnd = textEncoder.encode(`\r\n--${boundary}--\r\n`);
-    
-    const fullBody = new Uint8Array(formDataStart.length + imageBlob.length + formDataEnd.length);
-    fullBody.set(formDataStart, 0);
-    fullBody.set(new Uint8Array(imageBlob), formDataStart.length);
-    fullBody.set(formDataEnd, formDataStart.length + imageBlob.length);
+    // Test HeyGen upload with FormData
+    const formData = new FormData();
+    const blob = new Blob([imageBlob], { type: 'image/jpeg' });
+    formData.append('file', blob, 'test.jpg');
 
     console.log('[test-heygen-upload] Uploading to HeyGen...');
     const response = await fetch('https://upload.heygen.com/v2/asset', {
       method: 'POST',
       headers: {
-        'X-Api-Key': process.env.HEYGEN_API_KEY,
-        'Content-Type': `multipart/form-data; boundary=${boundary}`
+        'X-Api-Key': process.env.HEYGEN_API_KEY
       },
-      body: fullBody
+      body: formData
     });
 
     const responseText = await response.text();
