@@ -276,8 +276,8 @@
           document.getElementById('bioFact5').value.trim()
         ].filter(fact => fact.length > 0);
 
-        // Create DOP with correct field names that match dop-uploads.js
-        const uploadResponse = await fetch('/.netlify/functions/dop-uploads', {
+        // TEST: Use simple test function first
+        const uploadResponse = await fetch('/.netlify/functions/test-upload', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
