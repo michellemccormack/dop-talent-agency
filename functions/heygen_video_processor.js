@@ -219,15 +219,18 @@ async function processPersona(store, key, timeLimit) {
       // Send notification if just became ready
       if (!wasReady && persona.status === 'ready') {
         try {
-          await fetch('/.netlify/functions/send-notification', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+          // Call send-notification function directly
+          const sendNotification = require('./send-notification');
+          const mockEvent = {
+            httpMethod: 'POST',
             body: JSON.stringify({
               dopId: persona.dopId,
               email: persona.ownerEmail,
               name: persona.name
             })
-          });
+          };
+          
+          await sendNotification.handler(mockEvent);
           console.log(`[${key}] Notification sent for completed DOP`);
         } catch (notifyError) {
           console.warn(`[${key}] Failed to send notification:`, notifyError.message);
