@@ -241,15 +241,10 @@ exports.handler = async (event) => {
     await store.set(personaKey, JSON.stringify(persona), { 
       contentType: 'application/json'
     });
-    console.log('[dop-uploads] Persona saved, triggering video generation...');
+    console.log('[dop-uploads] Persona saved, video generation will start in background...');
     
-    // Trigger video generation in background
-    try {
-      await triggerVideoGeneration(dopId, persona);
-    } catch (videoError) {
-      console.warn('[dop-uploads] Video generation trigger failed:', videoError.message);
-      // Don't fail the upload if video generation fails
-    }
+    // Don't trigger video generation here - let the scheduled processor handle it
+    // This prevents timeout issues during upload
     
     console.log('[dop-uploads] Success!');
     

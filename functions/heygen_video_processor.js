@@ -119,6 +119,18 @@ async function processPersona(store, key, timeLimit) {
       return { key, status: 'ready', changed: false };
     }
 
+    // If this is a new upload (status: 'uploaded'), start video generation
+    if (persona.status === 'uploaded') {
+      console.log(`[${key}] New upload detected, starting video generation...`);
+      try {
+        await startVideoGenerationForPersona(store, key, persona);
+        return { key, status: 'processing', changed: true };
+      } catch (error) {
+        console.error(`[${key}] Failed to start video generation:`, error);
+        return { key, status: 'error', error: error.message };
+      }
+    }
+
     // Process pending videos
     let changed = false;
     let completed = 0;
@@ -241,6 +253,123 @@ async function processPersona(store, key, timeLimit) {
       status: 'error',
       error: error.message
     };
+  }
+}
+
+/**
+ * Start video generation for a new persona
+ */
+async function startVideoGenerationForPersona(store, key, persona) {
+  console.log(`[${key}] Starting video generation process...`);
+  
+  try {
+    // Step 1: Upload photo to HeyGen
+    const imageUrl = persona.images[0].url;
+    const uploadResponse = await fetch('/.netlify/functions/heygen-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'upload_photo',
+        imageUrl: imageUrl,
+        name: persona.name || 'DOP'
+      })
+    });
+    
+    if (!uploadResponse.ok) {
+      throw new Error('Photo upload to HeyGen failed');
+    }
+    
+    const uploadData = await uploadResponse.json();
+    const imageKey = uploadData.image_key;
+    console.log(`[${key}] Photo uploaded to HeyGen:`, imageKey);
+    
+    // Step 2: Create avatar group
+    const groupResponse = await fetch('/.netlify/functions/heygen-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'create_avatar_group',
+        imageKey: imageKey,
+        name: persona.name || 'DOP'
+      })
+    });
+    
+    if (!groupResponse.ok) {
+      throw new Error('Avatar group creation failed');
+    }
+    
+    const groupData = await groupResponse.json();
+    const avatarGroupId = groupData.avatar_group_id;
+    console.log(`[${key}] Avatar group created:`, avatarGroupId);
+    
+    // Step 3: Get avatar ID
+    const avatarResponse = await fetch('/.netlify/functions/heygen-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'get_avatar_id',
+        avatarGroupId: avatarGroupId
+      })
+    });
+    
+    if (!avatarResponse.ok) {
+      throw new Error('Failed to get avatar ID');
+    }
+    
+    const avatarData = await avatarResponse.json();
+    const avatarId = avatarData.avatar_id;
+    console.log(`[${key}] Got avatar ID:`, avatarId);
+    
+    // Step 4: Generate videos for each prompt
+    const videoResults = [];
+    for (const prompt of persona.prompts) {
+      try {
+        const videoResponse = await fetch('/.netlify/functions/heygen-proxy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'generate_video',
+            text: prompt.text,
+            avatarId: avatarId,
+            voiceId: 'default'
+          })
+        });
+        
+        if (!videoResponse.ok) {
+          throw new Error(`Video generation failed for prompt: ${prompt.key}`);
+        }
+        
+        const videoData = await videoResponse.json();
+        console.log(`[${key}] Video generation started for prompt ${prompt.key}:`, videoData.video_id);
+        
+        videoResults.push({
+          prompt: prompt.key,
+          requestId: videoData.video_id,
+          status: 'processing'
+        });
+      } catch (error) {
+        console.error(`[${key}] Video generation error for prompt ${prompt.key}:`, error.message);
+        videoResults.push({
+          prompt: prompt.key,
+          requestId: null,
+          status: 'failed',
+          error: error.message
+        });
+      }
+    }
+    
+    // Update persona with video request IDs
+    persona.status = 'processing';
+    persona.pending = {
+      videoRequests: videoResults
+    };
+    
+    await store.set(key, JSON.stringify(persona), { contentType: 'application/json' });
+    console.log(`[${key}] Persona updated with video requests`);
+    
+  } catch (error) {
+    console.error(`[${key}] Video generation setup failed:`, error);
+    throw error;
   }
 }
 
