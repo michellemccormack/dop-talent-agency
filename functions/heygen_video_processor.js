@@ -270,12 +270,12 @@ async function startVideoGenerationForPersona(store, key, persona) {
     const heygenProxy = require('./heygen-proxy');
     
     // Step 1: Upload photo to HeyGen
-    const imageUrl = persona.images[0].url;
+    const imageKey = persona.images[0].key;
     const uploadEvent = {
       httpMethod: 'POST',
       body: JSON.stringify({
         action: 'upload_photo',
-        imageUrl: imageUrl,
+        imageKey: imageKey,
         name: persona.name || 'DOP'
       })
     };

@@ -89,21 +89,33 @@ exports.handler = async (event) => {
 };
 
 // Upload photo to HeyGen
-async function uploadPhoto({ imageUrl, name }) {
-  if (!imageUrl) {
-    throw new Error('imageUrl is required');
+async function uploadPhoto({ imageUrl, name, imageKey }) {
+  if (!imageUrl && !imageKey) {
+    throw new Error('imageUrl or imageKey is required');
   }
 
-  console.log('[heygen-proxy] Uploading photo from URL:', imageUrl.substring(0, 50) + '...');
+  console.log('[heygen-proxy] Uploading photo...');
 
-  // Fetch the image from the URL
-  const imageResponse = await fetch(imageUrl);
-  if (!imageResponse.ok) {
-    throw new Error(`Failed to fetch image: ${imageResponse.status}`);
+  let imageBlob;
+  
+  if (imageKey) {
+    // Get image directly from Netlify Blobs
+    const { uploadsStore } = require('./_lib/blobs');
+    const store = uploadsStore();
+    imageBlob = await store.get(imageKey);
+    if (!imageBlob) {
+      throw new Error('Image not found in storage');
+    }
+  } else {
+    // Fetch the image from the URL (fallback)
+    console.log('[heygen-proxy] Fetching image from URL:', imageUrl.substring(0, 50) + '...');
+    const imageResponse = await fetch(imageUrl);
+    if (!imageResponse.ok) {
+      throw new Error(`Failed to fetch image: ${imageResponse.status}`);
+    }
+    const imageBuffer = await imageResponse.arrayBuffer();
+    imageBlob = Buffer.from(imageBuffer);
   }
-
-  const imageBuffer = await imageResponse.arrayBuffer();
-  const imageBlob = Buffer.from(imageBuffer);
 
   // Create multipart form data
   const boundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
