@@ -185,10 +185,10 @@ async function createAvatarGroup({ imageKey, name }) {
 
   const requestBody = {
     name: name || 'DOP Avatar',
-    avatar_image_ids: [imageKey]
+    image_key: imageKey
   };
 
-  const response = await fetch(`${HEYGEN_API_BASE}/v2/photo_avatar/group`, {
+  const response = await fetch(`${HEYGEN_API_BASE}/v2/photo_avatar/create`, {
     method: 'POST',
     headers: {
       'X-Api-Key': HEYGEN_API_KEY,
@@ -315,7 +315,7 @@ async function getAvatarId({ avatarGroupId }) {
 
   console.log('[heygen-proxy] Getting avatar ID from group:', avatarGroupId);
 
-  const response = await fetch(`${HEYGEN_API_BASE}/v2/photo_avatar/group/${avatarGroupId}`, {
+  const response = await fetch(`${HEYGEN_API_BASE}/v2/photo_avatar/${avatarGroupId}`, {
     method: 'GET',
     headers: {
       'X-Api-Key': HEYGEN_API_KEY,
@@ -339,10 +339,10 @@ async function getAvatarId({ avatarGroupId }) {
     throw new Error(`Avatar group info failed: ${data.message || response.statusText}`);
   }
 
-  // Get the first avatar ID from the group
-  const avatarId = data.data?.avatar_list?.[0]?.avatar_id;
+  // Get the avatar ID from the response
+  const avatarId = data.data?.avatar_id || data.data?.id;
   if (!avatarId) {
-    throw new Error('No avatar ID found in group');
+    throw new Error('No avatar ID found in response');
   }
 
   console.log('[heygen-proxy] Got avatar ID:', avatarId);
