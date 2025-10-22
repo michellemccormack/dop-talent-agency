@@ -1,7 +1,7 @@
 // functions/manual-process.js
 // Manual trigger for video processor to debug stuck personas
 
-const { getStore } = require('@netlify/blobs');
+const { uploadsStore } = require('./_lib/blobs');
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -15,7 +15,7 @@ exports.handler = async (event) => {
   }
 
   try {
-    const store = getStore({ name: 'dop-uploads' });
+    const store = uploadsStore();
     
     // Get a specific persona to debug
     const personaKey = 'personas/9a575701-6edd-456a-86f9-ea5a2c0f4413.json';
