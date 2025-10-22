@@ -188,7 +188,8 @@ async function createAvatarGroup({ imageKey, name }) {
     image_key: imageKey
   };
 
-  const response = await fetch(`${HEYGEN_API_BASE}/v2/photo_avatar/avatar_group/create`, {
+  // Try v1 API first since photo upload worked with v1
+  const response = await fetch(`${HEYGEN_API_BASE}/v1/avatar_group.create`, {
     method: 'POST',
     headers: {
       'X-Api-Key': HEYGEN_API_KEY,
