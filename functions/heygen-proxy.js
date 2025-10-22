@@ -316,13 +316,14 @@ async function generateVideo({ text, avatarId, voiceId }) {
         voice_id: voiceId || 'default'
       }
     }],
-    aspect_ratio: '9:16'
+    aspect_ratio: '9:16',
+    test: false
   };
 
   const response = await fetch(`${HEYGEN_API_BASE}/v1/video/generate`, {
     method: 'POST',
     headers: {
-      'X-Api-Key': HEYGEN_API_KEY,
+      'Authorization': `Bearer ${HEYGEN_API_KEY}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify(requestBody)
