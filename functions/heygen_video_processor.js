@@ -494,9 +494,29 @@ exports.handler = async (event) => {
       });
     }
 
-    // Process all personas
+    // Process all personas - prioritize newer ones first
     const keys = items.map(item => item.key || item);
-    const results = await processWithConcurrency(store, keys, timeLimit);
+    
+    // Sort by creation time (newest first) to prioritize recent DOPs
+    const sortedKeys = await Promise.all(keys.map(async (key) => {
+      try {
+        const data = await store.get(key);
+        if (data) {
+          const persona = JSON.parse(data);
+          return { key, created: new Date(persona.created || '1970-01-01') };
+        }
+      } catch (error) {
+        console.warn(`Failed to read persona ${key}:`, error.message);
+      }
+      return { key, created: new Date('1970-01-01') };
+    }));
+    
+    // Sort by creation date (newest first)
+    sortedKeys.sort((a, b) => b.created - a.created);
+    const prioritizedKeys = sortedKeys.map(item => item.key);
+    
+    console.log(`Processing ${prioritizedKeys.length} personas, newest first...`);
+    const results = await processWithConcurrency(store, prioritizedKeys, timeLimit);
 
     // Calculate summary stats
     const summary = results.reduce((acc, r) => {
