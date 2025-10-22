@@ -263,11 +263,17 @@ async function processPersona(store, key, timeLimit) {
  * Start video generation for a new persona
  */
 async function startVideoGenerationForPersona(store, key, persona) {
-  console.log(`[${key}] Starting video generation process...`);
+  console.log(`[${key}] ===== STARTING VIDEO GENERATION =====`);
+  console.log(`[${key}] Persona status:`, persona.status);
+  console.log(`[${key}] Persona dopId:`, persona.dopId);
+  console.log(`[${key}] Persona name:`, persona.name);
+  console.log(`[${key}] Persona images count:`, persona.images ? persona.images.length : 0);
+  console.log(`[${key}] Persona prompts count:`, persona.prompts ? persona.prompts.length : 0);
   
   try {
     // Import heygen-proxy functions directly
     const heygenProxy = require('./heygen-proxy');
+    console.log(`[${key}] HeyGen proxy imported successfully`);
     
     // Step 1: Upload photo to HeyGen (skip if already uploaded)
     let uploadedImageKey = persona.heygenImageKey; // Check if already uploaded
