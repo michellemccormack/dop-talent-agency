@@ -154,18 +154,23 @@ async function triggerVideoGeneration(dopId, persona) {
 }
 
 exports.handler = async (event) => {
-  console.log('[dop-uploads] START');
+  console.log('[dop-uploads] ===== STARTING DOP UPLOAD =====');
+  console.log('[dop-uploads] HTTP Method:', event.httpMethod);
+  console.log('[dop-uploads] Headers:', JSON.stringify(event.headers, null, 2));
+  console.log('[dop-uploads] Body length:', event.body ? event.body.length : 0);
   
   if (event.httpMethod === 'OPTIONS') {
+    console.log('[dop-uploads] OPTIONS request, returning CORS headers');
     return { statusCode: 204, headers: CORS };
   }
   
   if (event.httpMethod !== 'POST') {
+    console.log('[dop-uploads] ERROR: Method not allowed:', event.httpMethod);
     return jsonResponse(405, { error: 'Method not allowed' });
   }
 
   try {
-    console.log('[dop-uploads] Parsing body');
+    console.log('[dop-uploads] Parsing request body...');
     const body = JSON.parse(event.body || '{}');
     
     const photo = body.photo || body.imageBase64;
@@ -175,36 +180,56 @@ exports.handler = async (event) => {
     const bioFacts = Array.isArray(body.bioFacts) ? body.bioFacts : [];
     const email = (body.email || '').trim();
     
+    console.log('[dop-uploads] Request data parsed:');
+    console.log('[dop-uploads] - Name:', name);
+    console.log('[dop-uploads] - Bio length:', bio.length);
+    console.log('[dop-uploads] - Bio facts count:', bioFacts.length);
+    console.log('[dop-uploads] - Email:', email ? 'provided' : 'not provided');
+    console.log('[dop-uploads] - Photo data length:', photo ? photo.length : 0);
+    console.log('[dop-uploads] - Voice data length:', voice ? voice.length : 0);
+    
     if (!photo || !voice) {
       return jsonResponse(400, { error: 'Both photo and voice required' });
     }
     
-    console.log('[dop-uploads] Generating dopId');
+    console.log('[dop-uploads] Generating dopId...');
     const dopId = 'dop_' + randomUUID().replace(/-/g, '');
+    console.log('[dop-uploads] Generated dopId:', dopId);
     
-    console.log('[dop-uploads] Decoding files');
+    console.log('[dop-uploads] Decoding files...');
+    console.log('[dop-uploads] - Photo data prefix:', photo ? photo.substring(0, 50) + '...' : 'none');
+    console.log('[dop-uploads] - Voice data prefix:', voice ? voice.substring(0, 50) + '...' : 'none');
+    
     const imgBuf = Buffer.from(stripDataPrefix(photo), 'base64');
     const vocBuf = Buffer.from(stripDataPrefix(voice), 'base64');
-    console.log('[dop-uploads] Image:', imgBuf.length, 'bytes');
-    console.log('[dop-uploads] Voice:', vocBuf.length, 'bytes');
+    console.log('[dop-uploads] Decoded files:');
+    console.log('[dop-uploads] - Image:', imgBuf.length, 'bytes');
+    console.log('[dop-uploads] - Voice:', vocBuf.length, 'bytes');
     
-    console.log('[dop-uploads] Storing files');
+    console.log('[dop-uploads] Initializing blob store...');
     const store = uploadsStore();
+    console.log('[dop-uploads] Blob store initialized successfully');
     const imageKey = 'images/' + dopId + '/photo.jpg';
     const voiceKey = 'voices/' + dopId + '/voice.webm';
+    console.log('[dop-uploads] File keys generated:');
+    console.log('[dop-uploads] - Image key:', imageKey);
+    console.log('[dop-uploads] - Voice key:', voiceKey);
     
+    console.log('[dop-uploads] Storing image to blob store...');
     await store.set(imageKey, imgBuf, { contentType: 'image/jpeg' });
-    console.log('[dop-uploads] Image stored');
+    console.log('[dop-uploads] Image stored successfully');
     
+    console.log('[dop-uploads] Storing voice to blob store...');
     await store.set(voiceKey, vocBuf, { contentType: 'audio/webm' });
-    console.log('[dop-uploads] Voice stored');
+    console.log('[dop-uploads] Voice stored successfully');
     
-    console.log('[dop-uploads] Creating persona');
+    console.log('[dop-uploads] Creating persona object...');
     
     // Helper to generate file URLs
     const fileUrl = function(key) {
       return '/.netlify/functions/dop-file?key=' + encodeURIComponent(key);
     };
+    console.log('[dop-uploads] File URL helper created');
     
     const persona = {
       dopId: dopId,
@@ -238,15 +263,20 @@ exports.handler = async (event) => {
     };
     
     const personaKey = 'personas/' + dopId + '.json';
+    console.log('[dop-uploads] Saving persona to blob store...');
+    console.log('[dop-uploads] - Persona key:', personaKey);
+    console.log('[dop-uploads] - Persona size:', JSON.stringify(persona).length, 'bytes');
+    
     await store.set(personaKey, JSON.stringify(persona), { 
       contentType: 'application/json'
     });
-    console.log('[dop-uploads] Persona saved, video generation will start in background...');
+    console.log('[dop-uploads] Persona saved successfully to blob store');
+    console.log('[dop-uploads] Video generation will start in background via scheduled processor...');
     
     // Don't trigger video generation here - let the scheduled processor handle it
     // This prevents timeout issues during upload
     
-    console.log('[dop-uploads] Success!');
+    console.log('[dop-uploads] ===== UPLOAD COMPLETED SUCCESSFULLY =====');
     
     return jsonResponse(200, {
       success: true,
@@ -258,12 +288,16 @@ exports.handler = async (event) => {
     });
     
   } catch (error) {
-    console.error('[dop-uploads] ERROR:', error.message);
-    console.error('[dop-uploads] Stack:', error.stack);
+    console.error('[dop-uploads] ===== UPLOAD FAILED =====');
+    console.error('[dop-uploads] ERROR TYPE:', error.name);
+    console.error('[dop-uploads] ERROR MESSAGE:', error.message);
+    console.error('[dop-uploads] ERROR STACK:', error.stack);
+    console.error('[dop-uploads] ===== END ERROR =====');
     
     return jsonResponse(500, {
       success: false,
-      error: error.message
+      error: error.message,
+      errorType: error.name
     });
   }
 };
