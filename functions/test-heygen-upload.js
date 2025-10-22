@@ -36,18 +36,15 @@ exports.handler = async (event) => {
     
     console.log('[test-heygen-upload] Image found, size:', imageBlob.length, 'bytes');
     
-    // Test HeyGen upload with FormData
-    const formData = new FormData();
-    const blob = new Blob([imageBlob], { type: 'image/jpeg' });
-    formData.append('file', blob, 'test.jpg');
-
+    // Test HeyGen upload with raw binary data
     console.log('[test-heygen-upload] Uploading to HeyGen...');
     const response = await fetch('https://upload.heygen.com/v1/asset', {
       method: 'POST',
       headers: {
+        'Content-Type': 'image/jpeg',
         'X-Api-Key': process.env.HEYGEN_API_KEY
       },
-      body: formData
+      body: imageBlob  // Send raw binary data
     });
 
     const responseText = await response.text();
