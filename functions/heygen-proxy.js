@@ -109,6 +109,17 @@ async function uploadPhoto({ imageUrl, name, imageKey }) {
     // Convert to Buffer to ensure proper binary format
     imageBlob = Buffer.from(imageBlob);
     console.log('[heygen-proxy] Retrieved image from blobs, size:', imageBlob.length, 'bytes');
+    
+    // Verify the image format by checking the first few bytes
+    const header = imageBlob.slice(0, 4);
+    console.log('[heygen-proxy] Image header bytes:', Array.from(header).map(b => b.toString(16).padStart(2, '0')).join(' '));
+    
+    // JPEG files start with FF D8 FF
+    if (header[0] === 0xFF && header[1] === 0xD8 && header[2] === 0xFF) {
+      console.log('[heygen-proxy] Image is confirmed JPEG format');
+    } else {
+      console.log('[heygen-proxy] WARNING: Image may not be JPEG format');
+    }
   } else {
     // Fetch the image from the URL (fallback)
     console.log('[heygen-proxy] Fetching image from URL:', imageUrl.substring(0, 50) + '...');
