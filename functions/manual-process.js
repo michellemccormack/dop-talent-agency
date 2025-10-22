@@ -59,7 +59,11 @@ exports.handler = async (event) => {
           heygenAvatarId: persona.heygenAvatarId,
           pending: persona.pending,
           videos: persona.videos,
-          prompts: persona.prompts
+          prompts: persona.prompts,
+          images: persona.images,
+          voices: persona.voices,
+          bioFacts: persona.bioFacts,
+          ownerEmail: persona.ownerEmail
         }
       })
     };
