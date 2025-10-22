@@ -308,7 +308,8 @@ async function generateVideo({ text, avatarId, voiceId }) {
     video_inputs: [{
       character: {
         type: 'talking_photo',
-        talking_photo_id: avatarId
+        talking_photo_id: avatarId,
+        scale: 1.0
       },
       voice: {
         type: 'text',
@@ -316,14 +317,18 @@ async function generateVideo({ text, avatarId, voiceId }) {
         voice_id: voiceId || 'default'
       }
     }],
+    dimension: {
+      width: 1080,
+      height: 1920
+    },
     aspect_ratio: '9:16',
     test: false
   };
 
-  const response = await fetch(`${HEYGEN_API_BASE}/v1/video/generate`, {
+  const response = await fetch(`${HEYGEN_API_BASE}/v2/video/generate`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${HEYGEN_API_KEY}`,
+      'X-Api-Key': HEYGEN_API_KEY,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify(requestBody)
