@@ -175,23 +175,54 @@ async function uploadPhoto({ imageUrl, name, imageKey }) {
   };
 }
 
-// Create photo avatar group - SKIP FOR NOW, use image key directly
+// Create photo avatar group
 async function createAvatarGroup({ imageKey, name }) {
   if (!imageKey) {
     throw new Error('imageKey is required');
   }
 
-  console.log('[heygen-proxy] Skipping avatar group creation, using image key directly:', imageKey);
+  console.log('[heygen-proxy] Creating photo avatar group with image key:', imageKey);
 
-  // For now, skip avatar group creation and use the image key directly
-  // This is a workaround until we find the correct HeyGen API endpoint
+  const requestBody = {
+    name: name || 'DOP Avatar',
+    avatar_image_ids: [imageKey]
+  };
+
+  const response = await fetch(`${HEYGEN_API_BASE}/v2/photo_avatar/group`, {
+    method: 'POST',
+    headers: {
+      'X-Api-Key': HEYGEN_API_KEY,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify(requestBody)
+  });
+
+  const responseText = await response.text();
+  console.log('[heygen-proxy] Avatar group response status:', response.status);
+
+  let data;
+  try {
+    data = JSON.parse(responseText);
+  } catch (parseError) {
+    console.error('[heygen-proxy] Failed to parse response:', responseText.substring(0, 500));
+    throw new Error(`HeyGen avatar group creation returned non-JSON response: ${responseText.substring(0, 200)}`);
+  }
+  
+  if (!response.ok) {
+    console.error('[heygen-proxy] Avatar group creation error:', data);
+    throw new Error(`Avatar group creation failed: ${data.message || response.statusText}`);
+  }
+
+  console.log('[heygen-proxy] Avatar group created successfully:', data.data?.id);
+
   return {
     statusCode: 200,
     headers: { "Content-Type": "application/json", ...corsHeaders },
     body: JSON.stringify({
       success: true,
-      avatar_group_id: imageKey, // Use image key as avatar group ID
-      message: 'Avatar group creation skipped, using image key directly'
+      avatar_group_id: data.data?.id,
+      message: 'Avatar group created successfully'
     })
   };
 }
@@ -282,16 +313,46 @@ async function getAvatarId({ avatarGroupId }) {
     throw new Error('avatarGroupId is required');
   }
 
-  console.log('[heygen-proxy] Skipping avatar ID retrieval, using avatarGroupId directly:', avatarGroupId);
+  console.log('[heygen-proxy] Getting avatar ID from group:', avatarGroupId);
 
-  // For now, skip avatar ID retrieval and use the avatarGroupId directly
-  // This is a workaround until we find the correct HeyGen API endpoint
+  const response = await fetch(`${HEYGEN_API_BASE}/v2/photo_avatar/group/${avatarGroupId}`, {
+    method: 'GET',
+    headers: {
+      'X-Api-Key': HEYGEN_API_KEY,
+      'Accept': 'application/json'
+    }
+  });
+
+  const responseText = await response.text();
+  console.log('[heygen-proxy] Avatar group info response status:', response.status);
+
+  let data;
+  try {
+    data = JSON.parse(responseText);
+  } catch (parseError) {
+    console.error('[heygen-proxy] Failed to parse response:', responseText.substring(0, 500));
+    throw new Error(`HeyGen avatar group info returned non-JSON response: ${responseText.substring(0, 200)}`);
+  }
+  
+  if (!response.ok) {
+    console.error('[heygen-proxy] Avatar group info error:', data);
+    throw new Error(`Avatar group info failed: ${data.message || response.statusText}`);
+  }
+
+  // Get the first avatar ID from the group
+  const avatarId = data.data?.avatar_list?.[0]?.avatar_id;
+  if (!avatarId) {
+    throw new Error('No avatar ID found in group');
+  }
+
+  console.log('[heygen-proxy] Got avatar ID:', avatarId);
+
   return {
     statusCode: 200,
     headers: { "Content-Type": "application/json", ...corsHeaders },
     body: JSON.stringify({
       success: true,
-      avatar_id: avatarGroupId // Use avatarGroupId as avatar_id
+      avatar_id: avatarId
     })
   };
 }
