@@ -117,17 +117,14 @@ async function uploadPhoto({ imageUrl, name, imageKey }) {
     imageBlob = Buffer.from(imageBuffer);
   }
 
-  // Use v1/asset endpoint with FormData
-  const formData = new FormData();
-  const blob = new Blob([imageBlob], { type: 'image/jpeg' });
-  formData.append('file', blob, `${name || 'avatar'}.jpg`);
-
+  // Use v1/asset endpoint with raw binary data
   const response = await fetch(`${HEYGEN_UPLOAD_BASE}/v1/asset`, {
     method: 'POST',
     headers: {
+      'Content-Type': 'image/jpeg',
       'X-Api-Key': HEYGEN_API_KEY
     },
-    body: formData
+    body: imageBlob  // Send raw binary data, NOT FormData
   });
 
   const responseText = await response.text();
