@@ -269,62 +269,95 @@ async function startVideoGenerationForPersona(store, key, persona) {
     // Import heygen-proxy functions directly
     const heygenProxy = require('./heygen-proxy');
     
-    // Step 1: Upload photo to HeyGen
-    const imageKey = persona.images[0].key;
-    const uploadEvent = {
-      httpMethod: 'POST',
-      body: JSON.stringify({
-        action: 'upload_photo',
-        imageKey: imageKey,
-        name: persona.name || 'DOP'
-      })
-    };
+    // Step 1: Upload photo to HeyGen (skip if already uploaded)
+    let uploadedImageKey = persona.heygenImageKey; // Check if already uploaded
     
-    const uploadResult = await heygenProxy.handler(uploadEvent);
-    if (uploadResult.statusCode !== 200) {
-      throw new Error('Photo upload to HeyGen failed');
+    if (!uploadedImageKey) {
+      console.log(`[${key}] Uploading photo to HeyGen...`);
+      const imageKey = persona.images[0].key;
+      const uploadEvent = {
+        httpMethod: 'POST',
+        body: JSON.stringify({
+          action: 'upload_photo',
+          imageKey: imageKey,
+          name: persona.name || 'DOP'
+        })
+      };
+      
+      const uploadResult = await heygenProxy.handler(uploadEvent);
+      if (uploadResult.statusCode !== 200) {
+        throw new Error('Photo upload to HeyGen failed');
+      }
+      
+      const uploadData = JSON.parse(uploadResult.body);
+      uploadedImageKey = uploadData.image_key;
+      console.log(`[${key}] Photo uploaded to HeyGen:`, uploadedImageKey);
+      
+      // Save the HeyGen image key to avoid re-uploading
+      persona.heygenImageKey = uploadedImageKey;
+      await store.set(key, JSON.stringify(persona), { contentType: 'application/json' });
+    } else {
+      console.log(`[${key}] Photo already uploaded to HeyGen:`, uploadedImageKey);
     }
     
-    const uploadData = JSON.parse(uploadResult.body);
-    const uploadedImageKey = uploadData.image_key;
-    console.log(`[${key}] Photo uploaded to HeyGen:`, uploadedImageKey);
+    // Step 2: Create avatar group (skip if already created)
+    let avatarGroupId = persona.heygenAvatarGroupId; // Check if already created
     
-    // Step 2: Create avatar group
-    const groupEvent = {
-      httpMethod: 'POST',
-      body: JSON.stringify({
-        action: 'create_avatar_group',
-        imageKey: uploadedImageKey,
-        name: persona.name || 'DOP'
-      })
-    };
-    
-    const groupResult = await heygenProxy.handler(groupEvent);
-    if (groupResult.statusCode !== 200) {
-      throw new Error('Avatar group creation failed');
+    if (!avatarGroupId) {
+      console.log(`[${key}] Creating avatar group...`);
+      const groupEvent = {
+        httpMethod: 'POST',
+        body: JSON.stringify({
+          action: 'create_avatar_group',
+          imageKey: uploadedImageKey,
+          name: persona.name || 'DOP'
+        })
+      };
+      
+      const groupResult = await heygenProxy.handler(groupEvent);
+      if (groupResult.statusCode !== 200) {
+        throw new Error('Avatar group creation failed');
+      }
+      
+      const groupData = JSON.parse(groupResult.body);
+      avatarGroupId = groupData.avatar_group_id;
+      console.log(`[${key}] Avatar group created:`, avatarGroupId);
+      
+      // Save the avatar group ID to avoid re-creating
+      persona.heygenAvatarGroupId = avatarGroupId;
+      await store.set(key, JSON.stringify(persona), { contentType: 'application/json' });
+    } else {
+      console.log(`[${key}] Avatar group already created:`, avatarGroupId);
     }
     
-    const groupData = JSON.parse(groupResult.body);
-    const avatarGroupId = groupData.avatar_group_id;
-    console.log(`[${key}] Avatar group created:`, avatarGroupId);
+    // Step 3: Get avatar ID (skip if already retrieved)
+    let avatarId = persona.heygenAvatarId; // Check if already retrieved
     
-    // Step 3: Get avatar ID
-    const avatarEvent = {
-      httpMethod: 'POST',
-      body: JSON.stringify({
-        action: 'get_avatar_id',
-        avatarGroupId: avatarGroupId
-      })
-    };
-    
-    const avatarResult = await heygenProxy.handler(avatarEvent);
-    if (avatarResult.statusCode !== 200) {
-      throw new Error('Failed to get avatar ID');
+    if (!avatarId) {
+      console.log(`[${key}] Getting avatar ID...`);
+      const avatarEvent = {
+        httpMethod: 'POST',
+        body: JSON.stringify({
+          action: 'get_avatar_id',
+          avatarGroupId: avatarGroupId
+        })
+      };
+      
+      const avatarResult = await heygenProxy.handler(avatarEvent);
+      if (avatarResult.statusCode !== 200) {
+        throw new Error('Failed to get avatar ID');
+      }
+      
+      const avatarData = JSON.parse(avatarResult.body);
+      avatarId = avatarData.avatar_id;
+      console.log(`[${key}] Got avatar ID:`, avatarId);
+      
+      // Save the avatar ID to avoid re-retrieving
+      persona.heygenAvatarId = avatarId;
+      await store.set(key, JSON.stringify(persona), { contentType: 'application/json' });
+    } else {
+      console.log(`[${key}] Avatar ID already retrieved:`, avatarId);
     }
-    
-    const avatarData = JSON.parse(avatarResult.body);
-    const avatarId = avatarData.avatar_id;
-    console.log(`[${key}] Got avatar ID:`, avatarId);
     
     // Step 4: Generate videos for each prompt
     const videoResults = [];
