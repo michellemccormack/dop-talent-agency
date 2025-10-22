@@ -37,6 +37,9 @@ exports.handler = async (event) => {
     console.log('[test-heygen-upload] Image found, size:', imageBlob.length, 'bytes');
     
     // Test HeyGen upload with raw binary data
+    // Convert Buffer to Uint8Array for proper binary data
+    const binaryData = new Uint8Array(imageBlob);
+    
     console.log('[test-heygen-upload] Uploading to HeyGen...');
     const response = await fetch('https://upload.heygen.com/v1/asset', {
       method: 'POST',
@@ -44,7 +47,7 @@ exports.handler = async (event) => {
         'Content-Type': 'image/jpeg',
         'X-Api-Key': process.env.HEYGEN_API_KEY
       },
-      body: imageBlob  // Send raw binary data
+      body: binaryData  // Send raw binary data as Uint8Array
     });
 
     const responseText = await response.text();

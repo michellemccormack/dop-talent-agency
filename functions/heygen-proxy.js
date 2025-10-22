@@ -118,13 +118,16 @@ async function uploadPhoto({ imageUrl, name, imageKey }) {
   }
 
   // Use v1/asset endpoint with raw binary data
+  // Convert Buffer to Uint8Array for proper binary data
+  const binaryData = new Uint8Array(imageBlob);
+  
   const response = await fetch(`${HEYGEN_UPLOAD_BASE}/v1/asset`, {
     method: 'POST',
     headers: {
       'Content-Type': 'image/jpeg',
       'X-Api-Key': HEYGEN_API_KEY
     },
-    body: imageBlob  // Send raw binary data, NOT FormData
+    body: binaryData  // Send raw binary data as Uint8Array
   });
 
   const responseText = await response.text();
