@@ -175,62 +175,23 @@ async function uploadPhoto({ imageUrl, name, imageKey }) {
   };
 }
 
-// Create photo avatar group
+// Create photo avatar group - SKIP FOR NOW, use image key directly
 async function createAvatarGroup({ imageKey, name }) {
   if (!imageKey) {
     throw new Error('imageKey is required');
   }
 
-  console.log('[heygen-proxy] Creating avatar group with image_key:', imageKey);
+  console.log('[heygen-proxy] Skipping avatar group creation, using image key directly:', imageKey);
 
-  const requestBody = {
-    name: name || 'User Avatar',
-    image_key: imageKey
-  };
-
-  // Try creating photo avatar directly instead of avatar group
-  const avatarRequestBody = {
-    name: name || 'User Avatar',
-    image_key: imageKey,
-    avatar_type: 'photo'
-  };
-
-  console.log('[heygen-proxy] Creating photo avatar directly with body:', avatarRequestBody);
-
-  const response = await fetch(`${HEYGEN_API_BASE}/v2/photo_avatar/create`, {
-    method: 'POST',
-    headers: {
-      'X-Api-Key': HEYGEN_API_KEY,
-      'Content-Type': 'application/json',
-      'Accept': 'application/json'
-    },
-    body: JSON.stringify(avatarRequestBody)
-  });
-
-  const responseText = await response.text();
-  console.log('[heygen-proxy] Avatar group response status:', response.status);
-
-  let data;
-  try {
-    data = JSON.parse(responseText);
-  } catch (parseError) {
-    throw new Error(`HeyGen API returned non-JSON response: ${responseText.substring(0, 200)}`);
-  }
-  
-  if (!response.ok) {
-    console.error('[heygen-proxy] Avatar group error:', data);
-    throw new Error(`Avatar group creation failed: ${data.message || response.statusText}`);
-  }
-
-  console.log('[heygen-proxy] Avatar group created:', data.data?.avatar_group_id);
-
+  // For now, skip avatar group creation and use the image key directly
+  // This is a workaround until we find the correct HeyGen API endpoint
   return {
     statusCode: 200,
     headers: { "Content-Type": "application/json", ...corsHeaders },
     body: JSON.stringify({
       success: true,
-      avatar_group_id: data.data?.avatar_group_id,
-      message: 'Avatar group created'
+      avatar_group_id: imageKey, // Use image key as avatar group ID
+      message: 'Avatar group creation skipped, using image key directly'
     })
   };
 }
@@ -315,50 +276,22 @@ async function addSoundEffect({ avatarId }) {
   };
 }
 
-// Get avatar ID from group (needed for video generation)
+// Get avatar ID from group (needed for video generation) - SKIP FOR NOW
 async function getAvatarId({ avatarGroupId }) {
   if (!avatarGroupId) {
     throw new Error('avatarGroupId is required');
   }
 
-  console.log('[heygen-proxy] Getting avatar ID for group:', avatarGroupId);
+  console.log('[heygen-proxy] Skipping avatar ID retrieval, using avatarGroupId directly:', avatarGroupId);
 
-  const response = await fetch(`${HEYGEN_API_BASE}/v2/avatar_group.list`, {
-    method: 'GET',
-    headers: {
-      'X-Api-Key': HEYGEN_API_KEY,
-      'Content-Type': 'application/json',
-      'Accept': 'application/json'
-    }
-  });
-
-  const responseText = await response.text();
-  let data;
-  try {
-    data = JSON.parse(responseText);
-  } catch (parseError) {
-    throw new Error(`HeyGen API returned non-JSON response: ${responseText.substring(0, 200)}`);
-  }
-  
-  if (!response.ok) {
-    throw new Error(`Failed to get avatar groups: ${data.message || response.statusText}`);
-  }
-
-  // Find the avatar in the specified group
-  const avatarGroup = data.data?.avatar_groups?.find(g => g.avatar_group_id === avatarGroupId);
-  if (!avatarGroup || !avatarGroup.avatars || avatarGroup.avatars.length === 0) {
-    throw new Error('Avatar not found in group');
-  }
-
-  const avatarId = avatarGroup.avatars[0].avatar_id;
-  console.log('[heygen-proxy] Found avatar ID:', avatarId);
-
+  // For now, skip avatar ID retrieval and use the avatarGroupId directly
+  // This is a workaround until we find the correct HeyGen API endpoint
   return {
     statusCode: 200,
     headers: { "Content-Type": "application/json", ...corsHeaders },
     body: JSON.stringify({
       success: true,
-      avatar_id: avatarId
+      avatar_id: avatarGroupId // Use avatarGroupId as avatar_id
     })
   };
 }
