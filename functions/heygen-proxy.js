@@ -188,47 +188,24 @@ async function createAvatarGroup({ imageKey, name }) {
     image_key: imageKey
   };
 
-  // Try different API endpoints to find the correct one
-  const endpoints = [
-    `${HEYGEN_API_BASE}/v1/avatar_group.create`,
-    `${HEYGEN_API_BASE}/v2/photo_avatar/avatar_group/create`,
-    `${HEYGEN_API_BASE}/v1/photo_avatar/avatar_group/create`,
-    `${HEYGEN_API_BASE}/v2/avatar_group/create`
-  ];
-  
-  let response;
-  let lastError;
-  
-  for (const endpoint of endpoints) {
-    console.log('[heygen-proxy] Trying endpoint:', endpoint);
-    try {
-      response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'X-Api-Key': HEYGEN_API_KEY,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
-      });
-      
-      if (response.ok) {
-        console.log('[heygen-proxy] Success with endpoint:', endpoint);
-        break;
-      } else {
-        const errorText = await response.text();
-        console.log('[heygen-proxy] Endpoint failed:', endpoint, 'Status:', response.status, 'Error:', errorText);
-        lastError = errorText;
-      }
-    } catch (error) {
-      console.log('[heygen-proxy] Endpoint error:', endpoint, error.message);
-      lastError = error.message;
-    }
-  }
-  
-  if (!response || !response.ok) {
-    throw new Error(`All avatar group endpoints failed. Last error: ${lastError}`);
-  }
+  // Try creating photo avatar directly instead of avatar group
+  const avatarRequestBody = {
+    name: name || 'User Avatar',
+    image_key: imageKey,
+    avatar_type: 'photo'
+  };
+
+  console.log('[heygen-proxy] Creating photo avatar directly with body:', avatarRequestBody);
+
+  const response = await fetch(`${HEYGEN_API_BASE}/v2/photo_avatar/create`, {
+    method: 'POST',
+    headers: {
+      'X-Api-Key': HEYGEN_API_KEY,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify(avatarRequestBody)
+  });
 
   const responseText = await response.text();
   console.log('[heygen-proxy] Avatar group response status:', response.status);
