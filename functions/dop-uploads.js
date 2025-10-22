@@ -216,8 +216,11 @@ exports.handler = async (event) => {
     console.log('[dop-uploads] - Voice key:', voiceKey);
     
     console.log('[dop-uploads] Storing image to blob store...');
-    await store.set(imageKey, imgBuf, { contentType: 'image/jpeg' });
-    console.log('[dop-uploads] Image stored successfully');
+    await store.set(imageKey, imgBuf, { 
+      contentType: 'image/jpeg',
+      metadata: { originalName: 'photo.jpg' }
+    });
+    console.log('[dop-uploads] Image stored successfully with correct content type');
     
     console.log('[dop-uploads] Storing voice to blob store...');
     await store.set(voiceKey, vocBuf, { contentType: 'audio/webm' });

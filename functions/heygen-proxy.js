@@ -102,10 +102,13 @@ async function uploadPhoto({ imageUrl, name, imageKey }) {
     // Get image directly from Netlify Blobs
     const { uploadsStore } = require('./_lib/blobs');
     const store = uploadsStore();
-    imageBlob = await store.get(imageKey);
+    imageBlob = await store.get(imageKey, { type: 'arrayBuffer' });
     if (!imageBlob) {
       throw new Error('Image not found in storage');
     }
+    // Convert to Buffer to ensure proper binary format
+    imageBlob = Buffer.from(imageBlob);
+    console.log('[heygen-proxy] Retrieved image from blobs, size:', imageBlob.length, 'bytes');
   } else {
     // Fetch the image from the URL (fallback)
     console.log('[heygen-proxy] Fetching image from URL:', imageUrl.substring(0, 50) + '...');
