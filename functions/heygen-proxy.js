@@ -99,16 +99,20 @@ async function uploadPhoto({ imageUrl, name, imageKey }) {
   let imageBlob;
   
   if (imageKey) {
-    // Get image directly from Netlify Blobs
-    const { uploadsStore } = require('./_lib/blobs');
-    const store = uploadsStore();
-    imageBlob = await store.get(imageKey, { type: 'arrayBuffer' });
-    if (!imageBlob) {
-      throw new Error('Image not found in storage');
+    // Use dop-file function to get image with correct content type
+    const baseUrl = process.env.URL || 'https://dopple-talent-demo.netlify.app';
+    const imageUrl = `${baseUrl}/.netlify/functions/dop-file?key=${encodeURIComponent(imageKey)}`;
+    console.log('[heygen-proxy] Fetching image via dop-file function:', imageUrl);
+    
+    const imageResponse = await fetch(imageUrl);
+    if (!imageResponse.ok) {
+      throw new Error(`Failed to fetch image via dop-file: ${imageResponse.status}`);
     }
-    // Convert to Buffer to ensure proper binary format
-    imageBlob = Buffer.from(imageBlob);
-    console.log('[heygen-proxy] Retrieved image from blobs, size:', imageBlob.length, 'bytes');
+    
+    const imageBuffer = await imageResponse.arrayBuffer();
+    imageBlob = Buffer.from(imageBuffer);
+    console.log('[heygen-proxy] Retrieved image via dop-file, size:', imageBlob.length, 'bytes');
+    console.log('[heygen-proxy] Response content-type:', imageResponse.headers.get('content-type'));
     
     // Verify the image format by checking the first few bytes
     const header = imageBlob.slice(0, 4);
