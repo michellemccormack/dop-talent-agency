@@ -23,7 +23,7 @@ exports.handler = async (event) => {
     });
     
     // Get the latest DOP
-    const personaKey = 'personas/dop_eb2c2a793c094d1281cf4d829a86626f.json';
+    const personaKey = 'personas/dop_18cf41e0172349da832ad0ce6f9936e6.json';
     
     console.log('[refresh-persona] Loading persona:', personaKey);
     const personaData = await store.get(personaKey);
