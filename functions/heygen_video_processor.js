@@ -80,8 +80,12 @@ function hasAllVideos(persona) {
 async function processPersona(store, key, timeLimit) {
   const startTime = Date.now();
   
+  console.log(`\n[${key}] ===== PROCESSING PERSONA =====`);
+  console.log(`[${key}] Starting processing at ${new Date().toISOString()}`);
+  
   try {
     // Read persona data
+    console.log(`[${key}] Loading persona data...`);
     const raw = await store.get(key, { type: 'text' });
     if (!raw) {
       console.log(`[${key}] Blob not found, skipping`);
@@ -91,6 +95,7 @@ async function processPersona(store, key, timeLimit) {
     let persona;
     try {
       persona = JSON.parse(raw);
+      console.log(`[${key}] Persona loaded: dopId=${persona.dopId}, status=${persona.status}, created=${persona.created}`);
     } catch (parseError) {
       console.error(`[${key}] Invalid JSON:`, parseError);
       return { key, status: 'skip', reason: 'bad json' };
@@ -108,6 +113,10 @@ async function processPersona(store, key, timeLimit) {
     persona.pending = persona.pending || {};
 
     // Check if already complete
+    console.log(`[${key}] Checking completion status...`);
+    console.log(`[${key}] Pending keys: ${Object.keys(persona.pending).length}`);
+    console.log(`[${key}] Has all videos: ${hasAllVideos(persona)}`);
+    
     if (!Object.keys(persona.pending).length && hasAllVideos(persona)) {
       if (persona.status !== 'ready') {
         console.log(`[${key}] All videos present, marking ready`);
@@ -121,9 +130,11 @@ async function processPersona(store, key, timeLimit) {
 
     // If this is a new upload (status: 'uploaded'), start video generation
     if (persona.status === 'uploaded') {
-      console.log(`[${key}] New upload detected, starting video generation...`);
+      console.log(`[${key}] *** NEW UPLOAD DETECTED *** Starting video generation...`);
+      console.log(`[${key}] Persona details: dopId=${persona.dopId}, created=${persona.created}`);
       try {
         await startVideoGenerationForPersona(store, key, persona);
+        console.log(`[${key}] Video generation started successfully`);
         return { key, status: 'processing', changed: true };
       } catch (error) {
         console.error(`[${key}] Failed to start video generation:`, error);
@@ -425,10 +436,15 @@ async function processWithConcurrency(store, keys, timeLimit) {
   const results = [];
   const startTime = Date.now();
 
+  console.log(`Starting to process ${keys.length} personas with MAX_CONCURRENT=${MAX_CONCURRENT}`);
+  console.log(`Time limit: ${timeLimit}ms`);
+
   // Process in batches
   for (let i = 0; i < keys.length; i += MAX_CONCURRENT) {
     // Check global time limit
     const elapsed = Date.now() - startTime;
+    console.log(`Processing batch starting at index ${i}, elapsed: ${elapsed}ms`);
+    
     if (elapsed > timeLimit - 5000) { // Leave 5s buffer
       console.warn(`Approaching time limit (${elapsed}ms), stopping early. Processed ${i}/${keys.length} personas.`);
       break;
@@ -484,7 +500,15 @@ exports.handler = async (event) => {
       String(x.key || x).endsWith('.json')
     );
 
-    console.log(`Found ${items.length} persona(s)\n`);
+    console.log(`Found ${items.length} persona(s)`);
+    console.log('Persona keys:', items.map(item => item.key || item).slice(0, 5)); // Show first 5 keys
+    console.log('Looking for newest DOP: dop_18cf41e0172349da832ad0ce6f9936e6');
+    
+    // Check if the new DOP is in the list
+    const newDopKey = 'personas/dop_18cf41e0172349da832ad0ce6f9936e6.json';
+    const hasNewDop = items.some(item => (item.key || item) === newDopKey);
+    console.log(`New DOP found in list: ${hasNewDop}`);
+    console.log(''); // Empty line for readability
 
     if (items.length === 0) {
       return ok({
@@ -498,17 +522,20 @@ exports.handler = async (event) => {
     const keys = items.map(item => item.key || item);
     
     // Sort by creation time (newest first) to prioritize recent DOPs
+    console.log('Sorting personas by creation date...');
     const sortedKeys = await Promise.all(keys.map(async (key) => {
       try {
         const data = await store.get(key);
         if (data) {
           const persona = JSON.parse(data);
-          return { key, created: new Date(persona.created || '1970-01-01') };
+          const created = new Date(persona.created || '1970-01-01');
+          console.log(`Persona ${key}: created ${created.toISOString()}, status: ${persona.status}`);
+          return { key, created, status: persona.status };
         }
       } catch (error) {
         console.warn(`Failed to read persona ${key}:`, error.message);
       }
-      return { key, created: new Date('1970-01-01') };
+      return { key, created: new Date('1970-01-01'), status: 'unknown' };
     }));
     
     // Sort by creation date (newest first)
@@ -516,6 +543,11 @@ exports.handler = async (event) => {
     const prioritizedKeys = sortedKeys.map(item => item.key);
     
     console.log(`Processing ${prioritizedKeys.length} personas, newest first...`);
+    console.log('Top 3 personas to process:');
+    sortedKeys.slice(0, 3).forEach((item, index) => {
+      console.log(`${index + 1}. ${item.key} - ${item.created.toISOString()} - ${item.status}`);
+    });
+    
     const results = await processWithConcurrency(store, prioritizedKeys, timeLimit);
 
     // Calculate summary stats
