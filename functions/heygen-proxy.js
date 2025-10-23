@@ -325,6 +325,9 @@ async function generateVideo({ text, avatarId, voiceId }) {
     test: false
   };
 
+  console.log('[heygen-proxy] Request body:', JSON.stringify(requestBody, null, 2));
+  console.log('[heygen-proxy] Making request to:', `${HEYGEN_API_BASE}/v2/video/generate`);
+
   const response = await fetch(`${HEYGEN_API_BASE}/v2/video/generate`, {
     method: 'POST',
     headers: {
@@ -335,15 +338,22 @@ async function generateVideo({ text, avatarId, voiceId }) {
   });
 
   const responseText = await response.text();
+  console.log('[heygen-proxy] Video generation response status:', response.status);
+  console.log('[heygen-proxy] Video generation response headers:', Object.fromEntries(response.headers.entries()));
+  console.log('[heygen-proxy] Video generation response body:', responseText);
+  
   let data;
   try {
     data = JSON.parse(responseText);
   } catch (parseError) {
-    throw new Error(`HeyGen API returned non-JSON response: ${responseText.substring(0, 200)}`);
+    console.error('[heygen-proxy] Failed to parse response as JSON:', responseText);
+    throw new Error(`HeyGen API returned non-JSON response: ${responseText.substring(0, 500)}`);
   }
-  
+
   if (!response.ok) {
-    throw new Error(`Video generation failed: ${data.message || response.statusText}`);
+    console.error('[heygen-proxy] Video generation failed with status:', response.status);
+    console.error('[heygen-proxy] Video generation error response:', data);
+    throw new Error(`Video generation failed: ${data.message || data.error || response.statusText}`);
   }
 
   return {
