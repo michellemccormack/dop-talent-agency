@@ -278,6 +278,27 @@ exports.handler = async (event) => {
     const fileUrl = (k) => `/.netlify/functions/dop-file?key=${encodeURIComponent(k)}`;
     const publicImageUrl = `${BASE_URL}${fileUrl(imageKey)}`;
 
+    // --- save persona to Blobs IMMEDIATELY so chat can load it even if we timeout below ---
+    const personaKey = `personas/${dopId}.json`;
+    const prompts = generatePersonaPrompts(bio, name);
+    const minimalPersona = {
+      dopId,
+      name: name || 'My DOP',
+      bio: bio || '',
+      created: new Date().toISOString(),
+      systemPrompt: generateSystemPrompt(bio, name),
+      ...(paid ? { paid: true } : {}),
+      images: [{ key: imageKey, url: fileUrl(imageKey), type: imageType, name: imageName, ts: Date.now() }],
+      voices: [{ key: voiceKey, url: fileUrl(voiceKey), type: audioType, name: audioName, ts: Date.now() }],
+      voice: { id: null },
+      heygen: { avatar_id: null },
+      prompts,
+      status: 'pending',
+      videos: []
+    };
+    await store.set(personaKey, JSON.stringify(minimalPersona), { contentType: 'application/json; charset=utf-8' });
+    console.log('[dop-uploads] saved minimal persona:', personaKey);
+
     // --- optional: clone voice + create heygen avatar (with timeouts so we return before Netlify kills the function) ---
     let voice_id = null;
     let voiceCloneError = null;
@@ -297,8 +318,7 @@ exports.handler = async (event) => {
       console.error('[dop-uploads] avatar creation failed:', e);
     }
 
-    // --- build persona JSON ---
-    const prompts = generatePersonaPrompts(bio, name);
+    // --- build full persona and overwrite in Blobs ---
     const pending = {};
     const failures = [];
 
@@ -352,10 +372,8 @@ exports.handler = async (event) => {
       failures: failures.length > 0 ? failures : undefined
     };
 
-    const personaKey = `personas/${dopId}.json`;
     await store.set(personaKey, JSON.stringify(persona), { contentType: 'application/json; charset=utf-8' });
-    const verify = await store.get(personaKey, { type: 'text' }).catch(() => null);
-    console.log('[dop-uploads] saved persona key:', personaKey, 'read-back:', verify ? 'ok' : 'FAIL');
+    console.log('[dop-uploads] updated full persona:', personaKey);
 
     // Build accurate response message
     let message;
