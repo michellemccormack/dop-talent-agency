@@ -24,7 +24,7 @@ async function createCheckoutSession({
   form.success_url = dopId
     ? `${origin}/chat.html?id=${encodeURIComponent(dopId)}&session_id={CHECKOUT_SESSION_ID}`
     : `${origin}/pay-success.html?session_id={CHECKOUT_SESSION_ID}`;
-  form.cancel_url = dopId ? `${origin}/chat.html?id=${encodeURIComponent(dopId)}` : `${origin}/upload.html`;
+  form.cancel_url = dopId ? `${origin}/chat.html?id=${encodeURIComponent(dopId)}` : `${origin}/alter-ego`;
 
   if (priceId) {
     form['line_items[0][price]'] = priceId;
@@ -88,12 +88,15 @@ exports.handler = async (event) => {
     return { statusCode: 405, headers: corsHeaders(), body: 'Method Not Allowed' };
   }
 
-  let dopId = event.queryStringParameters?.dopId || event.queryStringParameters?.id || null;
+  const qsParams = event.queryStringParameters || {};
+  let dopId = qsParams.dopId || qsParams.id || null;
   if (event.httpMethod === 'POST' && event.body) {
     try {
       const body = typeof event.body === 'string' ? JSON.parse(event.body) : event.body;
       dopId = dopId || body.dopId || body.dop_id || null;
-    } catch (_) {}
+    } catch (e) {
+      // ignore parse error
+    }
   }
 
   try {
