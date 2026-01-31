@@ -536,28 +536,35 @@
           
           mediaController.showVideo();
         } else {
-          // Show hint after 6s so user isn't stuck with no guidance
-          var hintEl = qs('#loadingHint');
-          loadingHintTimer = setTimeout(function() { if (hintEl) hintEl.style.display = 'block'; }, 6000);
-          // Load personalized DOP (10s timeout so we don't spin forever)
-          const controller = new AbortController();
-          const timeoutId = setTimeout(function() { controller.abort(); }, 10000);
-          let response;
-          try {
-            response = await fetch(`/.netlify/functions/dop-persona?id=${encodeURIComponent(dopId)}`, { signal: controller.signal });
-          } catch (e) {
+          // Prefer persona from sessionStorage (just uploaded) so we don't depend on Blobs
+          var stored = null;
+          try { stored = sessionStorage.getItem('persona_' + dopId); } catch (e) {}
+          var persona = null;
+          if (stored) {
+            try { persona = JSON.parse(stored); } catch (e) {}
+          }
+          if (!persona) {
+            var hintEl = qs('#loadingHint');
+            loadingHintTimer = setTimeout(function() { if (hintEl) hintEl.style.display = 'block'; }, 6000);
+            var controller = new AbortController();
+            var timeoutId = setTimeout(function() { controller.abort(); }, 10000);
+            var response;
+            try {
+              response = await fetch(`/.netlify/functions/dop-persona?id=${encodeURIComponent(dopId)}`, { signal: controller.signal });
+            } catch (e) {
+              clearTimeout(timeoutId);
+              clearTimeout(loadingHintTimer);
+              if (e.name === 'AbortError') throw new Error('Loading took too long. Try refreshing or go back to create again.');
+              throw e;
+            }
             clearTimeout(timeoutId);
             clearTimeout(loadingHintTimer);
-            if (e.name === 'AbortError') throw new Error('Loading took too long. Try refreshing or go back to create again.');
-            throw e;
+            if (hintEl) hintEl.style.display = 'none';
+            if (!response.ok) {
+              throw new Error(`dop-persona returned ${response.status}`);
+            }
+            persona = await response.json();
           }
-          clearTimeout(timeoutId);
-          clearTimeout(loadingHintTimer);
-          if (hintEl) hintEl.style.display = 'none';
-          if (!response.ok) {
-            throw new Error(`dop-persona returned ${response.status}`);
-          }
-          const persona = await response.json();
           PERSONA_DATA = persona;
 
           if (persona.paid !== true) {

@@ -256,7 +256,10 @@
         return res.json();
       }).then(function(data) {
         setProgress('');
-        showResult('Saved. Your Alter Ego is ready. <br/><a href="/chat.html?id=' + data.dopId + '" style="color:var(--ok);">Open chat</a>');
+        if (data.persona && typeof data.dopId === 'string') {
+          try { sessionStorage.setItem('persona_' + data.dopId, JSON.stringify(data.persona)); } catch (e) {}
+        }
+        showResult('Saved. Your Alter Ego is ready. <br/><a href="/chat.html?id=' + encodeURIComponent(data.dopId) + '" style="color:var(--ok);">Open chat</a>');
       }).catch(function(err) {
         showError(err.message || String(err));
       }).finally(function() {

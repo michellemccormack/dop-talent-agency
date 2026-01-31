@@ -299,101 +299,13 @@ exports.handler = async (event) => {
     await store.set(personaKey, JSON.stringify(minimalPersona), { contentType: 'application/json; charset=utf-8' });
     console.log('[dop-uploads] saved minimal persona:', personaKey);
 
-    // --- optional: clone voice + create heygen avatar (with timeouts so we return before Netlify kills the function) ---
-    let voice_id = null;
-    let voiceCloneError = null;
-    try {
-      voice_id = await withTimeout(VOICE_CLONE_TIMEOUT_MS, createVoiceClone(vocBuf, name));
-    } catch (e) {
-      voiceCloneError = e.message || 'Voice clone timed out or failed';
-      console.error('[dop-uploads] voice clone failed:', e);
-    }
-
-    let avatar_id = null;
-    let avatarError = null;
-    try {
-      avatar_id = await withTimeout(HEYGEN_AVATAR_TIMEOUT_MS, createHeyGenAvatarFromImageUrl(publicImageUrl, name));
-    } catch (e) {
-      avatarError = e.message || 'Avatar creation timed out or failed';
-      console.error('[dop-uploads] avatar creation failed:', e);
-    }
-
-    // --- build full persona and overwrite in Blobs ---
-    const pending = {};
-    const failures = [];
-
-    // Try to queue all three HeyGen renders in parallel (with timeout so we don't block the response)
-    if (avatar_id) {
-      const queuePromises = prompts.map((p) => {
-        const script = name ? `Hi, I'm ${name}. ${p.text}` : p.text;
-        return withTimeout(HEYGEN_QUEUE_TIMEOUT_MS, queueHeyGenVideo(avatar_id, voice_id || 'default', script))
-          .then((task_id) => ({ key: p.key, task_id }))
-          .catch(() => ({ key: p.key, task_id: null }));
-      });
-
-      const results = await Promise.all(queuePromises);
-      
-      for (const { key, task_id } of results) {
-        if (task_id) {
-          pending[key] = { task_id, started_at: Date.now() };
-        } else {
-          failures.push(`Failed to queue video for prompt: ${key}`);
-        }
-      }
-    } else {
-      failures.push('Avatar creation failed; cannot queue videos');
-    }
-
-    // Determine realistic status
-    const hasQueuedVideos = Object.keys(pending).length > 0;
-    const status = hasQueuedVideos ? 'processing' : (avatar_id ? 'pending' : 'partial');
-
-    const persona = {
-      dopId,
-      name: name || 'My DOP',
-      bio: bio || '',
-      created: new Date().toISOString(),
-      systemPrompt: generateSystemPrompt(bio, name),
-      ...(paid ? { paid: true } : {}),
-
-      // Media
-      images: [{ key: imageKey, url: fileUrl(imageKey), type: imageType, name: imageName, ts: Date.now() }],
-      voices: [{ key: voiceKey, url: fileUrl(voiceKey), type: audioType, name: audioName, ts: Date.now() }],
-
-      // Engines
-      voice: { id: voice_id || null, error: voiceCloneError || undefined },
-      heygen: { avatar_id: avatar_id || null, error: avatarError || undefined },
-
-      // Conversation & video gen
-      prompts,
-      status,
-      videos: [],
-      pending: hasQueuedVideos ? pending : undefined,
-      failures: failures.length > 0 ? failures : undefined
-    };
-
-    await store.set(personaKey, JSON.stringify(persona), { contentType: 'application/json; charset=utf-8' });
-    console.log('[dop-uploads] updated full persona:', personaKey);
-
-    // Build accurate response message
-    let message;
-    if (hasQueuedVideos) {
-      message = `DOP saved. Queued ${Object.keys(pending).length} HeyGen videos.`;
-    } else if (avatar_id) {
-      message = 'DOP saved. Avatar created but video queueing failed.';
-    } else {
-      message = 'DOP saved with media files. Avatar/video generation unavailable.';
-    }
-
+    // Return immediately so the client always gets the persona (no timeout). Voice/avatar can be filled later.
     return ok({
       success: true,
       dopId,
-      voiceId: voice_id,
-      heygenAvatarId: avatar_id,
-      queued: Object.keys(pending).length,
-      message,
-      chatUrl: `/chat.html?id=${dopId}`,
-      warnings: failures.length > 0 ? failures : undefined
+      persona: minimalPersona,
+      message: 'DOP saved. Open chat to continue.',
+      chatUrl: `/chat.html?id=${dopId}`
     });
 
   } catch (e) {
