@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Create Your DOP - Dopple Talent Agency</title>
+  <title>Create Your Alter Ego</title>
   
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
@@ -115,8 +115,8 @@
 <body>
   <div class="container">
     <div class="header">
-      <h1>Create Your DOP</h1>
-      <p>Upload your photo and voice sample to create an AI doppelganger</p>
+      <h1>Create Your Alter Ego</h1>
+      <p>Upload your photo and voice to create your digital Alter Ego</p>
     </div>
 
     <!-- Pay gate: must pay before creating alter ego -->
@@ -179,9 +179,21 @@
         payErr.style.display = 'none';
         try {
           const res = await fetch('/.netlify/functions/create-checkout-session', { method: 'POST' });
-          const data = await res.json().catch(() => ({}));
+          const raw = await res.text();
+          let data = {};
+          try {
+            data = raw ? JSON.parse(raw) : {};
+          } catch (_) {
+            // 502 / gateway errors often return HTML
+            if (!res.ok) {
+              payErr.textContent = 'Server error (' + res.status + '). Check Netlify function logs for create-checkout-session.';
+              payErr.style.display = 'block';
+              payBtn.disabled = false;
+              return;
+            }
+          }
           if (!res.ok) {
-            payErr.textContent = data.error || 'Could not start checkout.';
+            payErr.textContent = (data && data.error) ? data.error : 'Could not start checkout.';
             payErr.style.display = 'block';
             payBtn.disabled = false;
             return;

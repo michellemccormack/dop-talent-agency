@@ -8,7 +8,7 @@
  * Optional: STRIPE_PRODUCT_NAME (default: "Alter Ego")
  */
 
-const qs = require('node:querystring');
+const qs = require('querystring');
 
 async function createCheckoutSession({
   secretKey,
@@ -100,13 +100,11 @@ exports.handler = async (event) => {
   }
 
   try {
-    const {
-      STRIPE_SECRET_KEY,
-      STRIPE_PRICE_ID,
-      STRIPE_AMOUNT_CENTS,
-      STRIPE_CURRENCY,
-      STRIPE_PRODUCT_NAME,
-    } = process.env;
+    const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
+    const STRIPE_PRICE_ID = process.env.STRIPE_PRICE_ID;
+    const STRIPE_AMOUNT_CENTS = process.env.STRIPE_AMOUNT_CENTS;
+    const STRIPE_CURRENCY = process.env.STRIPE_CURRENCY;
+    const STRIPE_PRODUCT_NAME = process.env.STRIPE_PRODUCT_NAME;
 
     if (!STRIPE_SECRET_KEY) {
       return { statusCode: 500, headers: { ...corsHeaders(), 'content-type': 'application/json' }, body: JSON.stringify({ error: 'Missing STRIPE_SECRET_KEY' }) };
@@ -151,6 +149,7 @@ exports.handler = async (event) => {
       body: JSON.stringify({ url }),
     };
   } catch (e) {
-    return err(500, e.message || 'Unexpected error');
+    const msg = (e && (e.message || e.toString)) ? (e.message || e.toString()) : 'Unexpected error';
+    return err(500, msg);
   }
 };
