@@ -123,6 +123,7 @@
     <div class="card" id="payGateCard">
       <p style="margin:0 0 16px; color:var(--muted);">Pay once to create your Alter Ego. After payment you'll upload your photo and voice on the next page.</p>
       <button type="button" class="pay-btn" id="payBtn">Create your alter ego</button>
+      <p style="margin:12px 0 0; font-size:13px; color:var(--muted);">Test without paying: set <code>ALLOW_TEST_CHECKOUT=1</code> in Netlify env, then <a href="#" id="testBypassLink">use test flow</a>.</p>
       <div id="payErr" class="status error" style="margin-top:12px; display:none;"></div>
     </div>
 
@@ -174,6 +175,10 @@
     (function () {
       const payBtn = document.getElementById('payBtn');
       const payErr = document.getElementById('payErr');
+      document.getElementById('testBypassLink').addEventListener('click', function (e) {
+        e.preventDefault();
+        window.location.href = '/pay-success.html?session_id=test_bypass_' + Date.now();
+      });
       payBtn.addEventListener('click', async function () {
         payBtn.disabled = true;
         payErr.style.display = 'none';

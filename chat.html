@@ -532,13 +532,21 @@
           
           mediaController.showVideo();
         } else {
-          // Load personalized DOP
-          const response = await fetch(`/.netlify/functions/dop-persona?id=${encodeURIComponent(dopId)}`);
-          
+          // Load personalized DOP (with 15s timeout so we don't spin forever)
+          const controller = new AbortController();
+          const timeoutId = setTimeout(function() { controller.abort(); }, 15000);
+          let response;
+          try {
+            response = await fetch(`/.netlify/functions/dop-persona?id=${encodeURIComponent(dopId)}`, { signal: controller.signal });
+          } catch (e) {
+            clearTimeout(timeoutId);
+            if (e.name === 'AbortError') throw new Error('Loading took too long. Please try again.');
+            throw e;
+          }
+          clearTimeout(timeoutId);
           if (!response.ok) {
             throw new Error(`dop-persona returned ${response.status}`);
           }
-          
           const persona = await response.json();
           PERSONA_DATA = persona;
 

@@ -22,6 +22,18 @@ const bad = (code, msg, extra = {}) => ({ statusCode: code, headers: { ...CORS, 
 
 const BASE_URL = process.env.URL || 'https://dopple-talent-demo.netlify.app';
 
+// Cap time spent on external APIs so the function returns before Netlify timeout (~10–26s).
+const VOICE_CLONE_TIMEOUT_MS = 5000;
+const HEYGEN_AVATAR_TIMEOUT_MS = 6000;
+const HEYGEN_QUEUE_TIMEOUT_MS = 4000;
+
+function withTimeout(ms, promise) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), ms))
+  ]);
+}
+
 // ---------- validation helpers ----------
 function isValidBase64(str) {
   if (!str || typeof str !== 'string') return false;
@@ -266,22 +278,22 @@ exports.handler = async (event) => {
     const fileUrl = (k) => `/.netlify/functions/dop-file?key=${encodeURIComponent(k)}`;
     const publicImageUrl = `${BASE_URL}${fileUrl(imageKey)}`;
 
-    // --- optional: clone voice + create heygen avatar ---
+    // --- optional: clone voice + create heygen avatar (with timeouts so we return before Netlify kills the function) ---
     let voice_id = null;
     let voiceCloneError = null;
-    try { 
-      voice_id = await createVoiceClone(vocBuf, name); 
+    try {
+      voice_id = await withTimeout(VOICE_CLONE_TIMEOUT_MS, createVoiceClone(vocBuf, name));
     } catch (e) {
-      voiceCloneError = e.message;
+      voiceCloneError = e.message || 'Voice clone timed out or failed';
       console.error('[dop-uploads] voice clone failed:', e);
     }
-    
+
     let avatar_id = null;
     let avatarError = null;
-    try { 
-      avatar_id = await createHeyGenAvatarFromImageUrl(publicImageUrl, name); 
+    try {
+      avatar_id = await withTimeout(HEYGEN_AVATAR_TIMEOUT_MS, createHeyGenAvatarFromImageUrl(publicImageUrl, name));
     } catch (e) {
-      avatarError = e.message;
+      avatarError = e.message || 'Avatar creation timed out or failed';
       console.error('[dop-uploads] avatar creation failed:', e);
     }
 
@@ -290,14 +302,15 @@ exports.handler = async (event) => {
     const pending = {};
     const failures = [];
 
-    // Try to queue all three HeyGen renders in parallel
+    // Try to queue all three HeyGen renders in parallel (with timeout so we don't block the response)
     if (avatar_id) {
-      const queuePromises = prompts.map(async (p) => {
+      const queuePromises = prompts.map((p) => {
         const script = name ? `Hi, I'm ${name}. ${p.text}` : p.text;
-        const task_id = await queueHeyGenVideo(avatar_id, voice_id || 'default', script);
-        return { key: p.key, task_id };
+        return withTimeout(HEYGEN_QUEUE_TIMEOUT_MS, queueHeyGenVideo(avatar_id, voice_id || 'default', script))
+          .then((task_id) => ({ key: p.key, task_id }))
+          .catch(() => ({ key: p.key, task_id: null }));
       });
-      
+
       const results = await Promise.all(queuePromises);
       
       for (const { key, task_id } of results) {

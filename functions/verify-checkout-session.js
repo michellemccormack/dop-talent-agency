@@ -39,6 +39,13 @@ exports.handler = async (event) => {
     return err(400, 'Missing session_id');
   }
 
+  // Optional: test without paying (only when ALLOW_TEST_CHECKOUT=1 in env)
+  if (process.env.ALLOW_TEST_CHECKOUT === '1' && sessionId.startsWith('test_bypass_')) {
+    const store = uploadsStore();
+    await store.set(`payments/${sessionId}`, JSON.stringify({ paid: true }), { contentType: 'application/json' });
+    return ok({ paid: true });
+  }
+
   const secretKey = process.env.STRIPE_SECRET_KEY;
   if (!secretKey) {
     return err(500, 'Missing STRIPE_SECRET_KEY');
