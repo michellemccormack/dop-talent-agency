@@ -74,7 +74,7 @@ function generatePersonaPrompts(bio, name) {
   return [
     { key: 'fun',   text: 'What do you like to do for fun?' },
     { key: 'from',  text: 'Where are you from?' },
-    { key: 'relax', text: 'What's your favorite way to relax?' },
+    { key: 'relax', text: "What's your favorite way to relax?" },
   ];
 }
 
