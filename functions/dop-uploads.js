@@ -206,7 +206,8 @@ exports.handler = async (event) => {
       audioBase64,
       audioType = 'audio/webm',
       audioName = 'voice.webm',
-      dopId: dopIdIn
+      dopId: dopIdIn,
+      session_id: sessionId   // optional: from pay-success flow; must be verified to set paid: true
     } = body;
 
     // Validate and sanitize inputs
@@ -215,7 +216,34 @@ exports.handler = async (event) => {
     
     // Use crypto for secure ID generation
     const dopId = dopIdIn || ('dop_' + randomUUID().replace(/-/g, ''));
-    
+
+    // If session_id provided, verify payment blob and set paid on persona (one-time use)
+    let paid = false;
+    if (sessionId && typeof sessionId === 'string' && sessionId.trim()) {
+      const paymentStore = uploadsStore();
+      const paymentKey = `payments/${sessionId.trim()}`;
+      let paymentData;
+      try {
+        paymentData = await paymentStore.get(paymentKey, { type: 'text' });
+      } catch (_) {
+        paymentData = null;
+      }
+      if (!paymentData) {
+        return bad(403, 'Invalid or already used payment session. Please pay first.');
+      }
+      let parsed;
+      try {
+        parsed = typeof paymentData === 'string' ? JSON.parse(paymentData) : paymentData;
+      } catch (_) {
+        return bad(403, 'Invalid payment session.');
+      }
+      if (!parsed || parsed.paid !== true) {
+        return bad(403, 'Payment not verified.');
+      }
+      paid = true;
+      await paymentStore.delete(paymentKey);
+    }
+
     // Validate and decode base64 with size limits
     const imgBuf = validateAndDecodeBase64(
       photo || imageBase64, 
@@ -293,6 +321,7 @@ exports.handler = async (event) => {
       bio: bio || '',
       created: new Date().toISOString(),
       systemPrompt: generateSystemPrompt(bio, name),
+      ...(paid ? { paid: true } : {}),
 
       // Media
       images: [{ key: imageKey, url: fileUrl(imageKey), type: imageType, name: imageName, ts: Date.now() }],

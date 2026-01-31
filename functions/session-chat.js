@@ -2,10 +2,112 @@
 // Updated to handle BOTH pre-recorded personas AND user-generated DOPs
 
 const path = require("path");
+const crypto = require("crypto");
 const { readFile } = require("fs/promises");
 
 // For user-generated DOPs
 const { uploadsStore } = require('./_lib/blobs');
+
+// ---------- Guardrails (MVP: abuse/cost control, no PII) ----------
+const MAX_MESSAGE_CHARS = 4000;
+const RATE_PER_MIN = 30;
+const RATE_BURST = 10;
+const RATE_BURST_WINDOW_MS = 10000;
+const RATE_MIN_WINDOW_MS = 60000;
+const RATE_PER_SESSION_PER_MIN = 20;
+const TOKEN_BUDGET_ROLLING_24H = 100000;
+const DUPLICATE_WINDOW_MS = 30000;
+const TOKEN_LIMIT_MESSAGE = "You've hit today's limit. Try again tomorrow.";
+const RATE_LIMIT_MESSAGE = "Please slow down and try again.";
+const SLOW_DOWN_MESSAGE = "Please slow down and try again.";
+
+function getClientIp(event) {
+  const h = event.headers || {};
+  const ip = h["x-nf-client-connection-ip"] || (h["x-forwarded-for"] || "").split(",")[0].trim();
+  return ip || "unknown";
+}
+
+function hashForLog(s) {
+  if (!s || typeof s !== "string") return "n/a";
+  return crypto.createHash("sha256").update(s).digest("hex").slice(0, 8);
+}
+
+function estimateTokens(text) {
+  if (!text || typeof text !== "string") return 0;
+  return Math.ceil((text.length || 0) / 4);
+}
+
+function logGuardrail(payload) {
+  const { sessionIdHash, route, rateLimitHit, tokenLimitHit, duplicateHit, tokenEstimate } = payload;
+  console.log(
+    JSON.stringify({
+      ts: new Date().toISOString(),
+      route: route || "session-chat",
+      session_id_hash: sessionIdHash,
+      rate_limit_hit: !!rateLimitHit,
+      token_limit_hit: !!tokenLimitHit,
+      duplicate_hit: !!duplicateHit,
+      token_estimate: tokenEstimate == null ? undefined : tokenEstimate,
+    })
+  );
+}
+
+function getRateLimitStore() {
+  if (typeof getStore !== "function") return null;
+  try {
+    return getStore({ name: "sessions" });
+  } catch {
+    return null;
+  }
+}
+
+async function checkRateLimit(ip, sessionId) {
+  const store = getRateLimitStore();
+  if (!store) return { allowed: true };
+
+  const now = Date.now();
+  const ipHash = crypto.createHash("sha256").update(ip || "unknown").digest("hex").slice(0, 16);
+  const ipKey = `rl/ip/${ipHash}`;
+  const sessKey = `rl/session/${sessionId}`;
+
+  const trim = (data) => {
+    if (!data || typeof data !== "object") return { minWindow: now, minCount: 0, burstWindow: now, burstCount: 0 };
+    let { minWindow, minCount, burstWindow, burstCount } = data;
+    if (now - minWindow > RATE_MIN_WINDOW_MS) { minWindow = now; minCount = 0; }
+    if (now - burstWindow > RATE_BURST_WINDOW_MS) { burstWindow = now; burstCount = 0; }
+    return { minWindow, minCount: minCount || 0, burstWindow, burstCount: burstCount || 0 };
+  };
+
+  try {
+    const [ipRaw, sessRaw] = await Promise.all([
+      store.get(ipKey, { type: "text" }).catch(() => null),
+      store.get(sessKey, { type: "text" }).catch(() => null),
+    ]);
+    const ipData = trim(ipRaw ? JSON.parse(ipRaw) : null);
+    const sessData = trim(sessRaw ? JSON.parse(sessRaw) : null);
+
+    ipData.minCount++;
+    ipData.burstCount++;
+    sessData.minCount++;
+    sessData.burstCount++;
+
+    if (
+      ipData.minCount > RATE_PER_MIN ||
+      ipData.burstCount > RATE_BURST ||
+      sessData.minCount > RATE_PER_SESSION_PER_MIN
+    ) {
+      return { allowed: false };
+    }
+
+    await Promise.all([
+      store.set(ipKey, JSON.stringify(ipData), { contentType: "application/json" }).catch(() => {}),
+      store.set(sessKey, JSON.stringify(sessData), { contentType: "application/json" }).catch(() => {}),
+    ]);
+  } catch {
+    return { allowed: true };
+  }
+  return { allowed: true };
+}
 
 // Deterministic intent → clip map (keep for pre-recorded personas)
 let intentMap = {};
@@ -199,10 +301,12 @@ module.exports.handler = async (event) => {
     try { body = JSON.parse(event.body || "{}"); } catch {}
     
     const sessionId = body.sessionId || body.id || null;
-    const userMessage = (body.message ?? body.text ?? "").toString();
+    const userMessageRaw = (body.message ?? body.text ?? "").toString();
+    const userMessage = userMessageRaw.trim();
     const personaId = body.personaId || body.persona || null;
     const meta = body.meta || {};
     const forceLLM = !!body.forceLLM;
+    const sessionIdHash = hashForLog(sessionId);
 
     if (!sessionId) {
       return { 
@@ -218,16 +322,78 @@ module.exports.handler = async (event) => {
         body: JSON.stringify({ version: VERSION, error: "message is required" }) 
       };
     }
+    if (userMessage.length > MAX_MESSAGE_CHARS) {
+      return {
+        statusCode: 400,
+        headers: corsHeaders(),
+        body: JSON.stringify({ version: VERSION, error: "Message is too long. Please shorten and try again." }),
+      };
+    }
+
+    const ip = getClientIp(event);
+    const rateLimitResult = await checkRateLimit(ip, sessionId);
+    if (!rateLimitResult.allowed) {
+      logGuardrail({ sessionIdHash, route: "session-chat", rateLimitHit: true });
+      return {
+        statusCode: 429,
+        headers: corsHeaders(),
+        body: JSON.stringify({ version: VERSION, error: RATE_LIMIT_MESSAGE }),
+      };
+    }
 
     const sessions = getSessionsStore();
     let session = (await sessions.get(sessionId).catch(() => null)) || { sessionId, messages: [] };
 
-    // Store user message
+    const lastUser = session.messages.filter((m) => m && m.role === "user").pop();
+    if (lastUser && lastUser.content === userMessage && (nowTs() - (lastUser.ts || 0)) < DUPLICATE_WINDOW_MS) {
+      logGuardrail({ sessionIdHash, route: "session-chat", duplicateHit: true });
+      return {
+        statusCode: 429,
+        headers: corsHeaders(),
+        body: JSON.stringify({ version: VERSION, error: SLOW_DOWN_MESSAGE }),
+      };
+    }
+
+    const now = nowTs();
+    const twentyFourHoursMs = 24 * 60 * 60 * 1000;
+    if (!session.tokenBudgetResetAt || now > session.tokenBudgetResetAt) {
+      session.tokenBudgetResetAt = now + twentyFourHoursMs;
+      session.tokenBudgetUsed = 0;
+    }
+    if ((session.tokenBudgetUsed || 0) >= TOKEN_BUDGET_ROLLING_24H) {
+      session.messages.push({
+        role: "user",
+        content: userMessage,
+        meta,
+        ts: now,
+      });
+      const limitReply = TOKEN_LIMIT_MESSAGE;
+      session.messages.push({
+        role: "assistant",
+        content: limitReply,
+        meta: { tokenLimit: true },
+        ts: nowTs(),
+      });
+      await sessions.set(sessionId, session).catch(() => {});
+      logGuardrail({ sessionIdHash, route: "session-chat", tokenLimitHit: true, tokenEstimate: session.tokenBudgetUsed });
+      return {
+        statusCode: 200,
+        headers: corsHeaders(),
+        body: JSON.stringify({
+          version: VERSION,
+          sessionId,
+          messages: session.messages,
+          reply: limitReply,
+          personaType: "unknown",
+        }),
+      };
+    }
+
     session.messages.push({
       role: "user",
       content: userMessage,
       meta,
-      ts: nowTs(),
+      ts: now,
     });
     await sessions.set(sessionId, session).catch(() => {});
 
@@ -308,7 +474,19 @@ module.exports.handler = async (event) => {
       ts: nowTs(),
     };
     session.messages.push(assistantMsg);
+
+    const userTokens = estimateTokens(userMessage);
+    const assistantTokens = estimateTokens(assistantText);
+    session.tokenBudgetUsed = (session.tokenBudgetUsed || 0) + userTokens + assistantTokens;
     await sessions.set(sessionId, session);
+
+    logGuardrail({
+      sessionIdHash,
+      route: "session-chat",
+      rateLimitHit: false,
+      tokenLimitHit: false,
+      tokenEstimate: session.tokenBudgetUsed,
+    });
 
     return {
       statusCode: 200,

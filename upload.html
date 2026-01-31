@@ -88,6 +88,16 @@
     .create-btn:hover{transform:translateY(-2px); box-shadow:0 12px 32px rgba(138,140,255,.4)}
     .create-btn:disabled{opacity:.5; cursor:not-allowed; transform:none}
 
+    .pay-btn{
+      width:100%; padding:16px 32px; border:none; border-radius:16px;
+      background:linear-gradient(135deg,var(--accent),#9b9dff);
+      color:#000; font-size:18px; font-weight:800; font-family:'Montserrat',sans-serif;
+      text-transform:uppercase; cursor:pointer; transition:all .2s ease;
+      box-shadow:0 8px 24px rgba(138,140,255,.3);
+    }
+    .pay-btn:hover{transform:translateY(-2px); box-shadow:0 12px 32px rgba(138,140,255,.4)}
+    .pay-btn:disabled{opacity:.5; cursor:not-allowed; transform:none}
+
     .status{
       padding:12px 16px; border-radius:12px; margin-bottom:16px;
       font-weight:600; text-align:center; display:none;
@@ -109,8 +119,15 @@
       <p>Upload your photo and voice sample to create an AI doppelganger</p>
     </div>
 
-    <div class="card">
-      <!-- Upload Section -->
+    <!-- Pay gate: must pay before creating alter ego -->
+    <div class="card" id="payGateCard">
+      <p style="margin:0 0 16px; color:var(--muted);">Pay once to create your Alter Ego. After payment you'll upload your photo and voice on the next page.</p>
+      <button type="button" class="pay-btn" id="payBtn">Create your alter ego</button>
+      <div id="payErr" class="status error" style="margin-top:12px; display:none;"></div>
+    </div>
+
+    <div class="card" id="createFormCard" style="display:none;">
+      <!-- Upload Section (shown only after payment on pay-success.html) -->
       <div class="upload-grid">
         <!-- Photo Upload -->
         <div class="upload-box" id="photoBox">
@@ -153,6 +170,36 @@
   </div>
 
   <script>
+    // Pay gate: redirect to Stripe Checkout
+    (function () {
+      const payBtn = document.getElementById('payBtn');
+      const payErr = document.getElementById('payErr');
+      payBtn.addEventListener('click', async function () {
+        payBtn.disabled = true;
+        payErr.style.display = 'none';
+        try {
+          const res = await fetch('/.netlify/functions/create-checkout-session', { method: 'POST' });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            payErr.textContent = data.error || 'Could not start checkout.';
+            payErr.style.display = 'block';
+            payBtn.disabled = false;
+            return;
+          }
+          if (data.url) {
+            window.location.href = data.url;
+            return;
+          }
+          payErr.textContent = 'No checkout URL returned.';
+          payErr.style.display = 'block';
+        } catch (e) {
+          payErr.textContent = e.message || 'Checkout failed.';
+          payErr.style.display = 'block';
+        }
+        payBtn.disabled = false;
+      });
+    })();
+
     // State
     let photoFile = null;
     let voiceFile = null;

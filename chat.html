@@ -113,6 +113,17 @@
     .btn[disabled]{opacity:.45; cursor:not-allowed}
     .btn.active{background:linear-gradient(180deg,#e9ebff,#dfe1ff); border-color:#cfd1ff}
 
+    .pay-gate-state{text-align:center; padding:24px}
+    .pay-gate-btn{
+      appearance:none; border:none; cursor:pointer;
+      padding:14px 24px; border-radius:16px; font-size:14px;
+      font-family:'Montserrat',sans-serif; font-weight:700; text-transform:uppercase;
+      background:linear-gradient(135deg,var(--accent),#9b9dff); color:#000;
+      box-shadow:0 8px 24px rgba(138,140,255,.3);
+    }
+    .pay-gate-btn:hover{transform:translateY(-1px)}
+    .pay-gate-btn:disabled{opacity:.5; cursor:not-allowed; transform:none}
+
     .hero{display:flex; justify-content:center; position:relative}
 
     #dopHero{
@@ -270,6 +281,12 @@
       <div class="error-state" id="errorState" style="display:none">
         <div>Sorry, this DOP couldn't be loaded.</div>
         <div class="details" id="errorDetails"></div>
+      </div>
+
+      <div class="pay-gate-state" id="payGateState" style="display:none">
+        <div style="margin-bottom:16px; color:var(--muted);">Unlock chat for this alter ego.</div>
+        <button type="button" class="pay-gate-btn" id="payGateBtn">Create your alter ego</button>
+        <div id="payGateErr" style="margin-top:12px; color:var(--stop); display:none;"></div>
       </div>
 
       <div id="mainInterface" style="display:none">
@@ -524,6 +541,43 @@
           
           const persona = await response.json();
           PERSONA_DATA = persona;
+
+          if (persona.paid !== true) {
+            loadingEl.style.display = 'none';
+            const payGateEl = qs('#payGateState');
+            const payBtn = qs('#payGateBtn');
+            const payErr = qs('#payGateErr');
+            payGateEl.style.display = 'block';
+            payBtn.onclick = async function () {
+              payBtn.disabled = true;
+              payErr.style.display = 'none';
+              try {
+                const res = await fetch('/.netlify/functions/create-checkout-session', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ dopId })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                  payErr.textContent = data.error || 'Could not start checkout.';
+                  payErr.style.display = 'block';
+                  payBtn.disabled = false;
+                  return;
+                }
+                if (data.url) {
+                  window.location.href = data.url;
+                  return;
+                }
+                payErr.textContent = 'No checkout URL returned.';
+                payErr.style.display = 'block';
+              } catch (e) {
+                payErr.textContent = e.message || 'Checkout failed.';
+                payErr.style.display = 'block';
+              }
+              payBtn.disabled = false;
+            };
+            return;
+          }
 
           // Set up image loading with spinner
           if (persona.images && persona.images.length > 0) {
@@ -1314,7 +1368,21 @@ if (img) { img.addEventListener('load', () => mediaController.hideSpinner(), { o
     // ========================================
     // START APPLICATION
     // ========================================
-    loadPersona();
+    (async function start() {
+      const sessionId = urlParams.get('session_id');
+      if (sessionId && dopId) {
+        try {
+          const res = await fetch(`/.netlify/functions/verify-checkout-session?session_id=${encodeURIComponent(sessionId)}&dopId=${encodeURIComponent(dopId)}`);
+          const data = await res.json().catch(() => ({}));
+          if (res.ok && data.paid && window.history && window.history.replaceState) {
+            const u = new URL(window.location.href);
+            u.searchParams.delete('session_id');
+            window.history.replaceState({}, '', u.toString());
+          }
+        } catch (_) {}
+      }
+      loadPersona();
+    })();
   </script>
 </body>
 </html>

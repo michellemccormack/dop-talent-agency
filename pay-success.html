@@ -28,7 +28,11 @@
     <h1>Payment received ✅</h1>
     <p>Upload a <strong>photo</strong> and a short <strong>voice sample</strong> to create your DOP.</p>
 
-    <form id="uploadForm">
+    <div id="noSession" class="err" style="display:none;">No payment session. <a href="/upload.html">Create your alter ego</a> to pay first.</div>
+    <div id="verifyErr" class="err" style="display:none;"></div>
+    <div id="verifyProgress" class="progress" style="display:none;">Verifying payment…</div>
+
+    <form id="uploadForm" style="display:none;">
       <div class="row">
         <div class="card">
           <label for="photo">Photo (JPG/PNG, ≤ 6 MB)</label>
@@ -53,11 +57,44 @@
     </form>
 
     <div class="links" style="margin-top:24px;">
-      <a href="/">← Back to home</a>    </div>
+      <a href="/">← Back to home</a> &nbsp; <a href="/upload.html">Create alter ego</a>
+    </div>
   </div>
 
   <script>
     const byId = (id) => document.getElementById(id);
+    let paidSessionId = null;
+
+    (async function init() {
+      const params = new URLSearchParams(window.location.search);
+      const sessionId = params.get('session_id');
+      if (!sessionId) {
+        byId('noSession').style.display = 'block';
+        return;
+      }
+      byId('verifyProgress').style.display = 'block';
+      try {
+        const res = await fetch(`/.netlify/functions/verify-checkout-session?session_id=${encodeURIComponent(sessionId)}`);
+        const data = await res.json().catch(() => ({}));
+        byId('verifyProgress').style.display = 'none';
+        if (!res.ok) {
+          byId('verifyErr').style.display = 'block';
+          byId('verifyErr').innerHTML = data.error || 'Payment verification failed.';
+          return;
+        }
+        if (data.paid) {
+          paidSessionId = sessionId;
+          byId('uploadForm').style.display = 'block';
+        } else {
+          byId('verifyErr').style.display = 'block';
+          byId('verifyErr').textContent = 'Payment not completed.';
+        }
+      } catch (e) {
+        byId('verifyProgress').style.display = 'none';
+        byId('verifyErr').style.display = 'block';
+        byId('verifyErr').textContent = e.message || 'Verification failed.';
+      }
+    })();
 
     // Convert File to base64 (strip data URL prefix).
     function fileToBase64(file) {
@@ -106,7 +143,8 @@
             imageName: img.name || "photo.jpg",
             audioBase64: aud.base64,
             audioType: aud.type || "audio/webm",
-            audioName: aud.name || "voice.webm"
+            audioName: aud.name || "voice.webm",
+            session_id: paidSessionId
           }),
         });
 
@@ -118,7 +156,7 @@
         setProgress("");
         showResult(
           `✅ Saved! <br/>Your <strong>dopId</strong>: <code>${data.dopId}</code><br/>
-           Next: you can open <code>/dop/${data.dopId}</code> once it’s live (Step #27).`
+           <a href="/chat.html?id=${data.dopId}">Open chat</a>`
         );
       } catch (err) {
         showError(err.message || String(err));
