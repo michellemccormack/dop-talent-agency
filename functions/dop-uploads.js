@@ -352,7 +352,10 @@ exports.handler = async (event) => {
       failures: failures.length > 0 ? failures : undefined
     };
 
-    await store.set(`personas/${dopId}.json`, JSON.stringify(persona), { contentType: 'application/json; charset=utf-8' });
+    const personaKey = `personas/${dopId}.json`;
+    await store.set(personaKey, JSON.stringify(persona), { contentType: 'application/json; charset=utf-8' });
+    const verify = await store.get(personaKey, { type: 'text' }).catch(() => null);
+    console.log('[dop-uploads] saved persona key:', personaKey, 'read-back:', verify ? 'ok' : 'FAIL');
 
     // Build accurate response message
     let message;
