@@ -288,8 +288,10 @@ exports.handler = async (event) => {
       created: new Date().toISOString(),
       systemPrompt: generateSystemPrompt(bio, name),
       ...(paid ? { paid: true } : {}),
+      image: imgBuf.toString('base64'),  // Add base64 image for immediate display
       images: [{ key: imageKey, url: fileUrl(imageKey), type: imageType, name: imageName, ts: Date.now() }],
       voices: [{ key: voiceKey, url: fileUrl(voiceKey), type: audioType, name: audioName, ts: Date.now() }],
+      voiceId: null,  // Will be filled if ElevenLabs succeeds
       voice: { id: null },
       heygen: { avatar_id: null },
       prompts,
@@ -299,12 +301,51 @@ exports.handler = async (event) => {
     await store.set(personaKey, JSON.stringify(minimalPersona), { contentType: 'application/json; charset=utf-8' });
     console.log('[dop-uploads] saved minimal persona:', personaKey);
 
-    // Return immediately so the client always gets the persona (no timeout). Voice/avatar can be filled later.
+    // --- Try to create voice clone and HeyGen avatar (with timeouts) ---
+    let voiceId = null;
+    let avatarId = null;
+
+    try {
+      voiceId = await withTimeout(VOICE_CLONE_TIMEOUT_MS, createVoiceClone(vocBuf, name));
+      console.log('[dop-uploads] voice clone result:', voiceId || 'timeout/failed');
+    } catch (e) {
+      console.log('[dop-uploads] voice clone timeout or error:', e.message);
+    }
+
+    try {
+      avatarId = await withTimeout(HEYGEN_AVATAR_TIMEOUT_MS, createHeyGenAvatarFromImageUrl(publicImageUrl, name));
+      console.log('[dop-uploads] HeyGen avatar result:', avatarId || 'timeout/failed');
+    } catch (e) {
+      console.log('[dop-uploads] HeyGen avatar timeout or error:', e.message);
+    }
+
+    // --- Update persona with voice/avatar if we got them ---
+    if (voiceId || avatarId) {
+      const updatedPersona = {
+        ...minimalPersona,
+        voiceId: voiceId || null,
+        voice: { id: voiceId || null },
+        heygen: { avatar_id: avatarId || null }
+      };
+      await store.set(personaKey, JSON.stringify(updatedPersona), { contentType: 'application/json; charset=utf-8' });
+      console.log('[dop-uploads] updated persona with voice/avatar');
+      
+      // Return updated persona
+      return ok({
+        success: true,
+        dopId,
+        persona: updatedPersona,
+        message: 'DOP created with voice and avatar!',
+        chatUrl: `/chat.html?id=${dopId}`
+      });
+    }
+
+    // Return minimal persona if voice/avatar failed
     return ok({
       success: true,
       dopId,
       persona: minimalPersona,
-      message: 'DOP saved. Open chat to continue.',
+      message: 'DOP saved. Voice/avatar processing in progress.',
       chatUrl: `/chat.html?id=${dopId}`
     });
 
