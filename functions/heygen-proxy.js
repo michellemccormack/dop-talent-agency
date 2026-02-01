@@ -117,35 +117,22 @@ async function uploadPhoto({ imageUrl, name }) {
   const imageBlob = Buffer.from(imageBuffer);
   console.log('[heygen-proxy] Image fetched, size:', imageBlob.length, 'bytes');
 
-  // Create multipart form data
-  const boundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
+  // Try using FormData (Node 18+ native support)
+  const FormData = globalThis.FormData || require('form-data');
+  const formData = new FormData();
   
-  let formData = '';
-  
-  // Add file field - HeyGen expects "asset" not "file"
-  formData += `--${boundary}\r\n`;
-  formData += `Content-Disposition: form-data; name="asset"; filename="${name || 'avatar'}.jpg"\r\n`;
-  formData += `Content-Type: image/jpeg\r\n\r\n`;
-  
-  // Convert to proper format
-  const textEncoder = new TextEncoder();
-  const formDataStart = textEncoder.encode(formData);
-  const formDataEnd = textEncoder.encode(`\r\n--${boundary}--\r\n`);
-  
-  // Combine parts
-  const fullBody = new Uint8Array(formDataStart.length + imageBlob.length + formDataEnd.length);
-  fullBody.set(formDataStart, 0);
-  fullBody.set(new Uint8Array(imageBlob), formDataStart.length);
-  fullBody.set(formDataEnd, formDataStart.length + imageBlob.length);
+  // Create a Blob from the buffer
+  const blob = new Blob([imageBlob], { type: 'image/jpeg' });
+  formData.append('asset', blob, `${name || 'avatar'}.jpg`);
 
   console.log('[heygen-proxy] Calling HeyGen upload API at:', HEYGEN_UPLOAD_BASE + '/v1/asset');
   const response = await fetch(`${HEYGEN_UPLOAD_BASE}/v1/asset`, {
     method: 'POST',
     headers: {
       'X-Api-Key': HEYGEN_API_KEY,
-      'Content-Type': `multipart/form-data; boundary=${boundary}`
+      // Don't set Content-Type - let fetch set it with boundary
     },
-    body: fullBody
+    body: formData
   });
 
   const responseText = await response.text();
