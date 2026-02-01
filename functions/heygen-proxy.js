@@ -393,12 +393,17 @@ async function generateVideo({ text, avatarId, voiceId }) {
     throw new Error(`Video generation failed: ${data.message || response.statusText}`);
   }
 
+  // v2 API returns task_id for status polling; video_id may come later
+  const taskId = data.data?.task_id || data.task_id;
+  const videoId = data.data?.video_id || data.video_id;
+
   return {
     statusCode: 200,
     headers: { "Content-Type": "application/json", ...corsHeaders },
     body: JSON.stringify({
       success: true,
-      video_id: data.data?.video_id,
+      task_id: taskId,
+      video_id: videoId,
       status: 'processing',
       message: 'Video generation started'
     })

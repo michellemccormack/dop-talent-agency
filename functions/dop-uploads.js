@@ -184,10 +184,11 @@ async function createHeyGenAvatarFromImageUrl(imageUrl, name) {
   }
 }
 
-async function queueHeyGenVideo(avatar_id, voice_id, script) {
+async function queueHeyGenVideo(avatarId, voiceId, text) {
+  if (!avatarId || !text) return null;
   try {
-    const gen = await heygen('generate_video', { avatar_id, voice_id, script, ratio: '9:16', quality: 'high' });
-    return gen.task_id || gen.data?.task_id || null;
+    const gen = await heygen('generate_video', { text, avatarId, voiceId: voiceId || undefined });
+    return { task_id: gen.task_id, video_id: gen.video_id };
   } catch (e) {
     console.error('[dop-uploads] queue video error:', e.message);
     return null;
@@ -328,17 +329,44 @@ exports.handler = async (event) => {
         ...minimalPersona,
         voiceId: voiceId || null,
         voice: { id: voiceId || null },
-        heygen: { avatar_id: avatarId || null }
+        heygen: { avatar_id: avatarId || null },
+        pending: {}  // HeyGen video task_ids for heygen_video_processor to poll
       };
+
+      // Queue HeyGen videos for the 3 prompts (moving avatar) – processor will fill URLs later
+      const videoScripts = [
+        { key: 'fun', text: "I love having fun! What do you like to do?" },
+        { key: 'from', text: "I'm from all over. Where are you from?" },
+        { key: 'relax', text: (bio && bio.length > 10) ? `I like to relax by ${bio.slice(0, 80)}. What's your favorite way to relax?` : "I like to relax. What's your favorite way to relax?" }
+      ];
+
+      const queueTimeoutMs = 6000;  // 6s total for 3 parallel calls
+      const queueResults = await Promise.allSettled(
+        videoScripts.map(({ key, text }) =>
+          withTimeout(queueTimeoutMs, queueHeyGenVideo(avatarId, voiceId, text))
+        )
+      );
+
+      for (let i = 0; i < queueResults.length; i++) {
+        const res = queueResults[i];
+        const key = videoScripts[i].key;
+        if (res.status === 'fulfilled' && res.value && (res.value.task_id || res.value.video_id)) {
+          updatedPersona.pending[key] = { task_id: res.value.task_id, video_id: res.value.video_id };
+          console.log('[dop-uploads] queued video for', key, res.value.task_id || res.value.video_id);
+        }
+      }
+      if (Object.keys(updatedPersona.pending).length > 0) {
+        updatedPersona.status = 'processing';  // chat will poll until videos are ready
+      }
+
       await store.set(personaKey, JSON.stringify(updatedPersona), { contentType: 'application/json; charset=utf-8' });
-      console.log('[dop-uploads] updated persona with voice/avatar');
-      
-      // Return updated persona
+      console.log('[dop-uploads] updated persona with voice/avatar and', Object.keys(updatedPersona.pending).length, 'pending videos');
+
       return ok({
         success: true,
         dopId,
         persona: updatedPersona,
-        message: 'DOP created with voice and avatar!',
+        message: 'DOP created! Videos will appear when ready.',
         chatUrl: `/chat.html?id=${dopId}`
       });
     }

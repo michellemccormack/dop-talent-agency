@@ -7,6 +7,10 @@
   node_bundler = "esbuild"
   included_files = ["personas/**", "assets/**"]
 
+  # Poll HeyGen video tasks every 2 min so DOP videos appear
+  [functions."heygen_video_processor"]
+  schedule = "*/2 * * * *"
+
 # DOP viewer route (existing)
 [[redirects]]
   from = "/dop/:id"
@@ -29,6 +33,3 @@
   to   = "/upload.html"
   status = 200
 
-  [[scheduled]]
-path = "/.netlify/functions/heygen_video_processor"
-schedule = "*/2 * * * *"
