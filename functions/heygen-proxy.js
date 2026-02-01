@@ -122,9 +122,9 @@ async function uploadPhoto({ imageUrl, name }) {
   
   let formData = '';
   
-  // Add file field
+  // Add file field - HeyGen expects "asset" not "file"
   formData += `--${boundary}\r\n`;
-  formData += `Content-Disposition: form-data; name="file"; filename="${name || 'avatar'}.jpg"\r\n`;
+  formData += `Content-Disposition: form-data; name="asset"; filename="${name || 'avatar'}.jpg"\r\n`;
   formData += `Content-Type: image/jpeg\r\n\r\n`;
   
   // Convert to proper format
