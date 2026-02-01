@@ -1,5 +1,5 @@
 // functions/dop-persona.js
-// Load persona configuration for a DOP ID
+// Get persona data for a DOP
 
 const { uploadsStore } = require('./_lib/blobs');
 
@@ -15,70 +15,75 @@ exports.handler = async (event) => {
   }
   
   if (event.httpMethod !== 'GET') {
-    return { statusCode: 405, headers: CORS_HEADERS, body: 'Method Not Allowed' };
+    return {
+      statusCode: 405,
+      headers: { ...CORS_HEADERS, 'content-type': 'application/json' },
+      body: JSON.stringify({ error: 'Method not allowed' })
+    };
   }
 
   try {
-    const dopId = event.queryStringParameters?.id || event.queryStringParameters?.dopId;
-    
+    const dopId = event.queryStringParameters?.id;
+    console.log('[dop-persona] Request received. dopId:', dopId);
+
     if (!dopId) {
       return {
         statusCode: 400,
         headers: { ...CORS_HEADERS, 'content-type': 'application/json' },
-        body: JSON.stringify({ error: 'Missing dopId parameter' })
+        body: JSON.stringify({ error: 'Missing id parameter' })
       };
     }
 
-    // Try to load the persona config using our wrapper
+    // FIX 2: Use uploadsStore() directly — exactly the same way dop-uploads.js writes.
+    // Previously this used uploadsStore.getBlob() which is a convenience wrapper,
+    // but the key point is that both read and write must go through the same
+    // getStore({ name: 'dop-uploads', siteID, token }) call.
+    console.log('[dop-persona] Initializing blob store...');
+    const store = uploadsStore();
+    console.log('[dop-persona] Store initialized successfully');
+
     const personaKey = `personas/${dopId}.json`;
-    
-    console.log(`[dop-persona] Loading persona: ${personaKey}`);
-    
-    let personaData;
-    try {
-      const rawData = await uploadsStore.getBlob(personaKey);
-      
-      if (!rawData) {
-        console.log(`[dop-persona] Persona not found: ${personaKey}`);
-        return {
-          statusCode: 404,
-          headers: { ...CORS_HEADERS, 'content-type': 'application/json' },
-          body: JSON.stringify({ error: 'Persona not found' })
-        };
+    console.log('[dop-persona] Looking up key:', personaKey);
+
+    // Use store.get() directly — same interface dop-uploads uses for store.set()
+    const rawData = await store.get(personaKey, { type: 'text' });
+    console.log('[dop-persona] Raw data result:', rawData ? `found (${rawData.length} chars)` : 'null/undefined');
+
+    if (!rawData) {
+      // Extra debug: list what IS in the store so we can see if the key is just different
+      try {
+        const listing = await store.list({ prefix: 'personas/' });
+        console.log('[dop-persona] Personas in store:', JSON.stringify(listing));
+      } catch (listErr) {
+        console.log('[dop-persona] Could not list store contents:', listErr.message);
       }
-      
-      // Parse the JSON
-      personaData = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
-      console.log(`[dop-persona] Successfully loaded persona: ${dopId}`);
-      
-    } catch (parseError) {
-      console.error(`[dop-persona] Failed to load persona ${dopId}:`, parseError);
+
       return {
         statusCode: 404,
         headers: { ...CORS_HEADERS, 'content-type': 'application/json' },
-        body: JSON.stringify({ 
-          error: 'Persona configuration not found or invalid',
-          details: parseError.message
-        })
+        body: JSON.stringify({ error: 'Persona not found', dopId, key: personaKey })
       };
     }
 
-    // Return the persona config
+    const persona = JSON.parse(rawData);
+    console.log('[dop-persona] Parsed persona successfully. Name:', persona.name, 'Status:', persona.status);
+
     return {
       statusCode: 200,
       headers: { ...CORS_HEADERS, 'content-type': 'application/json' },
-      body: JSON.stringify(personaData)
+      body: JSON.stringify({
+        success: true,
+        persona: persona
+      })
     };
 
-  } catch (err) {
-    console.error('[dop-persona] Error:', err);
+  } catch (error) {
+    console.error('[dop-persona] Error:', error.message);
+    console.error('[dop-persona] Stack:', error.stack);
     return {
       statusCode: 500,
       headers: { ...CORS_HEADERS, 'content-type': 'application/json' },
-      body: JSON.stringify({ 
-        error: 'Internal server error',
-        details: err.message
-      })
+      body: JSON.stringify({ error: 'Internal server error', details: error.message })
     };
   }
 };

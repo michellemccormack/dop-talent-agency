@@ -84,6 +84,12 @@
     .pill.thinking  .dot{background:#8a8cff}
     .pill.speaking  .dot{background:#16db65}
     .pill.ready     .dot{background:#6f7284}
+    .pill.processing .dot{background:#ffa500; animation:pulse 1.5s ease-in-out infinite}
+
+    @keyframes pulse{
+      0%, 100%{opacity:1}
+      50%{opacity:0.4}
+    }
 
     .instructions{
       text-align:center;
@@ -112,17 +118,6 @@
     .btn:hover{transform:translateY(-1px)}
     .btn[disabled]{opacity:.45; cursor:not-allowed}
     .btn.active{background:linear-gradient(180deg,#e9ebff,#dfe1ff); border-color:#cfd1ff}
-
-    .pay-gate-state{text-align:center; padding:24px}
-    .pay-gate-btn{
-      appearance:none; border:none; cursor:pointer;
-      padding:14px 24px; border-radius:16px; font-size:14px;
-      font-family:'Montserrat',sans-serif; font-weight:700; text-transform:uppercase;
-      background:linear-gradient(135deg,var(--accent),#9b9dff); color:#000;
-      box-shadow:0 8px 24px rgba(138,140,255,.3);
-    }
-    .pay-gate-btn:hover{transform:translateY(-1px)}
-    .pay-gate-btn:disabled{opacity:.5; cursor:not-allowed; transform:none}
 
     .hero{display:flex; justify-content:center; position:relative}
 
@@ -181,6 +176,33 @@
     }
     
     @keyframes spin{to{transform:rotate(360deg)}}
+
+    .processing-message{
+      position:absolute;
+      inset:0;
+      display:none;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      background:rgba(0,0,0,.85);
+      border-radius:12px;
+      padding:20px;
+      text-align:center;
+      z-index:10;
+    }
+    .processing-message.show{display:flex}
+    .processing-message .emoji{font-size:64px; margin-bottom:16px}
+    .processing-message .title{
+      font-size:20px;
+      font-weight:700;
+      margin-bottom:8px;
+      color:var(--text);
+    }
+    .processing-message .subtitle{
+      font-size:14px;
+      color:var(--muted);
+      max-width:280px;
+    }
 
     .footer{font-size:12px; color:#b7b8c3; text-align:center; margin-top:26px; margin-bottom:60px}
 
@@ -276,20 +298,11 @@
       <div class="loading-state" id="loadingState">
         <div class="spinner"></div>
         <div>Loading your DOP...</div>
-        <div id="loadingHint" style="display:none; margin-top:12px; font-size:14px; color:var(--muted);">
-          Taking a while? The DOP might still be saving. <a href="javascript:location.reload()" style="color:var(--accent);">Refresh</a> or <a href="/alter-ego" style="color:var(--accent);">go back</a>.
-        </div>
       </div>
 
       <div class="error-state" id="errorState" style="display:none">
         <div>Sorry, this DOP couldn't be loaded.</div>
         <div class="details" id="errorDetails"></div>
-      </div>
-
-      <div class="pay-gate-state" id="payGateState" style="display:none">
-        <div style="margin-bottom:16px; color:var(--muted);">Unlock chat for this alter ego.</div>
-        <button type="button" class="pay-gate-btn" id="payGateBtn">Create your alter ego</button>
-        <div id="payGateErr" style="margin-top:12px; color:var(--stop); display:none;"></div>
       </div>
 
       <div id="mainInterface" style="display:none">
@@ -325,6 +338,11 @@
           <img id="dopImage" alt="DOP Avatar" />
           <div class="overlay" id="respOverlay">
             <div class="spinner" aria-hidden="true"></div>
+          </div>
+          <div class="processing-message" id="processingMessage">
+            <div class="emoji">🧑‍🍳</div>
+            <div class="title">We're cookin'...</div>
+            <div class="subtitle">Your DOP is being crafted! Videos will appear here when ready.</div>
           </div>
         </div>
       </div>
@@ -425,17 +443,20 @@
         this.videoEl = null;
         this.imageEl = null;
         this.overlayEl = null;
+        this.processingEl = null;
       }
 
       init() {
         this.videoEl = qs('#resp');
         this.imageEl = qs('#dopImage');
         this.overlayEl = qs('#respOverlay');
+        this.processingEl = qs('#processingMessage');
       }
 
       showVideo() {
         if (this.videoEl) this.videoEl.style.display = 'block';
         if (this.imageEl) this.imageEl.style.display = 'none';
+        this.hideProcessingMessage();
       }
 
       showImage() {
@@ -449,6 +470,14 @@
 
       hideSpinner() {
         if (this.overlayEl) this.overlayEl.classList.remove('show');
+      }
+
+      showProcessingMessage() {
+        if (this.processingEl) this.processingEl.classList.add('show');
+      }
+
+      hideProcessingMessage() {
+        if (this.processingEl) this.processingEl.classList.remove('show');
       }
 
       async playVideo(url) {
@@ -500,6 +529,44 @@
     const mediaController = new MediaController();
 
     // ========================================
+    // PROGRESS TRACKING
+    // ========================================
+    async function updateProgressDisplay() {
+      if (!dopId) return;
+      
+      try {
+        const response = await fetch(`/.netlify/functions/check-video?id=${dopId}`);
+        const progress = await response.json();
+        
+        if (progress.status === 'ready') {
+          if (mediaController) {
+            mediaController.hideProcessingMessage();
+          }
+          return;
+        }
+        
+        // Update processing message with progress
+        const processingEl = qs('#processingMessage');
+        if (processingEl) {
+          const progressText = progress.progressPercent > 0 
+            ? `${progress.completedVideos}/${progress.totalVideos} videos ready (${progress.progressPercent}%)`
+            : 'Generating your avatar...';
+          
+          const subtitle = processingEl.querySelector('.subtitle');
+          if (subtitle) {
+            subtitle.textContent = `${progressText}. ${progress.estimatedTimeRemaining}`;
+          }
+        }
+        
+      } catch (error) {
+        console.warn('[Progress] Failed to update progress:', error);
+      }
+    }
+
+    // Make function globally available
+    window.updateProgressDisplay = updateProgressDisplay;
+
+    // ========================================
     // PERSONA LOADER
     // ========================================
     let appInitialized = false;
@@ -513,7 +580,6 @@
       const nameEl = qs('#dopName');
       const bioEl = qs('#dopBio');
       const avatarEl = qs('#dopAvatar');
-      var loadingHintTimer = null;
 
       try {
         if (!dopId) {
@@ -521,6 +587,7 @@
           PERSONA_DATA = {
             name: 'Sasha',
             bio: 'Demo persona',
+            status: 'ready',
             prompts: [
               'What do you like to do for fun?',
               'Where are you from?',
@@ -531,78 +598,60 @@
           PROMPTS_CONFIG = [
             { question: 'What do you like to do for fun?', file: 'assets/p_fun.mp4', videoUrl: null },
             { question: 'Where are you from?', file: 'assets/p_from.mp4', videoUrl: null },
-            { question: 'What's your favorite way to relax?', file: 'assets/p_relax.mp4', videoUrl: null }
+            { question: 'What is your favorite way to relax?', file: 'assets/p_relax.mp4', videoUrl: null }
           ];
           
           mediaController.showVideo();
         } else {
-          // Prefer persona from sessionStorage (just uploaded) so we don't depend on Blobs
-          var stored = null;
-          try { stored = sessionStorage.getItem('persona_' + dopId); } catch (e) {}
-          var persona = null;
-          if (stored) {
-            try { persona = JSON.parse(stored); } catch (e) {}
-          }
-          if (!persona) {
-            var hintEl = qs('#loadingHint');
-            loadingHintTimer = setTimeout(function() { if (hintEl) hintEl.style.display = 'block'; }, 6000);
-            var controller = new AbortController();
-            var timeoutId = setTimeout(function() { controller.abort(); }, 10000);
-            var response;
-            try {
-              response = await fetch(`/.netlify/functions/dop-persona?id=${encodeURIComponent(dopId)}`, { signal: controller.signal });
-            } catch (e) {
-              clearTimeout(timeoutId);
-              clearTimeout(loadingHintTimer);
-              if (e.name === 'AbortError') throw new Error('Loading took too long. Try refreshing or go back to create again.');
-              throw e;
-            }
-            clearTimeout(timeoutId);
-            clearTimeout(loadingHintTimer);
-            if (hintEl) hintEl.style.display = 'none';
-            if (!response.ok) {
-              throw new Error(`dop-persona returned ${response.status}`);
-            }
-            persona = await response.json();
-          }
-          PERSONA_DATA = persona;
+          // ============================================================
+          // FIX: Fetch persona from serverless function, but fall back
+          // to sessionStorage on 404. The sessionStorage entry is written
+          // by pay-success.html immediately after a successful upload,
+          // so it's available even if Blobs hasn't propagated yet.
+          // ============================================================
+          let persona = null;
 
-          if (persona.paid !== true) {
-            loadingEl.style.display = 'none';
-            const payGateEl = qs('#payGateState');
-            const payBtn = qs('#payGateBtn');
-            const payErr = qs('#payGateErr');
-            payGateEl.style.display = 'block';
-            payBtn.onclick = async function () {
-              payBtn.disabled = true;
-              payErr.style.display = 'none';
-              try {
-                const res = await fetch('/.netlify/functions/create-checkout-session', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ dopId })
-                });
-                const data = await res.json().catch(() => ({}));
-                if (!res.ok) {
-                  payErr.textContent = data.error || 'Could not start checkout.';
-                  payErr.style.display = 'block';
-                  payBtn.disabled = false;
-                  return;
-                }
-                if (data.url) {
-                  window.location.href = data.url;
-                  return;
-                }
-                payErr.textContent = 'No checkout URL returned.';
-                payErr.style.display = 'block';
-              } catch (e) {
-                payErr.textContent = e.message || 'Checkout failed.';
-                payErr.style.display = 'block';
+          try {
+            const response = await fetch(`/.netlify/functions/dop-persona?id=${encodeURIComponent(dopId)}`);
+
+            if (response.ok) {
+              const data = await response.json();
+              persona = data.persona || data;
+              console.log('[Persona] Loaded from Blobs successfully');
+            } else if (response.status === 404) {
+              // Blobs returned 404 — check sessionStorage fallback
+              console.warn('[Persona] Blobs returned 404, checking sessionStorage fallback...');
+              const cached = sessionStorage.getItem(`dop_persona_${dopId}`);
+              if (cached) {
+                persona = JSON.parse(cached);
+                console.log('[Persona] Loaded from sessionStorage fallback');
+                showToast('Loaded from cache (avatar still syncing)');
+              } else {
+                console.warn('[Persona] sessionStorage also empty for key: dop_persona_' + dopId);
+                throw new Error(`Persona not found in Blobs or sessionStorage for dopId=${dopId}`);
               }
-              payBtn.disabled = false;
-            };
-            return;
+            } else {
+              // Some other HTTP error (500, etc) — don't fall back, just fail
+              const errBody = await response.text();
+              throw new Error(`dop-persona returned ${response.status}: ${errBody.slice(0, 120)}`);
+            }
+          } catch (fetchErr) {
+            // Network failure entirely (not an HTTP error) — also try sessionStorage
+            if (!persona) {
+              console.warn('[Persona] Fetch failed entirely, checking sessionStorage...', fetchErr.message);
+              const cached = sessionStorage.getItem(`dop_persona_${dopId}`);
+              if (cached) {
+                persona = JSON.parse(cached);
+                console.log('[Persona] Loaded from sessionStorage after fetch failure');
+                showToast('Loaded from cache (network issue)');
+              } else {
+                throw fetchErr; // Re-throw — nothing we can do
+              }
+            }
           }
+
+          PERSONA_DATA = persona;
+          console.log('[Persona] Loaded DOP:', persona.name, 'Status:', persona.status);
 
           // Set up image loading with spinner
           if (persona.images && persona.images.length > 0) {
@@ -614,17 +663,32 @@
               mediaController.setImageSource(imageUrl);
               mediaController.showImage();
               mediaController.showSpinner();
-              const img = document.querySelector('#dopImage');
-if (img) { img.addEventListener('load', () => mediaController.hideSpinner(), { once:true }); }
-
+              
+              const img = qs('#dopImage');
+              if (img) { 
+                img.addEventListener('load', () => mediaController.hideSpinner(), { once: true });
+                img.addEventListener('error', () => {
+                  console.warn('[Persona] Image failed to load');
+                  mediaController.hideSpinner();
+                }, { once: true });
+              }
             }
           }
 
-          // Set up video loaded handler
-          mediaController.videoEl.addEventListener('loadeddata', () => {
-            mediaController.showVideo();
-            mediaController.hideSpinner();
-          }, { once: true });
+          // Show "We're cookin'" message if still processing
+          if (persona.status === 'uploaded' || persona.status === 'processing') {
+            mediaController.showProcessingMessage();
+            console.log('[Persona] Showing processing message');
+          }
+
+          // Set up video loaded handler only if we expect videos
+          const videoEl = qs('#resp');
+          if (videoEl && persona.status === 'ready' && persona.videos && persona.videos.length > 0) {
+            videoEl.addEventListener('loadeddata', () => {
+              mediaController.showVideo();
+              mediaController.hideSpinner();
+            }, { once: true });
+          }
 
           // Update header
           header.style.display = 'flex';
@@ -666,6 +730,8 @@ if (img) { img.addEventListener('load', () => mediaController.hideSpinner(), { o
               videoUrl
             };
           });
+
+          console.log('[Persona] Built prompts config:', PROMPTS_CONFIG);
         }
 
         // Render prompt buttons (only on first load)
@@ -686,14 +752,20 @@ if (img) { img.addEventListener('load', () => mediaController.hideSpinner(), { o
         }
 
         // Continue polling if still processing (without re-initializing)
-        if (dopId && PERSONA_DATA.status !== 'ready') {
+        if (dopId && PERSONA_DATA && (PERSONA_DATA.status === 'uploaded' || PERSONA_DATA.status === 'processing')) {
           console.log('[App] DOP not ready, polling again in', CONFIG.PERSONA_POLL_INTERVAL, 'ms');
           setTimeout(loadPersona, CONFIG.PERSONA_POLL_INTERVAL);
+          
+          // Update progress display
+          updateProgressDisplay();
+        } else if (PERSONA_DATA && PERSONA_DATA.status === 'ready') {
+          // Hide processing message when ready
+          mediaController.hideProcessingMessage();
+          console.log('[App] DOP is ready!');
         }
 
       } catch (error) {
         console.error('[Persona] Load error:', error);
-        if (loadingHintTimer) clearTimeout(loadingHintTimer);
         loadingEl.style.display = 'none';
         errorEl.style.display = 'block';
         errorDetails.textContent = error.message || String(error);
@@ -722,11 +794,19 @@ if (img) { img.addEventListener('load', () => mediaController.hideSpinner(), { o
       const srStatus = qs('#srStatus');
       const grid = qs('#promptGrid');
 
-      // Disable mic for user-generated DOPs
+      // Disable mic for user-generated DOPs (but keep enabled for demo)
       const isUserDOP = !!dopId;
       if (isUserDOP) {
         micBtn.disabled = true;
+        micBtn.textContent = '💳 Upgrade to Chat';
         micBtn.title = 'Upgrade to have a conversation';
+        micBtn.style.background = 'linear-gradient(135deg, #ff6b6b, #ff8a8a)';
+        micBtn.style.color = '#fff';
+        
+        // Add click handler for upgrade
+        micBtn.addEventListener('click', () => {
+          showUpgradeModal();
+        });
       }
 
       // ========================================
@@ -819,7 +899,7 @@ if (img) { img.addEventListener('load', () => mediaController.hideSpinner(), { o
       // UI STATE MANAGEMENT
       // ========================================
       function setPill(mode, text) {
-        statusPill.classList.remove('listening', 'thinking', 'speaking', 'ready');
+        statusPill.classList.remove('listening', 'thinking', 'speaking', 'ready', 'processing');
         statusPill.classList.add(mode);
         pillText.textContent = text;
         srStatus.textContent = text;
@@ -846,7 +926,14 @@ if (img) { img.addEventListener('load', () => mediaController.hideSpinner(), { o
       function setIdleUI() {
         micBtn.classList.remove('listening', 'stopping');
         micBtn.textContent = '🎤 Tap to Talk';
-        setPill('ready', 'Ready');
+        
+        // Show processing status if DOP is still being created
+        if (PERSONA_DATA && (PERSONA_DATA.status === 'uploaded' || PERSONA_DATA.status === 'processing')) {
+          setPill('processing', 'DOP Processing…');
+        } else {
+          setPill('ready', 'Ready');
+        }
+        
         unlockButtons();
       }
 
@@ -978,10 +1065,13 @@ if (img) { img.addEventListener('load', () => mediaController.hideSpinner(), { o
         }
 
         // Return to image when video ends
-        mediaController.videoEl.addEventListener('ended', () => {
-          mediaController.showImage();
-          setIdleUI();
-        }, { once: true });
+        const videoEl = qs('#resp');
+        if (videoEl) {
+          videoEl.addEventListener('ended', () => {
+            mediaController.showImage();
+            setIdleUI();
+          }, { once: true });
+        }
       }
 
       // Expose for external use
@@ -1000,19 +1090,33 @@ if (img) { img.addEventListener('load', () => mediaController.hideSpinner(), { o
       // ========================================
       // EVENT HANDLERS
       // ========================================
-      mediaController.videoEl.addEventListener('click', () => {
-        if (mediaController.videoEl.paused) {
-          mediaController.videoEl.play().catch(error => {
-            console.warn('[App] Play error:', error);
-          });
-          isStopped = false;
-          setPlayingUI();
-        } else {
+      const videoEl = qs('#resp');
+      if (videoEl) {
+        videoEl.addEventListener('click', () => {
+          if (videoEl.paused) {
+            videoEl.play().catch(error => {
+              console.warn('[App] Play error:', error);
+            });
+            isStopped = false;
+            setPlayingUI();
+          } else {
+            mediaController.stopVideo();
+            setIdleUI();
+            mediaController.hideSpinner();
+          }
+        });
+
+        videoEl.addEventListener('ended', () => {
+          mediaController.stopVideo();
+          setIdleUI();
+        });
+
+        videoEl.addEventListener('error', () => {
           mediaController.stopVideo();
           setIdleUI();
           mediaController.hideSpinner();
-        }
-      });
+        });
+      }
 
       grid.addEventListener('click', (event) => {
         // Prevent event bubbling and default behavior
@@ -1057,19 +1161,25 @@ if (img) { img.addEventListener('load', () => mediaController.hideSpinner(), { o
 
         try {
           if (promptConfig.videoUrl) {
+            // Has video ready
+            console.log('[App] Playing existing video');
             playHeyGenVideo(promptConfig.videoUrl).finally(() => {
               clearTimeout(failsafeTimeout);
             });
           } else if (promptConfig.file) {
+            // Pre-recorded demo file
+            console.log('[App] Playing demo file');
             setVoiceForNextTTSByFile(promptConfig.file);
             playFile(promptConfig.file).finally(() => {
               clearTimeout(failsafeTimeout);
             });
           } else {
+            // No video yet - use LLM
+            console.log('[App] No video available, using LLM for:', promptConfig.question);
             const question = promptConfig.question;
             pushTurn('user', question, { inputType: 'button' });
             setPill('thinking', 'Thinking…');
-            routeToBackend(question, { forceLLM: true })
+            routeToBackend(question, { forceLLM: true, personaId: dopId })
               .catch(error => {
                 console.error('[App] Backend error:', error);
                 setIdleUI();
@@ -1087,17 +1197,6 @@ if (img) { img.addEventListener('load', () => mediaController.hideSpinner(), { o
           showToast('Error processing request');
         }
       }, { capture: true });
-
-      mediaController.videoEl.addEventListener('ended', () => {
-        mediaController.stopVideo();
-        setIdleUI();
-      });
-
-      mediaController.videoEl.addEventListener('error', () => {
-        mediaController.stopVideo();
-        setIdleUI();
-        mediaController.hideSpinner();
-      });
 
       // ========================================
       // SPEECH RECOGNITION (ASR)
@@ -1168,7 +1267,7 @@ if (img) { img.addEventListener('load', () => mediaController.hideSpinner(), { o
                   pushTurn('user', text, { inputType: 'mic' });
                   srStatus.textContent = 'Processing…';
                   setPill('thinking', 'Thinking…');
-                  routeToBackend(text, { forceLLM: true });
+                  routeToBackend(text, { forceLLM: true, personaId: dopId });
                 }
               }
             }
@@ -1230,9 +1329,11 @@ if (img) { img.addEventListener('load', () => mediaController.hideSpinner(), { o
           message: text,
           sessionId,
           context: getBoundedContext(),
-          personaId: dopId,
+          personaId: options.personaId || dopId,
           ...options
         };
+
+        console.log('[Backend] Calling session-chat with persona:', payload.personaId);
 
         try {
           const data = await callFunction('/.netlify/functions/session-chat', payload);
@@ -1256,7 +1357,74 @@ if (img) { img.addEventListener('load', () => mediaController.hideSpinner(), { o
       // Expose for external use
       window.routeToBackend = routeToBackend;
 
+
+      // ========================================
+      // UPGRADE MODAL
+      // ========================================
+      function showUpgradeModal() {
+        const modal = document.createElement('div');
+        modal.innerHTML = `
+          <div style="position:fixed; inset:0; background:rgba(0,0,0,.8); z-index:1000; display:flex; align-items:center; justify-content:center; padding:20px;">
+            <div style="background:var(--panel); border:1px solid var(--stroke); border-radius:var(--radius); padding:32px; max-width:500px; width:100%; box-shadow:var(--shadow);">
+              <h2 style="margin:0 0 16px; font-family:'Montserrat',sans-serif; font-weight:800; color:var(--text);">Upgrade Your DOP</h2>
+              <p style="color:var(--muted); margin-bottom:24px;">Unlock full conversation capabilities with your AI doppelgänger.</p>
+              
+              <div style="display:grid; gap:12px; margin-bottom:24px;">
+                <div style="background:rgba(138,140,255,.1); border:1px solid var(--accent); border-radius:12px; padding:16px;">
+                  <div style="font-weight:700; color:var(--text); margin-bottom:4px;">Basic Tier - $9.99</div>
+                  <div style="font-size:14px; color:var(--muted);">Full conversation access</div>
+                </div>
+                <div style="background:rgba(138,140,255,.1); border:1px solid var(--accent); border-radius:12px; padding:16px;">
+                  <div style="font-weight:700; color:var(--text); margin-bottom:4px;">Pro Tier - $19.99</div>
+                  <div style="font-size:14px; color:var(--muted);">Advanced features + priority</div>
+                </div>
+                <div style="background:rgba(138,140,255,.1); border:1px solid var(--accent); border-radius:12px; padding:16px;">
+                  <div style="font-weight:700; color:var(--text); margin-bottom:4px;">Premium Tier - $49.99</div>
+                  <div style="font-size:14px; color:var(--muted);">All features + custom voice</div>
+                </div>
+              </div>
+              
+              <div style="display:flex; gap:12px; justify-content:flex-end;">
+                <button id="cancelBtn" style="padding:12px 24px; border:1px solid var(--stroke); background:var(--panel-2); color:var(--text); border-radius:12px; cursor:pointer;">Cancel</button>
+                <button id="upgradeBtn" style="padding:12px 24px; border:none; background:linear-gradient(135deg,var(--accent),#9b9dff); color:#000; border-radius:12px; cursor:pointer; font-weight:600;">Upgrade Now</button>
+              </div>
+            </div>
+          </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        modal.querySelector('#cancelBtn').addEventListener('click', () => {
+          modal.remove();
+        });
+        
+        modal.querySelector('#upgradeBtn').addEventListener('click', async () => {
+          try {
+            const response = await fetch('/.netlify/functions/stripe-create-checkout', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                dopId: dopId,
+                tier: 'basic'
+              })
+            });
+            
+            const data = await response.json();
+            if (data.checkoutUrl) {
+              window.location.href = data.checkoutUrl;
+            } else {
+              showToast('Payment setup failed. Please try again.');
+            }
+          } catch (error) {
+            console.error('Upgrade error:', error);
+            showToast('Payment setup failed. Please try again.');
+          }
+        });
+      }
+
       async function handleBackendResponse(data) {
+        console.log('[Backend] Response:', data);
+        
         if (data.matchedClip) {
           setPlayingUI();
           await playFile(data.matchedClip);
@@ -1269,6 +1437,7 @@ if (img) { img.addEventListener('load', () => mediaController.hideSpinner(), { o
           await speakWithElevenLabs(speech);
           setIdleUI();
         } else {
+          console.warn('[Backend] No response content');
           setIdleUI();
         }
       }
@@ -1394,21 +1563,7 @@ if (img) { img.addEventListener('load', () => mediaController.hideSpinner(), { o
     // ========================================
     // START APPLICATION
     // ========================================
-    (async function start() {
-      const sessionId = urlParams.get('session_id');
-      if (sessionId && dopId) {
-        try {
-          const res = await fetch(`/.netlify/functions/verify-checkout-session?session_id=${encodeURIComponent(sessionId)}&dopId=${encodeURIComponent(dopId)}`);
-          const data = await res.json().catch(() => ({}));
-          if (res.ok && data.paid && window.history && window.history.replaceState) {
-            const u = new URL(window.location.href);
-            u.searchParams.delete('session_id');
-            window.history.replaceState({}, '', u.toString());
-          }
-        } catch (_) {}
-      }
-      loadPersona();
-    })();
+    loadPersona();
   </script>
 </body>
 </html>

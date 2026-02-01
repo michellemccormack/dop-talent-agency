@@ -3,9 +3,11 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Create Your Alter Ego — Upload</title>
+  <title>Payment Successful - Dopple Talent Agency</title>
+  
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
+
   <style>
     :root{
       --bg:#0e0f12; --bg-2:#08090c;
@@ -14,8 +16,10 @@
       --stroke:#26283a; --stroke-strong:#3a3b52;
       --accent:#8a8cff; --ok:#16db65; --shadow:0 10px 30px rgba(0,0,0,.35); --radius:16px;
     }
+    
     *{box-sizing:border-box}
     html,body{height:100%}
+    
     body{
       margin:0; font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
       color:var(--text); line-height:1.5;
@@ -25,247 +29,138 @@
         linear-gradient(180deg,var(--bg),var(--bg-2));
       min-height:100vh; padding:20px;
     }
-    .container{max-width:800px; margin:0 auto}
-    .header{text-align:center; margin-bottom:40px}
-    .header h1{
-      font-family:'Montserrat',sans-serif; font-weight:800; font-size:2.5rem;
-      background:linear-gradient(135deg,#fff,#d1d5db);
-      -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
-      margin:0 0 8px;
-    }
-    .header p{color:var(--muted); font-size:1.1rem; margin:0}
-    .card{
+
+    .container{max-width:600px; margin:0 auto; text-align:center}
+    
+    .success-card{
       background:linear-gradient(180deg,var(--panel),var(--panel-2));
       border:1px solid var(--stroke); border-radius:var(--radius);
-      box-shadow:var(--shadow); padding:32px; margin-bottom:24px;
+      box-shadow:var(--shadow); padding:40px 32px; margin:40px 0;
     }
-    .upload-grid{display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-bottom:24px}
-    .upload-box{
-      border:2px dashed var(--stroke); border-radius:var(--radius);
-      padding:32px 20px; text-align:center; cursor:pointer;
-      transition:all .2s ease; background:rgba(255,255,255,.02);
+
+    .success-icon{
+      font-size:4rem; margin-bottom:24px; color:var(--ok);
     }
-    .upload-box:hover{border-color:var(--accent); background:rgba(138,140,255,.05)}
-    .upload-box.has-file{border-color:var(--ok); border-style:solid}
-    .upload-box input[type="file"]{display:none}
-    .upload-box .icon{font-size:2.5rem; margin-bottom:12px; opacity:.6}
-    .upload-box .label{font-weight:600; margin-bottom:4px}
-    .upload-box .hint{font-size:13px; color:var(--muted)}
-    .upload-box .filename{font-size:12px; color:var(--ok); margin-top:8px; font-weight:600; word-break:break-all}
-    .form-group{margin-bottom:24px}
-    .form-group label{display:block; font-weight:600; margin-bottom:8px; color:var(--text)}
-    .form-group input, .form-group textarea{
-      width:100%; padding:12px 16px; border:1px solid var(--stroke);
-      border-radius:12px; background:var(--panel-2); color:var(--text);
-      font-size:16px; transition:border-color .2s ease; font-family:inherit;
+
+    .success-title{
+      font-family:'Montserrat',sans-serif; font-weight:800; font-size:2rem;
+      margin:0 0 16px; color:var(--text);
     }
-    .form-group input:focus, .form-group textarea:focus{outline:none; border-color:var(--accent)}
-    .form-group textarea{resize:vertical}
-    .create-btn{
-      width:100%; padding:16px 32px; border:none; border-radius:16px;
+
+    .success-message{
+      color:var(--muted); font-size:1.1rem; margin-bottom:32px;
+    }
+
+    .dop-info{
+      background:rgba(138,140,255,.1); border:1px solid var(--accent);
+      border-radius:12px; padding:20px; margin:24px 0;
+    }
+
+    .dop-name{
+      font-weight:700; font-size:1.2rem; margin-bottom:8px;
+    }
+
+    .dop-tier{
+      color:var(--accent); font-weight:600; text-transform:uppercase;
+      letter-spacing:.5px; font-size:.9rem;
+    }
+
+    .action-buttons{
+      display:flex; gap:16px; justify-content:center; margin-top:32px;
+    }
+
+    .btn{
+      padding:12px 24px; border:none; border-radius:12px;
+      font-weight:600; text-decoration:none; transition:all .2s ease;
+      cursor:pointer; font-size:16px;
+    }
+
+    .btn-primary{
       background:linear-gradient(135deg,var(--accent),#9b9dff);
-      color:#000; font-size:18px; font-weight:800; font-family:'Montserrat',sans-serif;
-      text-transform:uppercase; cursor:pointer; transition:all .2s ease;
-      box-shadow:0 8px 24px rgba(138,140,255,.3);
+      color:#000; box-shadow:0 4px 16px rgba(138,140,255,.3);
     }
-    .create-btn:hover{transform:translateY(-2px); box-shadow:0 12px 32px rgba(138,140,255,.4)}
-    .create-btn:disabled{opacity:.5; cursor:not-allowed; transform:none}
-    .status{padding:12px 16px; border-radius:12px; margin-bottom:16px; font-weight:600; text-align:center; display:none}
-    .status.error{background:rgba(255,107,107,.1); border:1px solid #ff6b6b; color:#ff6b6b}
-    .status.success{background:rgba(22,219,101,.1); border:1px solid var(--ok); color:var(--ok)}
-    .status.loading{background:rgba(138,140,255,.1); border:1px solid var(--accent); color:var(--accent)}
-    .err{background:rgba(255,107,107,.1); border:1px solid #ff6b6b; color:#ff6b6b; padding:12px 16px; border-radius:12px; margin-bottom:16px; display:none}
-    .links{margin-top:24px}
-    .links a{color:var(--accent); text-decoration:none}
-    .links a:hover{text-decoration:underline}
-    @media (max-width:768px){ .upload-grid{grid-template-columns:1fr} .card{padding:24px} }
+    .btn-primary:hover{transform:translateY(-2px); box-shadow:0 6px 20px rgba(138,140,255,.4)}
+
+    .btn-secondary{
+      background:var(--panel-2); color:var(--text);
+      border:1px solid var(--stroke);
+    }
+    .btn-secondary:hover{background:var(--panel); border-color:var(--stroke-strong)}
+
+    @media (max-width:480px){
+      .action-buttons{flex-direction:column}
+      .success-card{padding:32px 24px}
+    }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="header">
-      <h1>Payment received</h1>
-      <p>Upload your photo and voice, then answer a few questions to create your Alter Ego.</p>
-    </div>
-
-    <div id="noSession" class="card err" style="display:none;">No payment session. <a href="/alter-ego">Create your alter ego</a> to pay first.</div>
-    <div id="verifyErr" class="card err" style="display:none;"></div>
-    <div id="verifyProgress" class="card" style="display:none; color:var(--accent);">Verifying payment…</div>
-
-    <form id="uploadForm" class="card" style="display:none;">
-      <div class="upload-grid">
-        <div class="upload-box" id="photoBox">
-          <input id="photo" name="photo" type="file" accept="image/jpeg,image/png" required />
-          <div class="icon">📷</div>
-          <div class="label">Photo (JPG/PNG, ≤ 6 MB)</div>
-          <div class="hint">Clear face, single person is best.</div>
-          <div class="filename" id="photoFilename"></div>
-        </div>
-        <div class="upload-box" id="voiceBox">
-          <input id="voice" name="voice" type="file" accept="audio/webm,audio/wav,audio/mpeg,audio/mp4,audio/x-m4a" required />
-          <div class="icon">🎤</div>
-          <div class="label">Voice sample (WEBM/WAV/MP3/M4A, ≤ 8 MB)</div>
-          <div class="hint">10–30 seconds is plenty.</div>
-          <div class="filename" id="voiceFilename"></div>
-        </div>
+    <div class="success-card">
+      <div class="success-icon">✅</div>
+      <h1 class="success-title">Payment Successful!</h1>
+      <p class="success-message">Your DOP has been upgraded and is ready for full conversations.</p>
+      
+      <div class="dop-info" id="dopInfo">
+        <div class="dop-name" id="dopName">Loading...</div>
+        <div class="dop-tier" id="dopTier">Upgraded</div>
       </div>
 
-      <div class="form-group">
-        <label for="dopName">What should we call your Alter Ego?</label>
-        <input type="text" id="dopName" placeholder="e.g. Sasha, Alex, or leave blank" />
+      <div class="action-buttons">
+        <a href="#" id="chatBtn" class="btn btn-primary">Start Chatting</a>
+        <a href="/" class="btn btn-secondary">Back to Home</a>
       </div>
-      <div class="form-group">
-        <label for="dopBio">Tell us about them — personality, interests, background</label>
-        <textarea id="dopBio" rows="3" placeholder="The more detail you give, the better your Alter Ego will be at conversations. What do they like? Where are they from? How do they relax?"></textarea>
-      </div>
-
-      <div class="status" id="progress" aria-live="polite"></div>
-      <button class="create-btn" id="submitBtn" type="submit">Save & create my Alter Ego</button>
-      <div class="status success" id="result" style="display:none;"></div>
-      <div class="status error" id="err" style="display:none;"></div>
-    </form>
-
-    <div class="links">
-      <a href="/">← Back to home</a> &nbsp; <a href="/alter-ego">Create alter ego</a>
     </div>
   </div>
 
   <script>
-    const byId = (id) => document.getElementById(id);
-    let paidSessionId = null;
+    // Get URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const dopId = urlParams.get('dopId');
+    const tier = urlParams.get('tier') || 'basic';
 
-    (async function init() {
-      const params = new URLSearchParams(window.location.search);
-      const sessionId = params.get('session_id');
-      if (!sessionId) {
-        byId('noSession').style.display = 'block';
-        return;
-      }
-      byId('verifyProgress').style.display = 'block';
-      try {
-        const res = await fetch('/.netlify/functions/verify-checkout-session?session_id=' + encodeURIComponent(sessionId));
-        const data = await res.json().catch(function() { return {}; });
-        byId('verifyProgress').style.display = 'none';
-        if (!res.ok) {
-          byId('verifyErr').style.display = 'block';
-          byId('verifyErr').innerHTML = data.error || 'Payment verification failed.';
-          return;
-        }
-        if (data.paid) {
-          paidSessionId = sessionId;
-          byId('uploadForm').style.display = 'block';
-          setupUploadBoxes();
-        } else {
-          byId('verifyErr').style.display = 'block';
-          byId('verifyErr').textContent = 'Payment not completed.';
-        }
-      } catch (e) {
-        byId('verifyProgress').style.display = 'none';
-        byId('verifyErr').style.display = 'block';
-        byId('verifyErr').textContent = e.message || 'Verification failed.';
-      }
-    })();
+    // Update UI
+    document.getElementById('dopTier').textContent = `${tier.toUpperCase()} TIER`;
+    
+    if (dopId) {
+      document.getElementById('chatBtn').href = `/chat.html?id=${dopId}`;
+      
+      // FIX: After fetching the persona (which we already do to show the name),
+      // cache the FULL persona in sessionStorage. This way, if chat.html loads
+      // before Blobs has propagated the write from dop-uploads, it can fall back
+      // to this cached copy instead of showing a 404 error.
+      //
+      // The key format matches what chat.html reads: dop_persona_<dopId>
+      fetch(`/.netlify/functions/dop-persona?id=${dopId}`)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`dop-persona returned ${response.status}`);
+          }
+          return response.json();
+        })
+        .then(data => {
+          const persona = data.persona || data;
 
-    function setupUploadBoxes() {
-      var photoBox = byId('photoBox');
-      var voiceBox = byId('voiceBox');
-      var photoInput = byId('photo');
-      var voiceInput = byId('voice');
-      var photoFilename = byId('photoFilename');
-      var voiceFilename = byId('voiceFilename');
-      photoBox.addEventListener('click', function() { photoInput.click(); });
-      voiceBox.addEventListener('click', function() { voiceInput.click(); });
-      photoInput.addEventListener('change', function(e) {
-        var file = e.target.files[0];
-        if (file) {
-          photoFilename.textContent = file.name;
-          photoBox.classList.add('has-file');
-        }
-      });
-      voiceInput.addEventListener('change', function(e) {
-        var file = e.target.files[0];
-        if (file) {
-          voiceFilename.textContent = file.name;
-          voiceBox.classList.add('has-file');
-        }
-      });
-    }
+          // Show the name in the UI (existing behavior)
+          if (persona.name) {
+            document.getElementById('dopName').textContent = persona.name;
+          }
 
-    function fileToBase64(file) {
-      return new Promise(function(resolve, reject) {
-        var r = new FileReader();
-        r.onload = function() {
-          var res = r.result;
-          var comma = res.indexOf(',');
-          resolve({ base64: res.slice(comma + 1), type: file.type, name: file.name });
-        };
-        r.onerror = reject;
-        r.readAsDataURL(file);
-      });
-    }
-
-    function setProgress(msg) { byId('progress').textContent = msg; byId('progress').className = 'status loading'; byId('progress').style.display = msg ? 'block' : 'none'; }
-    function showError(msg) { var el = byId('err'); el.className = 'status error'; el.textContent = msg; el.style.display = 'block'; }
-    function showResult(html) { var el = byId('result'); el.className = 'status success'; el.innerHTML = html; el.style.display = 'block'; }
-
-    byId('uploadForm').addEventListener('submit', function(e) {
-      e.preventDefault();
-      byId('err').style.display = 'none';
-      byId('result').style.display = 'none';
-
-      var photo = byId('photo').files[0];
-      var voice = byId('voice').files[0];
-      if (!photo || !voice) return showError('Please pick both a photo and a voice file.');
-      if (photo.size > 6 * 1024 * 1024) return showError('Photo is larger than 6 MB.');
-      if (voice.size > 8 * 1024 * 1024) return showError('Voice file is larger than 8 MB.');
-
-      byId('submitBtn').disabled = true;
-      setProgress('Preparing files…');
-
-      Promise.all([fileToBase64(photo), fileToBase64(voice)]).then(function(arr) {
-        var img = arr[0];
-        var aud = arr[1];
-        setProgress('Uploading…');
-        var controller = new AbortController();
-        var timeoutId = setTimeout(function() { controller.abort(); }, 30000);
-        return fetch('/.netlify/functions/dop-uploads', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            imageBase64: img.base64,
-            imageType: img.type || 'image/jpeg',
-            imageName: img.name || 'photo.jpg',
-            audioBase64: aud.base64,
-            audioType: aud.type || 'audio/webm',
-            audioName: aud.name || 'voice.webm',
-            name: (byId('dopName').value || '').trim() || 'My DOP',
-            bio: (byId('dopBio').value || '').trim(),
-            session_id: paidSessionId
-          }),
-          signal: controller.signal
-        }).then(function(res) {
-          clearTimeout(timeoutId);
-          return res;
-        }).catch(function(e) {
-          clearTimeout(timeoutId);
-          if (e.name === 'AbortError') throw new Error('Upload took too long. Please try again.');
-          throw e;
+          // Cache the full persona for chat.html's fallback path
+          try {
+            sessionStorage.setItem(`dop_persona_${dopId}`, JSON.stringify(persona));
+            console.log('[pay-success] Cached persona in sessionStorage for dopId:', dopId);
+          } catch (storageErr) {
+            // sessionStorage can throw if storage is full or in private mode
+            console.warn('[pay-success] Could not cache persona in sessionStorage:', storageErr.message);
+          }
+        })
+        .catch(error => {
+          console.warn('[pay-success] Could not load/cache persona:', error.message);
+          // Non-fatal: the page still shows, user can still click "Start Chatting"
         });
-      }).then(function(res) {
-        if (!res.ok) return res.text().then(function(t) { throw new Error('Upload failed: ' + res.status + ' ' + t); });
-        return res.json();
-      }).then(function(data) {
-        setProgress('');
-        if (data.persona && typeof data.dopId === 'string') {
-          try { sessionStorage.setItem('persona_' + data.dopId, JSON.stringify(data.persona)); } catch (e) {}
-        }
-        showResult('Saved. Your Alter Ego is ready. <br/><a href="/chat.html?id=' + encodeURIComponent(data.dopId) + '" style="color:var(--ok);">Open chat</a>');
-      }).catch(function(err) {
-        showError(err.message || String(err));
-      }).finally(function() {
-        byId('submitBtn').disabled = false;
-      });
-    });
+    } else {
+      document.getElementById('dopName').textContent = 'Your DOP';
+    }
   </script>
 </body>
 </html>
