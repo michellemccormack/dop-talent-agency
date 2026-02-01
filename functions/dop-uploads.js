@@ -99,6 +99,7 @@ function generateSystemPrompt(bio, name) {
 
 // ---------- external API helpers via your proxy ----------
 async function heygen(action, payload) {
+  console.log(`[heygen] calling ${action} with`, JSON.stringify(payload).substring(0, 200));
   const res = await fetch(`${BASE_URL}/.netlify/functions/heygen-proxy`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -106,7 +107,8 @@ async function heygen(action, payload) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data.success === false) {
-    const message = data?.message || data?.error || `HTTP ${res.status}`;
+    const message = data?.details || data?.message || data?.error || `HTTP ${res.status}`;
+    console.error(`[heygen ${action}] FAILED:`, message, 'full response:', JSON.stringify(data));
     throw new Error(`[heygen ${action}] ${message}`);
   }
   return data;

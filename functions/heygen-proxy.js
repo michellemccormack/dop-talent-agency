@@ -90,20 +90,32 @@ exports.handler = async (event) => {
 
 // Upload photo to HeyGen
 async function uploadPhoto({ imageUrl, name }) {
+  console.log('[heygen-proxy] uploadPhoto called');
+  console.log('[heygen-proxy] HEYGEN_API_KEY present:', !!HEYGEN_API_KEY, 'length:', (HEYGEN_API_KEY || '').length);
+  
+  if (!HEYGEN_API_KEY) {
+    throw new Error('HEYGEN_API_KEY is not set in environment variables');
+  }
+  
   if (!imageUrl) {
     throw new Error('imageUrl is required');
   }
 
-  console.log('[heygen-proxy] Uploading photo from URL:', imageUrl.substring(0, 50) + '...');
+  console.log('[heygen-proxy] Uploading photo from URL:', imageUrl);
 
   // Fetch the image from the URL
+  console.log('[heygen-proxy] Fetching image...');
   const imageResponse = await fetch(imageUrl);
+  console.log('[heygen-proxy] Image fetch status:', imageResponse.status);
   if (!imageResponse.ok) {
-    throw new Error(`Failed to fetch image: ${imageResponse.status}`);
+    const errorText = await imageResponse.text().catch(() => '');
+    console.error('[heygen-proxy] Image fetch failed:', errorText.substring(0, 200));
+    throw new Error(`Failed to fetch image: ${imageResponse.status} - ${errorText.substring(0, 100)}`);
   }
 
   const imageBuffer = await imageResponse.arrayBuffer();
   const imageBlob = Buffer.from(imageBuffer);
+  console.log('[heygen-proxy] Image fetched, size:', imageBlob.length, 'bytes');
 
   // Create multipart form data
   const boundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
@@ -126,6 +138,7 @@ async function uploadPhoto({ imageUrl, name }) {
   fullBody.set(new Uint8Array(imageBlob), formDataStart.length);
   fullBody.set(formDataEnd, formDataStart.length + imageBlob.length);
 
+  console.log('[heygen-proxy] Calling HeyGen upload API at:', HEYGEN_UPLOAD_BASE + '/v1/asset');
   const response = await fetch(`${HEYGEN_UPLOAD_BASE}/v1/asset`, {
     method: 'POST',
     headers: {
