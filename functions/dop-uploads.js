@@ -23,8 +23,9 @@ const bad = (code, msg, extra = {}) => ({ statusCode: code, headers: { ...CORS, 
 const BASE_URL = process.env.URL || 'https://dopple-talent-demo.netlify.app';
 
 // Cap time spent on external APIs so the function returns before Netlify timeout (~10–26s).
-const VOICE_CLONE_TIMEOUT_MS = 8000;   // Increased to 8s
-const HEYGEN_AVATAR_TIMEOUT_MS = 12000; // Increased to 12s
+// Run voice + HeyGen in parallel so total time = max(voice, heygen), not sum.
+const VOICE_CLONE_TIMEOUT_MS = 18000;   // 18s – ElevenLabs clone can be slow
+const HEYGEN_AVATAR_TIMEOUT_MS = 18000; // 18s – run in parallel with voice
 const HEYGEN_QUEUE_TIMEOUT_MS = 4000;
 
 function withTimeout(ms, promise) {
@@ -111,19 +112,19 @@ async function heygen(action, payload) {
   return data;
 }
 
-async function createVoiceClone(voiceBuffer, name) {
+async function createVoiceClone(voiceBuffer, name, audioType = 'audio/webm', audioName = 'voice.webm') {
   if (!process.env.ELEVENLABS_API_KEY) {
     console.log('[dop-uploads] ElevenLabs key missing; skipping clone');
     return null;
   }
   try {
-    // Minimal multipart for ElevenLabs
     const boundary = '----DopForm' + randomUUID().replace(/-/g, '');
     const enc = new TextEncoder();
     const nm = (name || 'DOP Voice').replace(/[^a-zA-Z0-9 _-]/g, '');
+    const mime = (audioType && audioType.startsWith('audio/')) ? audioType : 'audio/webm';
     const head =
       `--${boundary}\r\nContent-Disposition: form-data; name="name"\r\n\r\n${nm}\r\n` +
-      `--${boundary}\r\nContent-Disposition: form-data; name="files"; filename="voice.webm"\r\nContent-Type: audio/webm\r\n\r\n`;
+      `--${boundary}\r\nContent-Disposition: form-data; name="files"; filename="${(audioName || 'voice.webm').replace(/[^a-zA-Z0-9._-]/g, '_')}"\r\nContent-Type: ${mime}\r\n\r\n`;
     const tail = `\r\n--${boundary}--\r\n`;
     const body = new Uint8Array(enc.encode(head).length + voiceBuffer.length + enc.encode(tail).length);
     body.set(enc.encode(head), 0);
@@ -301,22 +302,24 @@ exports.handler = async (event) => {
     await store.set(personaKey, JSON.stringify(minimalPersona), { contentType: 'application/json; charset=utf-8' });
     console.log('[dop-uploads] saved minimal persona:', personaKey);
 
-    // --- Try to create voice clone and HeyGen avatar (with timeouts) ---
-    let voiceId = null;
-    let avatarId = null;
+    // --- Run voice clone and HeyGen avatar in parallel (with timeouts) ---
+    const [voiceResult, avatarResult] = await Promise.allSettled([
+      withTimeout(VOICE_CLONE_TIMEOUT_MS, createVoiceClone(vocBuf, name, audioType, audioName)),
+      withTimeout(HEYGEN_AVATAR_TIMEOUT_MS, createHeyGenAvatarFromImageUrl(publicImageUrl, name))
+    ]);
 
-    try {
-      voiceId = await withTimeout(VOICE_CLONE_TIMEOUT_MS, createVoiceClone(vocBuf, name));
+    const voiceId = voiceResult.status === 'fulfilled' && voiceResult.value ? voiceResult.value : null;
+    const avatarId = avatarResult.status === 'fulfilled' && avatarResult.value ? avatarResult.value : null;
+
+    if (voiceResult.status === 'rejected') {
+      console.log('[dop-uploads] voice clone error:', voiceResult.reason?.message || voiceResult.reason);
+    } else {
       console.log('[dop-uploads] voice clone result:', voiceId || 'timeout/failed');
-    } catch (e) {
-      console.log('[dop-uploads] voice clone timeout or error:', e.message);
     }
-
-    try {
-      avatarId = await withTimeout(HEYGEN_AVATAR_TIMEOUT_MS, createHeyGenAvatarFromImageUrl(publicImageUrl, name));
+    if (avatarResult.status === 'rejected') {
+      console.log('[dop-uploads] HeyGen avatar error:', avatarResult.reason?.message || avatarResult.reason);
+    } else {
       console.log('[dop-uploads] HeyGen avatar result:', avatarId || 'timeout/failed');
-    } catch (e) {
-      console.log('[dop-uploads] HeyGen avatar timeout or error:', e.message);
     }
 
     // --- Update persona with voice/avatar if we got them ---
