@@ -709,6 +709,13 @@
           if (avatarUrl && avatarEl) {
             avatarEl.src = avatarUrl;
           }
+          
+          // Also set the large DOP Avatar image
+          const dopImageEl = document.getElementById('dopImage');
+          if (avatarUrl && dopImageEl) {
+            dopImageEl.src = avatarUrl;
+            dopImageEl.style.display = 'block';
+          }
 
           // Build prompts config
           const rawPrompts = Array.isArray(persona.prompts) ? persona.prompts : [];

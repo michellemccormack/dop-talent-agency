@@ -23,8 +23,8 @@ const bad = (code, msg, extra = {}) => ({ statusCode: code, headers: { ...CORS, 
 const BASE_URL = process.env.URL || 'https://dopple-talent-demo.netlify.app';
 
 // Cap time spent on external APIs so the function returns before Netlify timeout (~10–26s).
-const VOICE_CLONE_TIMEOUT_MS = 5000;
-const HEYGEN_AVATAR_TIMEOUT_MS = 6000;
+const VOICE_CLONE_TIMEOUT_MS = 8000;   // Increased to 8s
+const HEYGEN_AVATAR_TIMEOUT_MS = 12000; // Increased to 12s
 const HEYGEN_QUEUE_TIMEOUT_MS = 4000;
 
 function withTimeout(ms, promise) {
